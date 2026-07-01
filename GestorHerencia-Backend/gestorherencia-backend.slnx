@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="Herencia.Api/Herencia.Api.csproj" />
+  <Project Path="Herencia.Business/Herencia.Business.csproj" />
+  <Project Path="Herencia.Data/Herencia.Data.csproj" />
+</Solution>
