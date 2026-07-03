@@ -6,6 +6,11 @@
 # dotenv files
 .env
 
+# Bases de datos SQLite generadas localmente (no forman parte del codigo fuente)
+*.db
+*.db-shm
+*.db-wal
+
 # User-specific files
 *.rsuser
 *.suo
