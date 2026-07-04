@@ -1,6 +1,6 @@
 namespace Herencia.Data.Models;
 
-// Representa al titular de la cuenta: la persona duena de los activos digitales
+// Representa al titular de la cuenta: la persona dueña de los activos digitales
 // y que define quienes son sus beneficiarios. Hereda de EntidadBaseAuditable
 // para tener trazabilidad de creacion/modificacion.
 public class Usuario : EntidadBaseAuditable
