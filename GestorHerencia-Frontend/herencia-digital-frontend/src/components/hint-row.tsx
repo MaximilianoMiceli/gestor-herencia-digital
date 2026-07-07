@@ -6,11 +6,19 @@ import { ThemedView } from './themed-view';
 
 import { Spacing } from '@/constants/theme';
 
+/**
+ * Propiedades del componente HintRow.
+ */
 type HintRowProps = {
+  /** Título descriptivo de la acción o paso. */
   title?: string;
+  /** Componente o texto con el código, comando o ayuda a mostrar en el recuadro. */
   hint?: ReactNode;
 };
 
+/**
+ * Componente que renderiza una fila informativa que asocia un título con un recuadro de código o ayuda.
+ */
 export function HintRow({ title = 'Try editing', hint = 'app/index.tsx' }: HintRowProps) {
   return (
     <View style={styles.stepRow}>

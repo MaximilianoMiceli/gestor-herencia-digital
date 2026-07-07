@@ -5,6 +5,10 @@ import Animated, { Keyframe, Easing } from 'react-native-reanimated';
 import classes from './animated-icon.module.css';
 const DURATION = 300;
 
+/**
+ * Componente placeholder para la versión Web.
+ * En web no es necesaria la cortina de splash nativa, por lo que retorna null.
+ */
 export function AnimatedSplashOverlay() {
   return null;
 }
@@ -54,6 +58,10 @@ const glowKeyframe = new Keyframe({
   },
 });
 
+/**
+ * Logotipo animado para la pantalla de bienvenida (versión Web).
+ * Adapta los efectos visuales y animaciones usando clases CSS y Reanimated.
+ */
 export function AnimatedIcon() {
   return (
     <View style={styles.iconContainer}>

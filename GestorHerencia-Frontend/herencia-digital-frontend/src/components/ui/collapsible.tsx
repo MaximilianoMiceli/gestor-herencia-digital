@@ -8,6 +8,10 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
+/**
+ * Componente contenedor colapsable (acordeón).
+ * Oculta o muestra su contenido (children) cuando el usuario pulsa sobre el encabezado (title).
+ */
 export function Collapsible({ children, title }: PropsWithChildren & { title: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const theme = useTheme();

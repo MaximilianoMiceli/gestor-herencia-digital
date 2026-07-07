@@ -7,6 +7,9 @@ import { ThemedView } from './themed-view';
 
 import { Spacing } from '@/constants/theme';
 
+/**
+ * Componente que muestra una etiqueta de versión (Badge) de Expo en la versión Web de la app.
+ */
 export function WebBadge() {
   const scheme = useColorScheme();
 

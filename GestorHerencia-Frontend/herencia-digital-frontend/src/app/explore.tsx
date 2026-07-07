@@ -11,6 +11,10 @@ import { WebBadge } from '@/components/web-badge';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
+/**
+ * Pantalla de exploración del template original (oculta por defecto en el Tab Bar).
+ * Contiene guías, enlaces de documentación y visualización de recursos.
+ */
 export default function TabTwoScreen() {
   const safeAreaInsets = useSafeAreaInsets();
   const insets = {

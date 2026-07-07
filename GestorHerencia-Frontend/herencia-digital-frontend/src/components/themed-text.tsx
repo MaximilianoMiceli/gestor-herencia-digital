@@ -3,11 +3,20 @@ import { Platform, StyleSheet, Text, type TextProps } from 'react-native';
 import { Fonts, ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
+/**
+ * Propiedades para el componente ThemedText, extendiendo las de Text estándar.
+ */
 export type ThemedTextProps = TextProps & {
+  /** Estilo tipográfico preestablecido a aplicar (default, title, small, etc.). */
   type?: 'default' | 'title' | 'small' | 'smallBold' | 'subtitle' | 'link' | 'linkPrimary' | 'code';
+  /** Clave del color del tema activo a utilizar para el texto. */
   themeColor?: ThemeColor;
 };
 
+/**
+ * Componente de texto tipado y tematizado.
+ * Adapta automáticamente su color y tipografía de acuerdo al tema activo (claro/oscuro) y al preset seleccionado.
+ */
 export function ThemedText({ style, type = 'default', themeColor, ...rest }: ThemedTextProps) {
   const theme = useTheme();
 

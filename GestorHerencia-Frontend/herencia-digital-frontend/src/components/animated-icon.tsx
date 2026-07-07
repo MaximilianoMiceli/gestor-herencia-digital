@@ -8,10 +8,15 @@ import { scheduleOnRN } from 'react-native-worklets';
 const INITIAL_SCALE_FACTOR = Dimensions.get('screen').height / 90;
 const DURATION = 600;
 
+/**
+ * Componente que muestra una cortina sobre la pantalla nativa de carga (Splash)
+ * y ejecuta una animación de salida (fade-out) suave una vez que la app está lista.
+ */
 export function AnimatedSplashOverlay() {
   const [animate, setAnimate] = useState(false);
   const [visible, setVisible] = useState(true);
 
+  // Remueve completamente el overlay del árbol de componentes al finalizar la animación.
   if (!visible) return null;
 
   const splashKeyframe = new Keyframe({
@@ -95,6 +100,10 @@ const glowKeyframe = new Keyframe({
   },
 });
 
+/**
+ * Logotipo animado para la pantalla de bienvenida.
+ * Incluye un efecto de brillo giratorio en segundo plano y una animación de entrada elástica.
+ */
 export function AnimatedIcon() {
   return (
     <View style={styles.iconContainer}>
