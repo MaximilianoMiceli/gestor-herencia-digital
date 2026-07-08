@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.RegularExpressions;
 using Herencia.Business.Dtos;
 using Herencia.Business.Exceptions;
@@ -10,9 +8,9 @@ using Herencia.Data.Repositories;
 namespace Herencia.Business.Services;
 
 // UsuarioService es la implementacion CONCRETA de IUsuarioService: aca vive la
-// LOGICA DE NEGOCIO real de Usuario (validaciones, calculo del hash de la
-// contrasena, traduccion de errores tecnicos a excepciones amigables, y
-// mapeo entre entidades de Data y DTOs de Business).
+// LOGICA DE NEGOCIO real de Usuario (validaciones, orquestacion del calculo del
+// hash de la contrasena, traduccion de errores tecnicos a excepciones
+// amigables, y mapeo entre entidades de Data y DTOs de Business).
 public class UsuarioService : IUsuarioService
 {
     // --- Inyeccion de Dependencias por CONSTRUCTOR ---
@@ -27,13 +25,23 @@ public class UsuarioService : IUsuarioService
     // necesitar una base de datos real.
     private readonly IUsuarioRepository _usuarioRepository;
 
+    // ISeguridadService encapsula el ALGORITMO criptografico real (HMACSHA512)
+    // usado para calcular el hash/salt de una contrasena. UsuarioService ya NO
+    // calcula el hash "a mano" (como antes, en un metodo privado propio):
+    // delega esa responsabilidad a un servicio dedicado y reutilizable, para
+    // que la logica de SEGURIDAD viva en un unico lugar (ver el comentario de
+    // ISeguridadService para el detalle completo de por que se separo).
+    private readonly ISeguridadService _seguridadService;
+
     // El contenedor de Inyeccion de Dependencias configurado en Program.cs
     // (etapa Api) sera el encargado de "resolver" automaticamente una
-    // instancia de IUsuarioRepository (tipicamente UsuarioRepository) y
-    // pasarla aca por este constructor cuando se necesite un UsuarioService.
-    public UsuarioService(IUsuarioRepository usuarioRepository)
+    // instancia de IUsuarioRepository (tipicamente UsuarioRepository) y de
+    // ISeguridadService (tipicamente SeguridadService), y pasarlas aca por
+    // este constructor cuando se necesite un UsuarioService.
+    public UsuarioService(IUsuarioRepository usuarioRepository, ISeguridadService seguridadService)
     {
         _usuarioRepository = usuarioRepository;
+        _seguridadService = seguridadService;
     }
 
     // CrearUsuarioAsync: da de alta un nuevo Usuario a partir de un DTO de
@@ -81,13 +89,13 @@ public class UsuarioService : IUsuarioService
         // --- Paso 2: logica de negocio + acceso a datos, protegida con try-catch ---
         try
         {
-            // GenerarHashYSalt calcula, a partir de la contrasena en texto
-            // plano, el par (hash, salt) que efectivamente se va a persistir.
-            // Este calculo se hace ACA, en Business, porque es logica de
-            // SEGURIDAD/negocio, no un detalle de almacenamiento: la capa
-            // Data solo debe encargarse de guardar los bytes ya calculados,
-            // nunca de saber COMO se calculan.
-            var (passwordHash, passwordSalt) = GenerarHashYSalt(usuarioCreacionDTO.Password);
+            // Delegamos el calculo criptografico del hash/salt a
+            // ISeguridadService (out parameters: la firma expone dos salidas
+            // igual de importantes). UsuarioService ya no sabe COMO se calcula
+            // un hash seguro, solo que "existe alguien que sabe hacerlo": la
+            // capa Data, por su parte, solo se encarga de PERSISTIR los bytes
+            // ya calculados, sin saber tampoco como se generaron.
+            _seguridadService.CrearPasswordHash(usuarioCreacionDTO.Password, out var passwordHash, out var passwordSalt);
 
             // Mapeamos el DTO de entrada + los datos de seguridad calculados
             // hacia la entidad de EF Core "Usuario". Este mapeo manual (DTO ->
@@ -202,40 +210,111 @@ public class UsuarioService : IUsuarioService
         }
     }
 
-    // --- Metodos privados auxiliares (detalles de implementacion internos) ---
-
-    // GenerarHashYSalt simula/realiza el proceso de seguridad de contrasenas
-    // pedido por la rubrica: nunca guardamos la contrasena en texto plano.
-    //
-    // Se usa HMACSHA512 (clase provista por .NET en System.Security.Cryptography)
-    // porque, al construirla SIN pasarle una clave por parametro, el propio
-    // framework genera automaticamente una clave criptografica aleatoria de
-    // 128 bytes: esa clave ES el "salt" (el valor aleatorio unico por usuario).
-    // Luego, HMACSHA512.ComputeHash calcula el "hash" de la contrasena
-    // combinandola criptograficamente con esa clave/salt. Guardando ambos
-    // valores (hash + salt) por separado, se logra que dos usuarios con la
-    // misma contrasena en texto plano terminen con hashes COMPLETAMENTE
-    // distintos en la base de datos, frustrando ataques de diccionario/rainbow
-    // tables precalculadas.
-    private static (byte[] hash, byte[] salt) GenerarHashYSalt(string password)
+    // ActualizarUsuarioAsync: modifica el Nombre y el Email de un Usuario que ya
+    // existe. Notar que PasswordHash/PasswordSalt NUNCA se tocan aca: cambiar la
+    // contrasena queda fuera del alcance de este metodo (ver comentario en
+    // UsuarioActualizacionDTO).
+    public async Task<UsuarioDTO> ActualizarUsuarioAsync(int id, UsuarioActualizacionDTO usuarioActualizacionDTO)
     {
-        // El "using" asegura que los recursos no administrados de HMACSHA512
-        // (el algoritmo criptografico subyacente del sistema operativo) se
-        // liberen correctamente apenas termina de usarse, sin esperar al
-        // recolector de basura.
-        using var hmac = new HMACSHA512();
+        // --- Paso 1: Validaciones de negocio (mismas reglas que en el alta) ---
+        if (string.IsNullOrWhiteSpace(usuarioActualizacionDTO.Nombre))
+        {
+            throw new ReglaNegocioException("El nombre del usuario no puede estar vacio.");
+        }
 
-        // hmac.Key fue generado aleatoriamente por el propio constructor de
-        // HMACSHA512: este arreglo de bytes es nuestro salt.
-        var salt = hmac.Key;
+        if (string.IsNullOrWhiteSpace(usuarioActualizacionDTO.Email) ||
+            !Regex.IsMatch(usuarioActualizacionDTO.Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+        {
+            throw new ReglaNegocioException("El email ingresado no tiene un formato valido.");
+        }
 
-        // ComputeHash recibe la contrasena convertida a bytes (UTF8) y
-        // devuelve el hash resultante, ya combinado con el salt (la clave)
-        // configurado arriba.
-        var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(password));
+        try
+        {
+            // --- Paso 2: buscar la entidad EXISTENTE (no se "crea" una nueva) ---
+            // A diferencia de CrearUsuarioAsync, aca necesitamos la entidad
+            // completa ya trackeada por el repositorio (con su Id, PasswordHash,
+            // PasswordSalt y FechaCreacion originales intactos) para no perder
+            // esos datos al actualizar solo Nombre/Email.
+            var usuario = await _usuarioRepository.ObtenerPorIdAsync(id);
 
-        return (hash, salt);
+            if (usuario is null)
+            {
+                throw new RecursoNoEncontradoException($"No se encontro el usuario con Id {id}.");
+            }
+
+            // Se modifican UNICAMENTE los campos que este DTO expone. El resto
+            // de la entidad (PasswordHash, PasswordSalt, FechaCreacion) queda
+            // intacto porque ActivoDigitalActualizacionDTO/UsuarioActualizacionDTO
+            // ni siquiera tienen esas propiedades: es fisicamente imposible
+            // sobrescribirlas por este camino.
+            usuario.Nombre = usuarioActualizacionDTO.Nombre.Trim();
+            usuario.Email = usuarioActualizacionDTO.Email.Trim();
+
+            // Dato de auditoria: se deja constancia de CUANDO y QUIEN modifico
+            // el registro (bonus de auditoria pedido por la rubrica).
+            usuario.FechaModificacion = DateTime.UtcNow;
+            usuario.UsuarioModificacion = "sistema";
+
+            // Delegamos el UPDATE al repositorio a traves de la interfaz: la
+            // capa Business no sabe (ni le importa) que sentencia SQL termina
+            // ejecutando EF Core por detras.
+            await _usuarioRepository.ActualizarAsync(usuario);
+
+            return MapearADTO(usuario);
+        }
+        catch (RecursoNoEncontradoException)
+        {
+            throw;
+        }
+        catch (ReglaNegocioException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new ReglaNegocioException("Ocurrio un error al actualizar el usuario.", ex);
+        }
     }
+
+    // EliminarUsuarioAsync: borra un Usuario existente por su Id.
+    public async Task EliminarUsuarioAsync(int id)
+    {
+        try
+        {
+            // Se verifica la existencia ANTES de intentar borrar: esto permite
+            // distinguir "el Id no existe" (404, RecursoNoEncontradoException)
+            // de un eventual error tecnico al borrar (500 traducido a
+            // ReglaNegocioException), en vez de que ambos casos terminen
+            // mezclados dentro de un mismo catch generico.
+            var usuario = await _usuarioRepository.ObtenerPorIdAsync(id);
+
+            if (usuario is null)
+            {
+                throw new RecursoNoEncontradoException($"No se encontro el usuario con Id {id}.");
+            }
+
+            // Delegamos el DELETE al repositorio. La cascada configurada en
+            // AppDbContext (OnDelete(DeleteBehavior.Cascade) para Beneficiarios
+            // y ActivosDigitales) se encarga de que no queden registros
+            // huerfanos: eso es un detalle de la capa Data, invisible aca.
+            await _usuarioRepository.EliminarAsync(id);
+        }
+        catch (RecursoNoEncontradoException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new ReglaNegocioException("Ocurrio un error al eliminar el usuario.", ex);
+        }
+    }
+
+    // --- Metodos privados auxiliares (detalles de implementacion internos) ---
+    //
+    // Notar que el calculo criptografico del hash/salt YA NO vive aca: fue
+    // extraido a ISeguridadService/SeguridadService (ver el constructor de
+    // esta clase) para que la logica de seguridad de contrasenas tenga un
+    // unico lugar de verdad, reutilizable por cualquier otro servicio futuro.
 
     // MapearADTO centraliza en un unico lugar la conversion de la entidad
     // "Usuario" (Data) hacia "UsuarioDTO" (Business/salida). Tenerlo en un

@@ -173,6 +173,84 @@ public class ActivoDigitalService : IActivoDigitalService
         }
     }
 
+    // ActualizarActivoDigitalAsync: modifica Nombre, Tipo y Descripcion de un
+    // ActivoDigital que ya existe. El UsuarioId (titular) NUNCA se toca aca: no
+    // se puede "transferir" el activo por este medio (ver comentario en
+    // ActivoDigitalActualizacionDTO).
+    public async Task<ActivoDigitalDTO> ActualizarActivoDigitalAsync(int id, ActivoDigitalActualizacionDTO activoDigitalActualizacionDTO)
+    {
+        // --- Paso 1: misma validacion de formato que en el alta ---
+        if (string.IsNullOrWhiteSpace(activoDigitalActualizacionDTO.Nombre))
+        {
+            throw new ReglaNegocioException("El nombre del activo digital no puede estar vacio.");
+        }
+
+        try
+        {
+            // --- Paso 2: buscar la entidad EXISTENTE ---
+            // Se carga el activo completo (no solo se "arma" uno nuevo) para
+            // preservar sus campos que este DTO no expone: Id, UsuarioId,
+            // FechaCreacion y las AsignacionesHerencia ya vinculadas.
+            var activoDigital = await _activoDigitalRepository.ObtenerPorIdAsync(id);
+
+            if (activoDigital is null)
+            {
+                throw new RecursoNoEncontradoException($"No se encontro el activo digital con Id {id}.");
+            }
+
+            activoDigital.Nombre = activoDigitalActualizacionDTO.Nombre.Trim();
+            activoDigital.Tipo = activoDigitalActualizacionDTO.Tipo;
+            activoDigital.Descripcion = activoDigitalActualizacionDTO.Descripcion?.Trim() ?? string.Empty;
+
+            // Dato de auditoria: registra cuando y quien modifico el activo.
+            activoDigital.FechaModificacion = DateTime.UtcNow;
+            activoDigital.UsuarioModificacion = "sistema";
+
+            await _activoDigitalRepository.ActualizarAsync(activoDigital);
+
+            return MapearADTO(activoDigital);
+        }
+        catch (RecursoNoEncontradoException)
+        {
+            throw;
+        }
+        catch (ReglaNegocioException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new ReglaNegocioException("Ocurrio un error al actualizar el activo digital.", ex);
+        }
+    }
+
+    // EliminarActivoDigitalAsync: borra un ActivoDigital existente por su Id.
+    public async Task EliminarActivoDigitalAsync(int id)
+    {
+        try
+        {
+            var activoDigital = await _activoDigitalRepository.ObtenerPorIdAsync(id);
+
+            if (activoDigital is null)
+            {
+                throw new RecursoNoEncontradoException($"No se encontro el activo digital con Id {id}.");
+            }
+
+            // La cascada configurada en AppDbContext para AsignacionHerencia ->
+            // ActivoDigital se encarga de eliminar tambien las asignaciones de
+            // herencia que dependan de este activo.
+            await _activoDigitalRepository.EliminarAsync(id);
+        }
+        catch (RecursoNoEncontradoException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new ReglaNegocioException("Ocurrio un error al eliminar el activo digital.", ex);
+        }
+    }
+
     // MapearADTO centraliza la conversion Entidad -> DTO de salida, evitando
     // repetir este mapeo en cada metodo publico del servicio.
     private static ActivoDigitalDTO MapearADTO(ActivoDigital activoDigital)

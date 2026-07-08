@@ -27,4 +27,17 @@ public interface IActivoDigitalService
     // Puede lanzar RecursoNoEncontradoException si el usuarioId no existe, o
     // ReglaNegocioException si ocurre un error tecnico al consultarlos.
     Task<IEnumerable<ActivoDigitalDTO>> ObtenerActivosPorUsuarioAsync(int usuarioId);
+
+    // Actualiza el Nombre, Tipo y Descripcion de un ActivoDigital existente.
+    // No permite reasignar el Usuario titular (ver comentario en
+    // ActivoDigitalActualizacionDTO). Puede lanzar RecursoNoEncontradoException
+    // si el Id no existe, o ReglaNegocioException si los nuevos datos son
+    // invalidos o si ocurre un error tecnico al persistir el cambio.
+    Task<ActivoDigitalDTO> ActualizarActivoDigitalAsync(int id, ActivoDigitalActualizacionDTO activoDigitalActualizacionDTO);
+
+    // Elimina un ActivoDigital existente (y, por la configuracion de cascada del
+    // AppDbContext, tambien sus AsignacionesHerencia asociadas).
+    // Puede lanzar RecursoNoEncontradoException si el Id no existe, o
+    // ReglaNegocioException si ocurre un error tecnico al eliminarlo.
+    Task EliminarActivoDigitalAsync(int id);
 }

@@ -31,4 +31,16 @@ public interface IUsuarioService
     // Devuelve el listado completo de Usuarios registrados.
     // Puede lanzar ReglaNegocioException si ocurre un error tecnico al consultarlos.
     Task<IEnumerable<UsuarioDTO>> ObtenerTodosLosUsuariosAsync();
+
+    // Actualiza el Nombre y el Email de un Usuario ya existente.
+    // Puede lanzar RecursoNoEncontradoException si el Id no existe, o
+    // ReglaNegocioException si los nuevos datos son invalidos o si ocurre un
+    // error tecnico al persistir el cambio.
+    Task<UsuarioDTO> ActualizarUsuarioAsync(int id, UsuarioActualizacionDTO usuarioActualizacionDTO);
+
+    // Elimina un Usuario existente (y, por la configuracion de cascada del
+    // AppDbContext, tambien sus Beneficiarios y ActivosDigitales asociados).
+    // Puede lanzar RecursoNoEncontradoException si el Id no existe, o
+    // ReglaNegocioException si ocurre un error tecnico al eliminarlo.
+    Task EliminarUsuarioAsync(int id);
 }

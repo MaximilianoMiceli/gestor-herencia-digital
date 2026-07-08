@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Herencia.Data.Models;
 
 namespace Herencia.Business.Dtos;
@@ -13,8 +14,10 @@ namespace Herencia.Business.Dtos;
 // repartir el activo entre beneficiarios).
 public class ActivoDigitalCreacionDTO
 {
-    // Nombre descriptivo del activo (ej: "Cuenta Banco Santander"). Se valida
-    // en el servicio que no venga vacio.
+    // Nombre descriptivo del activo (ej: "Cuenta Banco Santander"). [Required]
+    // dispara un 400 automatico si viene null/vacio; el servicio ademas valida
+    // que no sea solo espacios en blanco.
+    [Required(ErrorMessage = "El nombre del activo es obligatorio.")]
     public string Nombre { get; set; } = string.Empty;
 
     // Categoria del activo. Al reutilizar el mismo enum "TipoActivoDigital" que

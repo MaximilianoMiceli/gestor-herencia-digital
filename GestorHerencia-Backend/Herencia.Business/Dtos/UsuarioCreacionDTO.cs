@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Herencia.Business.Dtos;
 
 // UsuarioCreacionDTO ("Data Transfer Object") es la forma en la que los datos
@@ -24,12 +26,16 @@ namespace Herencia.Business.Dtos;
 //    etapas del ciclo de vida de un Usuario.
 public class UsuarioCreacionDTO
 {
-    // Nombre completo del futuro titular de la cuenta. Se valida en el servicio
-    // que no venga vacio ni compuesto solo por espacios en blanco.
+    // Nombre completo del futuro titular de la cuenta. [Required] dispara un 400
+    // automatico (via [ApiController]) si viene null/vacio, ANTES de llegar al
+    // controller. El servicio, ademas, valida que no sea solo espacios en blanco.
+    [Required(ErrorMessage = "El nombre es obligatorio.")]
     public string Nombre { get; set; } = string.Empty;
 
-    // Email del usuario. Se valida en el servicio que tenga un formato de email
-    // correcto antes de intentar persistirlo (evita basura en la base de datos).
+    // Email del usuario. [Required] cubre el caso "vacio"; el FORMATO (que tenga
+    // arroba, dominio, etc.) se sigue validando en el servicio, que es quien
+    // conoce la regla de negocio exacta (la regex usada).
+    [Required(ErrorMessage = "El email es obligatorio.")]
     public string Email { get; set; } = string.Empty;
 
     // Contrasena en TEXTO PLANO, tal como la escribio el usuario en el formulario.
@@ -37,5 +43,6 @@ public class UsuarioCreacionDTO
     // trayecto DTO -> UsuarioService, donde se usa para calcular PasswordHash y
     // PasswordSalt. Jamas se persiste este valor en la base de datos, y jamas
     // deberia loguearse ni devolverse en una respuesta de la Api.
+    [Required(ErrorMessage = "La contraseña es obligatoria.")]
     public string Password { get; set; } = string.Empty;
 }
