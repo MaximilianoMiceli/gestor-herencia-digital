@@ -101,4 +101,58 @@ public class RepositorioBase<T> : IRepositorioBase<T> where T : class
             await _contexto.SaveChangesAsync();
         }
     }
+
+    // EjecutarEnTransaccionAsync: implementacion real del manejo de
+    // transacciones explicitas descripto en la interfaz.
+    public async Task EjecutarEnTransaccionAsync(Func<Task> operacion)
+    {
+        // Database.BeginTransactionAsync() abre una TRANSACCION a nivel de
+        // la conexion de base de datos subyacente (no es un concepto de EF
+        // Core en memoria: es una transaccion SQL real, del motor SQLite).
+        // Mientras esta transaccion este ABIERTA, cualquier SaveChangesAsync()
+        // que se ejecute sobre ESTE MISMO AppDbContext (sin importar si se
+        // llama desde este repositorio o desde OTRO repositorio que comparta
+        // la misma instancia Scoped del contexto, como pasa dentro de una
+        // misma request HTTP) queda ENCOLADO dentro de esta transaccion, en
+        // vez de confirmarse individualmente contra el archivo de base de
+        // datos.
+        //
+        // "await using" asegura que, pase lo que pase (exito, excepcion, lo
+        // que sea), el objeto "transaccion" se libere correctamente al salir
+        // de este metodo (llama automaticamente a DisposeAsync).
+        await using var transaccion = await _contexto.Database.BeginTransactionAsync();
+
+        try
+        {
+            // Se ejecuta la operacion recibida (tipicamente, varios pasos de
+            // negocio con sus propios AgregarAsync/ActualizarAsync/etc.).
+            await operacion();
+
+            // Si llegamos hasta aca sin excepciones, TODOS los pasos
+            // intentados dentro de "operacion" salieron bien: se confirma la
+            // transaccion, y recien AHI los cambios quedan escritos de forma
+            // permanente en el archivo de base de datos.
+            await transaccion.CommitAsync();
+        }
+        catch
+        {
+            // Si CUALQUIER paso dentro de "operacion" lanzo una excepcion
+            // (una regla de negocio violada, un recurso no encontrado, un
+            // error tecnico de EF Core, etc.), revertimos TODO lo que se
+            // haya intentado guardar dentro de esta transaccion, sin
+            // importar en que paso especifico fallo. Esto es exactamente lo
+            // que evita el escenario "guardamos 2 de 5 registros y despues
+            // fallamos": o se guardan los 5, o no se guarda NINGUNO.
+            await transaccion.RollbackAsync();
+
+            // "throw;" (sin argumento) relanza la excepcion ORIGINAL tal
+            // cual, preservando su tipo real (ej: ReglaNegocioException,
+            // RecursoNoEncontradoException) y su StackTrace completo, para
+            // que la capa Business (que fue quien paso la funcion
+            // "operacion") pueda seguir distinguiendo estos casos en su
+            // propio catch, exactamente igual que si la transaccion no
+            // hubiera existido.
+            throw;
+        }
+    }
 }

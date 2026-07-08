@@ -251,6 +251,80 @@ public class ActivoDigitalService : IActivoDigitalService
         }
     }
 
+    // ObtenerActivosPorUsuarioPaginadoAsync: devuelve solo una "pagina" de los
+    // ActivosDigitales de un usuario, junto con los metadatos necesarios para
+    // que el cliente arme un paginador (total de registros y de paginas).
+    public async Task<ResultadoPaginadoDTO<ActivoDigitalDTO>> ObtenerActivosPorUsuarioPaginadoAsync(
+        int usuarioId, int pagina, int limite, TipoActivoDigital? tipo, string? nombre)
+    {
+        // --- Normalizacion defensiva de los parametros de paginacion ---
+        // Estos valores llegan directamente desde un query string HTTP (ej:
+        // "?pagina=-3&limite=999999"), es decir, son datos de entrada NO
+        // confiables. Si no los acotaramos aca, un cliente mal intencionado
+        // podria pedir "limite=999999" para forzar a la base de datos a traer
+        // absolutamente TODOS los activos de un usuario en una sola respuesta
+        // (anulando el proposito mismo de paginar, que es limitar cuanto se
+        // procesa/transfiere por request), o "pagina=0"/"pagina=-1", que
+        // rompería la formula Skip = (pagina - 1) * limite generando un Skip
+        // negativo (invalido para SQL).
+        if (pagina < 1)
+        {
+            pagina = 1;
+        }
+
+        if (limite < 1)
+        {
+            limite = 10;
+        }
+        else if (limite > 100)
+        {
+            // Tope MAXIMO razonable por pagina: protege el rendimiento del
+            // servidor y de la base de datos ante requests abusivos, sin
+            // afectar el uso normal (10-50 registros por pantalla).
+            limite = 100;
+        }
+
+        try
+        {
+            // Misma regla de negocio que en ObtenerActivosPorUsuarioAsync: el
+            // usuario titular debe existir antes de listar (o paginar) sus
+            // activos.
+            var usuarioTitular = await _usuarioRepository.ObtenerPorIdAsync(usuarioId);
+
+            if (usuarioTitular is null)
+            {
+                throw new RecursoNoEncontradoException($"No se encontro el usuario con Id {usuarioId}.");
+            }
+
+            var (items, total) = await _activoDigitalRepository.ObtenerActivosPorUsuarioPaginadoAsync(usuarioId, pagina, limite, tipo, nombre);
+
+            return new ResultadoPaginadoDTO<ActivoDigitalDTO>
+            {
+                Items = items.Select(MapearADTO),
+                PaginaActual = pagina,
+                RegistrosPorPagina = limite,
+                TotalRegistros = total,
+                // Math.Ceiling redondea HACIA ARRIBA: si un usuario tiene 25
+                // activos con un limite de 10 por pagina, 25/10 = 2.5, y
+                // necesitamos 3 paginas completas para poder mostrar los 25
+                // (2 paginas de 10 + 1 pagina "incompleta" de 5). Se castea a
+                // "double" ANTES de dividir para forzar una division decimal
+                // (una division entre dos "int" en C# trunca el resultado,
+                // perdiendo justamente la parte fraccionaria que Ceiling
+                // necesita para redondear correctamente).
+                TotalPaginas = (int)Math.Ceiling(total / (double)limite)
+            };
+        }
+        catch (RecursoNoEncontradoException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new ReglaNegocioException("Ocurrio un error al obtener los activos digitales paginados del usuario.", ex);
+        }
+    }
+
     // MapearADTO centraliza la conversion Entidad -> DTO de salida, evitando
     // repetir este mapeo en cada metodo publico del servicio.
     private static ActivoDigitalDTO MapearADTO(ActivoDigital activoDigital)

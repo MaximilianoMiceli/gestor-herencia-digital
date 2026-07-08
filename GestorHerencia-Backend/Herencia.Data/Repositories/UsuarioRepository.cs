@@ -47,4 +47,20 @@ public class UsuarioRepository : RepositorioBase<Usuario>, IUsuarioRepository
             .Include(u => u.Beneficiarios)
             .FirstOrDefaultAsync(u => u.Id == usuarioId);
     }
+
+    // ObtenerPorEmailAsync: busca un Usuario filtrando por su columna Email.
+    public async Task<Usuario?> ObtenerPorEmailAsync(string email)
+    {
+        // A diferencia de ObtenerPorIdAsync (que usa FindAsync contra la clave
+        // primaria), ObtenerPorEmailAsync filtra por una columna que NO es la
+        // PK, por lo que necesitamos una consulta LINQ explicita con Where()
+        // (traducida por EF Core a un "WHERE Email = @email" en SQL) en vez de
+        // FindAsync. Gracias al indice UNICO sobre Email definido en
+        // AppDbContext.OnModelCreating, esta busqueda es eficiente y, ademas,
+        // la base de datos GARANTIZA que como mucho hay un Usuario con ese
+        // email exacto (por eso FirstOrDefaultAsync es semanticamente correcto
+        // aca, y no traeria resultados ambiguos).
+        return await _contexto.Usuarios
+            .FirstOrDefaultAsync(u => u.Email == email);
+    }
 }

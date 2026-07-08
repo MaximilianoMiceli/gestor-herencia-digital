@@ -1,4 +1,5 @@
 using Herencia.Business.Dtos;
+using Herencia.Data.Models;
 
 namespace Herencia.Business.Interfaces;
 
@@ -40,4 +41,20 @@ public interface IActivoDigitalService
     // Puede lanzar RecursoNoEncontradoException si el Id no existe, o
     // ReglaNegocioException si ocurre un error tecnico al eliminarlo.
     Task EliminarActivoDigitalAsync(int id);
+
+    // Version PAGINADA y FILTRADA de ObtenerActivosPorUsuarioAsync: en vez de
+    // devolver TODOS los activos de un usuario de una sola vez, devuelve
+    // solo la "pagina" pedida (parametros "pagina" y "limite"), envuelta en
+    // un ResultadoPaginadoDTO que ademas informa el total de registros/
+    // paginas. Los parametros "tipo" y "nombre" son FILTROS OPCIONALES
+    // (nullable): si ambos vienen null, se comporta igual que sin filtrar;
+    // si se envian, restringen la busqueda por categoria y/o por texto
+    // parcial del nombre. Es el metodo que consume el endpoint
+    // "GET /api/activos" (protegido con [Authorize]), donde el usuarioId
+    // SIEMPRE proviene del Claim del Token JWT del usuario autenticado,
+    // nunca de un parametro que el cliente pueda manipular libremente.
+    // Puede lanzar RecursoNoEncontradoException si el usuarioId no existe, o
+    // ReglaNegocioException si ocurre un error tecnico al consultarlos.
+    Task<ResultadoPaginadoDTO<ActivoDigitalDTO>> ObtenerActivosPorUsuarioPaginadoAsync(
+        int usuarioId, int pagina, int limite, TipoActivoDigital? tipo, string? nombre);
 }

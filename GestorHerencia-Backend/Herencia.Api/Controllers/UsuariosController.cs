@@ -1,6 +1,9 @@
+using System.Security.Claims;
 using Herencia.Business.Dtos;
 using Herencia.Business.Exceptions;
 using Herencia.Business.Interfaces;
+using Herencia.Data.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Herencia.Api.Controllers;
@@ -18,7 +21,16 @@ namespace Herencia.Api.Controllers;
 //
 // [Route("api/usuarios")] fija el prefijo de ruta base RESTful para todo el
 // recurso "usuarios", en linea con la convencion "api/{recurso-en-plural}".
+//
+// --- [Authorize] a nivel de clase ---
+// Los datos de un Usuario (Nombre, Email) son informacion personal: ningun
+// endpoint deberia quedar accesible sin un Token JWT valido. Igual que en
+// ActivosDigitalesController, se protege TODO el controller por defecto
+// ("secure by default"), y se marca explicitamente con [AllowAnonymous] el
+// UNICO endpoint que necesita quedar publico (Crear), en vez de arriesgarse a
+// que un endpoint nuevo quede sin proteger por simple omision.
 [ApiController]
+[Authorize]
 [Route("api/usuarios")]
 public class UsuariosController : ControllerBase
 {
@@ -56,12 +68,36 @@ public class UsuariosController : ControllerBase
         _logger = logger;
     }
 
+    // --- Helper privado: extraer el Id del usuario autenticado del Token JWT ---
+    // Mismo criterio que en ActivosDigitalesController: centraliza la lectura
+    // del Claim ClaimTypes.NameIdentifier para no repetirla en cada action.
+    private int? ObtenerUsuarioIdAutenticado()
+    {
+        var claim = User.FindFirst(ClaimTypes.NameIdentifier);
+        return (claim is not null && int.TryParse(claim.Value, out var usuarioId)) ? usuarioId : null;
+    }
+
     // GET api/usuarios
     //
     // Verbo GET: por definicion del protocolo HTTP, GET es una operacion de
     // SOLO LECTURA, segura e idempotente (llamarla una o mil veces produce el
     // mismo resultado y no modifica ningun estado del servidor). Por eso es el
     // verbo correcto para "obtener el listado completo de usuarios".
+    //
+    // --- [Authorize(Roles = "Administrador")] ---
+    // A diferencia del resto de los endpoints de este controller (protegidos
+    // por el [Authorize] de clase, que solo exige "estar logueado"), listar
+    // TODOS los usuarios del sistema es una operacion administrativa: ningun
+    // usuario "comun" (RolUsuario.Usuario) tiene motivo legitimo para ver los
+    // datos de TODOS los demas usuarios, solo los suyos propios (ver
+    // ObtenerPorId). [Authorize(Roles = "Administrador")] agrega una
+    // capa MAS de autorizacion encima de la autenticacion: no alcanza con
+    // tener un token valido, ese token ademas debe traer el Claim de rol
+    // "Administrador" (ver TokenService.CrearToken). Si un usuario
+    // autenticado pero con rol "Usuario" intenta este endpoint, el middleware
+    // de Authorization lo corta con un 403 Forbidden automatico, sin llegar a
+    // ejecutar el codigo de este metodo.
+    [Authorize(Roles = nameof(RolUsuario.Administrador))]
     [HttpGet]
     public async Task<ActionResult<IEnumerable<UsuarioDTO>>> ObtenerTodos()
     {
@@ -97,9 +133,32 @@ public class UsuariosController : ControllerBase
     {
         try
         {
+            // --- Verificacion de OWNERSHIP (IDOR) ---
+            // Sin este chequeo, cualquier usuario autenticado podria leer el
+            // perfil (Nombre, Email) de CUALQUIER OTRO usuario con solo
+            // adivinar/enumerar Ids en la URL. Como el sistema no maneja
+            // roles de administrador, la unica regla posible hoy es "un
+            // usuario solo puede ver su PROPIO perfil". El Id de la URL se
+            // compara contra el Id extraido del Token JWT (no falsificable
+            // sin invalidar la firma, ver TokenService).
+            var usuarioAutenticadoId = ObtenerUsuarioIdAutenticado();
+
+            if (usuarioAutenticadoId is null)
+            {
+                return Unauthorized(new { mensaje = "El token no contiene un identificador de usuario valido." });
+            }
+
+            if (id != usuarioAutenticadoId)
+            {
+                // 403 Forbidden: token valido, pero sin permiso sobre ESTE
+                // perfil puntual (no es el propio).
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    new { mensaje = "No tenes permiso para acceder a este usuario." });
+            }
+
             var usuario = await _usuarioService.ObtenerUsuarioPorIdAsync(id);
 
-            // 200 OK: se encontro el usuario solicitado.
+            // 200 OK: se encontro el usuario solicitado y es el propio.
             return Ok(usuario);
         }
         catch (RecursoNoEncontradoException ex)
@@ -132,6 +191,26 @@ public class UsuariosController : ControllerBase
     {
         try
         {
+            // Misma verificacion de OWNERSHIP que en ObtenerPorId: los
+            // ActivosDigitales son informacion sensible, asi que un usuario
+            // solo puede listar los SUYOS (id de la URL == id del token). El
+            // endpoint hermano "GET /api/activos" (ActivosDigitalesController)
+            // ya resuelve este mismo caso de uso sin necesitar recibir ningun
+            // Id en la URL; esta ruta anidada se mantiene por compatibilidad
+            // con lo ya implementado, pero ahora protegida de la misma forma.
+            var usuarioAutenticadoId = ObtenerUsuarioIdAutenticado();
+
+            if (usuarioAutenticadoId is null)
+            {
+                return Unauthorized(new { mensaje = "El token no contiene un identificador de usuario valido." });
+            }
+
+            if (id != usuarioAutenticadoId)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    new { mensaje = "No tenes permiso para acceder a los activos de este usuario." });
+            }
+
             // Notar que el controller delega ESTA logica (incluida la
             // validacion de que el usuario exista) al servicio de
             // ActivoDigital, no la reimplementa aca. El controller no sabe
@@ -159,6 +238,17 @@ public class UsuariosController : ControllerBase
     // no existe (el cliente no elige el Id, lo genera la base de datos). A
     // diferencia de GET/PUT/DELETE, POST no es idempotente: llamarlo dos veces
     // con el mismo body crea DOS usuarios distintos.
+    //
+    // --- ¿Por que [AllowAnonymous] aca, si el controller entero es [Authorize]? ---
+    // Este es, deliberadamente, el UNICO endpoint publico de todo el
+    // controller: no tendria sentido exigir estar ya autenticado para poder
+    // crear una cuenta nueva (seria una paradoja: necesitarias un token para
+    // conseguir tu primer token). El flujo de auto-registro "oficial" para un
+    // visitante anonimo es "POST /api/auth/registro" (AuthController), que
+    // reutiliza este mismo servicio; este endpoint se mantiene [AllowAnonymous]
+    // por compatibilidad con el alta administrativa de Usuarios ya implementada
+    // antes de que existiera el modulo de autenticacion.
+    [AllowAnonymous]
     [HttpPost]
     public async Task<ActionResult<UsuarioDTO>> Crear(UsuarioCreacionDTO usuarioCreacionDTO)
     {
@@ -220,6 +310,21 @@ public class UsuariosController : ControllerBase
 
         try
         {
+            // --- Verificacion de OWNERSHIP: un usuario solo puede editar su
+            // PROPIO perfil, nunca el de otro (aunque adivine su Id). ---
+            var usuarioAutenticadoId = ObtenerUsuarioIdAutenticado();
+
+            if (usuarioAutenticadoId is null)
+            {
+                return Unauthorized(new { mensaje = "El token no contiene un identificador de usuario valido." });
+            }
+
+            if (id != usuarioAutenticadoId)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    new { mensaje = "No tenes permiso para modificar este usuario." });
+            }
+
             var usuarioActualizado = await _usuarioService.ActualizarUsuarioAsync(id, usuarioActualizacionDTO);
 
             // 200 OK: la actualizacion se aplico correctamente. Se devuelve el
@@ -258,6 +363,21 @@ public class UsuariosController : ControllerBase
     {
         try
         {
+            // --- Verificacion de OWNERSHIP: un usuario solo puede eliminar
+            // su PROPIA cuenta, nunca la de otro. ---
+            var usuarioAutenticadoId = ObtenerUsuarioIdAutenticado();
+
+            if (usuarioAutenticadoId is null)
+            {
+                return Unauthorized(new { mensaje = "El token no contiene un identificador de usuario valido." });
+            }
+
+            if (id != usuarioAutenticadoId)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    new { mensaje = "No tenes permiso para eliminar este usuario." });
+            }
+
             await _usuarioService.EliminarUsuarioAsync(id);
 
             // 204 No Content: el borrado se realizo con exito. No se devuelve

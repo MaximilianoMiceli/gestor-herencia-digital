@@ -64,6 +64,12 @@ public class AppDbContext : DbContext
             entity.Property(u => u.PasswordSalt)
                   .IsRequired();
 
+            // Rol es obligatorio (todo Usuario tiene SIEMPRE un nivel de
+            // permisos definido, nunca "sin rol"). EF Core persiste el enum
+            // como INTEGER por defecto (0 = Usuario, 1 = Administrador).
+            entity.Property(u => u.Rol)
+                  .IsRequired();
+
             // --- Relacion 1-N: Usuario (1) -> Beneficiario (N) ---
             // Un usuario tiene muchos beneficiarios; cada beneficiario pertenece
             // a un unico usuario. Si se borra el Usuario, se borran en cascada
@@ -178,6 +184,9 @@ public class AppDbContext : DbContext
         var passwordSaltSeed = Convert.FromBase64String("c2FsdERlUHJ1ZWJhU2VtaWxsYTEyMzQ1Ng==");
 
         // --- 2 Usuarios de prueba ---
+        // El usuario 1 se siembra como Administrador (para poder probar de
+        // entrada el endpoint "GET /api/usuarios", restringido por rol) y el
+        // usuario 2 como Usuario comun.
         modelBuilder.Entity<Usuario>().HasData(
             new Usuario
             {
@@ -186,6 +195,7 @@ public class AppDbContext : DbContext
                 Email = "maximiceli@hotmail.com.ar",
                 PasswordHash = passwordHashSeed,
                 PasswordSalt = passwordSaltSeed,
+                Rol = RolUsuario.Administrador,
                 FechaCreacion = fechaSeed,
                 UsuarioCreacion = "seed"
             },
@@ -196,6 +206,7 @@ public class AppDbContext : DbContext
                 Email = "ana.torres@example.com",
                 PasswordHash = passwordHashSeed,
                 PasswordSalt = passwordSaltSeed,
+                Rol = RolUsuario.Usuario,
                 FechaCreacion = fechaSeed,
                 UsuarioCreacion = "seed"
             }

@@ -43,4 +43,15 @@ public interface IUsuarioService
     // Puede lanzar RecursoNoEncontradoException si el Id no existe, o
     // ReglaNegocioException si ocurre un error tecnico al eliminarlo.
     Task EliminarUsuarioAsync(int id);
+
+    // Busca un Usuario por su Email y devuelve un UsuarioAutenticacionDTO,
+    // el UNICO DTO de este servicio que SI incluye PasswordHash/PasswordSalt
+    // (ver el comentario de esa clase para el porque). Este metodo existe
+    // exclusivamente para que AuthController pueda completar el flujo de
+    // LOGIN: obtener los datos necesarios para verificar la contrasena
+    // ingresada contra el hash/salt persistidos.
+    // Puede lanzar RecursoNoEncontradoException si el email no corresponde a
+    // ningun Usuario registrado, o ReglaNegocioException si ocurre un error
+    // tecnico al consultarlo.
+    Task<UsuarioAutenticacionDTO> ObtenerUsuarioParaAutenticacionAsync(string email);
 }

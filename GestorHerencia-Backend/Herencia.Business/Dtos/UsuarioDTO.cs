@@ -1,3 +1,5 @@
+using Herencia.Data.Models;
+
 namespace Herencia.Business.Dtos;
 
 // UsuarioDTO es la forma en la que los datos de un Usuario SALEN de la capa
@@ -26,4 +28,10 @@ public class UsuarioDTO
     // Fecha de creacion del registro (dato de auditoria), util para mostrarla en
     // una futura UI (ej: "Usuario registrado el 07/07/2026").
     public DateTime FechaCreacion { get; set; }
+
+    // Nivel de permisos del usuario. Se expone en el DTO de salida (a
+    // diferencia de PasswordHash/PasswordSalt) porque NO es informacion
+    // sensible: el frontend lo necesita, por ejemplo, para decidir si
+    // mostrar o no una seccion administrativa en la UI.
+    public RolUsuario Rol { get; set; }
 }

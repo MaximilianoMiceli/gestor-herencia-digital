@@ -26,6 +26,12 @@ public class Usuario : EntidadBaseAuditable
     // la capa Data solo se encarga de PERSISTIR estos valores ya calculados.
     public byte[] PasswordSalt { get; set; } = [];
 
+    // Nivel de permisos del usuario dentro del sistema. Por defecto,
+    // RolUsuario.Usuario (ver esa clase): solo el auto-registro publico crea
+    // usuarios, y siempre con este rol basico, nunca con privilegios
+    // elevados.
+    public RolUsuario Rol { get; set; } = RolUsuario.Usuario;
+
     // --- Relaciones 1-N ---
     // Un Usuario puede tener muchos Beneficiarios registrados (relacion 1-N obligatoria
     // pedida por la rubrica). La coleccion se inicializa vacia para evitar NullReferenceException

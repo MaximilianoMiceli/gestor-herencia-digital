@@ -309,6 +309,45 @@ public class UsuarioService : IUsuarioService
         }
     }
 
+    // ObtenerUsuarioParaAutenticacionAsync: busca un Usuario por Email y
+    // devuelve sus datos MINIMOS necesarios para un flujo de Login (incluido
+    // el hash/salt, a diferencia de todos los demas metodos de este servicio).
+    public async Task<UsuarioAutenticacionDTO> ObtenerUsuarioParaAutenticacionAsync(string email)
+    {
+        try
+        {
+            var usuario = await _usuarioRepository.ObtenerPorEmailAsync(email);
+
+            if (usuario is null)
+            {
+                // Notar que el mensaje NO distingue "el email no existe" de
+                // ningun otro motivo: es responsabilidad de AuthController (no
+                // de este servicio) decidir que texto EXACTO le llega al
+                // cliente en el 401 de un login fallido. Aca simplemente se
+                // informa, para uso INTERNO, que no se encontro el registro.
+                throw new RecursoNoEncontradoException($"No se encontro un usuario con el email '{email}'.");
+            }
+
+            return new UsuarioAutenticacionDTO
+            {
+                Id = usuario.Id,
+                Nombre = usuario.Nombre,
+                Email = usuario.Email,
+                PasswordHash = usuario.PasswordHash,
+                PasswordSalt = usuario.PasswordSalt,
+                Rol = usuario.Rol
+            };
+        }
+        catch (RecursoNoEncontradoException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new ReglaNegocioException("Ocurrio un error al autenticar el usuario.", ex);
+        }
+    }
+
     // --- Metodos privados auxiliares (detalles de implementacion internos) ---
     //
     // Notar que el calculo criptografico del hash/salt YA NO vive aca: fue
@@ -329,7 +368,8 @@ public class UsuarioService : IUsuarioService
             Id = usuario.Id,
             Nombre = usuario.Nombre,
             Email = usuario.Email,
-            FechaCreacion = usuario.FechaCreacion
+            FechaCreacion = usuario.FechaCreacion,
+            Rol = usuario.Rol
         };
     }
 }

@@ -54,4 +54,28 @@ public interface IRepositorioBase<T> where T : class
     // URL de un endpoint REST tipo DELETE /api/usuarios/5) y no hace falta
     // cargar el objeto completo para poder borrarlo.
     Task EliminarAsync(int id);
+
+    // Ejecuta la funcion "operacion" dentro de una TRANSACCION EXPLICITA de
+    // base de datos. Se agrega aca (en el repositorio GENERICO, no en uno
+    // especifico) porque cualquier entidad del dominio podria, en algun
+    // momento, necesitar una operacion que combine VARIOS pasos de escritura
+    // (ej: varias llamadas a AgregarAsync) que deben tener exito TODAS juntas
+    // o NINGUNA: por ejemplo, repartir un ActivoDigital entre multiples
+    // Beneficiarios (varias filas de AsignacionHerencia) en una sola
+    // operacion atomica.
+    //
+    // - Si "operacion" termina SIN lanzar ninguna excepcion, la transaccion
+    //   se CONFIRMA (Commit): todos los cambios intentados dentro de
+    //   "operacion" quedan persistidos de forma definitiva.
+    // - Si "operacion" lanza CUALQUIER excepcion en CUALQUIER punto (incluso
+    //   despues de haber persistido con exito ALGUNOS de los pasos
+    //   anteriores dentro de la misma operacion), la transaccion se REVIERTE
+    //   (Rollback) POR COMPLETO: es como si absolutamente nada de lo
+    //   intentado dentro de "operacion" hubiera ocurrido, aunque parte de
+    //   ese trabajo ya se hubiera "guardado" (SaveChangesAsync) en un paso
+    //   intermedio. La excepcion original se relanza hacia quien llamo, para
+    //   que la capa Business decida como comunicar el error (ver
+    //   RepositorioBase.EjecutarEnTransaccionAsync para el detalle de
+    //   implementacion).
+    Task EjecutarEnTransaccionAsync(Func<Task> operacion);
 }

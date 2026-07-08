@@ -89,7 +89,17 @@ public class TokenService : ITokenService
                 // mostrarlo en una futura UI sin tener que hacer una consulta
                 // extra a la base de datos solo para saber "como se llama el
                 // usuario logueado".
-                new Claim(ClaimTypes.Name, usuario.Nombre)
+                new Claim(ClaimTypes.Name, usuario.Nombre),
+
+                // Role: el Claim que hace posible el atributo
+                // [Authorize(Roles = "Administrador")] en los controllers.
+                // ASP.NET Core, al validar el JWT (Program.cs), reconoce
+                // automaticamente los Claims de tipo ClaimTypes.Role como los
+                // "roles" del usuario autenticado: no hace falta configurar
+                // nada adicional para que [Authorize(Roles = "...")] los
+                // encuentre, siempre y cuando se use el mismo ClaimTypes.Role
+                // (y no un string arbitrario) tanto aca como al leerlo.
+                new Claim(ClaimTypes.Role, usuario.Rol.ToString())
             };
 
             // --- Paso 2: leer la clave secreta del servidor ---
