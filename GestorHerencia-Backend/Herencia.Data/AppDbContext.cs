@@ -104,6 +104,30 @@ public class AppDbContext : DbContext
 
             entity.Property(b => b.Parentesco)
                   .HasMaxLength(100);
+
+            // Estado (enum EstadoBeneficiario) es OBLIGATORIO: todo
+            // Beneficiario esta SIEMPRE en alguno de los 3 estados definidos,
+            // nunca "sin estado". Igual que con Usuario.Rol, no agregamos una
+            // conversion explicita (HasConversion<string>()) porque dejamos
+            // que EF Core use su comportamiento por defecto para enums:
+            // columna INTEGER. Se podria alternativamente guardar como TEXT
+            // con ".HasConversion<string>()" (mas legible mirando la base de
+            // datos "a mano" con un cliente SQLite), pero se prefirio INTEGER
+            // por CONSISTENCIA con el resto de los enums ya persistidos en
+            // este mismo proyecto (RolUsuario, TipoActivoDigital), y porque
+            // ocupa menos espacio y es mas rapido de indexar/comparar.
+            //
+            // HasDefaultValue asegura que, incluso si una fila se inserta por
+            // fuera de la logica de negocio de Business (ej. un INSERT SQL
+            // manual, o una futura migracion de datos) y no completa esta
+            // columna, la base de datos misma la complete con "Pendiente"
+            // (valor 1) en vez de dejarla en 0 (un valor que ni siquiera
+            // corresponde a ningun miembro del enum). Esto es una segunda
+            // capa de defensa, ADEMAS del valor por defecto ya fijado en el
+            // propio modelo (Beneficiario.Estado = EstadoBeneficiario.Pendiente).
+            entity.Property(b => b.Estado)
+                  .IsRequired()
+                  .HasDefaultValue(EstadoBeneficiario.Pendiente);
         });
 
         // ==========================================================
