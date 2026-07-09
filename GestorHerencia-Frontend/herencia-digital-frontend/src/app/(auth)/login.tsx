@@ -1,21 +1,36 @@
+/**
+ * @file login.tsx
+ * @description Pantalla pública de inicio de sesión (Login Screen).
+ * 
+ * Permite a los usuarios autenticarse mediante su correo electrónico y contraseña.
+ * Tras un inicio de sesión exitoso, el JWT devuelto por el backend se persiste
+ * en SecureStore a través del método `signIn` del AuthContext, lo que provoca
+ * que el enrutador raíz cambie de flujo y cargue el Dashboard privado.
+ */
+
 import React, { useState } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import LockLogo from '../../components/LockLogo';
 import GradientText from '../../components/GradientText';
 import AuthButton from '../../components/AuthButton';
 import AuthInput from '../../components/AuthInput';
 import { useAuth } from '../../context/AuthContext';
 import { AuthService } from '../../services/auth.service';
+import { API_BASE_URL } from '../../constants/api';
 
 export default function LoginScreen() {
   const router = useRouter();
   const { signIn } = useAuth();
+  const { acceptInvitationId } = useLocalSearchParams<{ acceptInvitationId?: string }>();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  /**
+   * Procesa la solicitud de inicio de sesión interactuando con la API y el llavero.
+   */
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Error', 'Por favor ingresa tu email y contraseña.');
@@ -24,9 +39,28 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
+      // 1. Enviamos credenciales al endpoint de login
       const response = await AuthService.login({ email, password });
+      
+      // Si el inicio de sesión fue disparado por una invitación, procesamos la aceptación primero
+      if (acceptInvitationId) {
+        try {
+          await fetch(`${API_BASE_URL}/invitaciones/${acceptInvitationId}/procesar`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${response.token}`,
+            },
+            body: JSON.stringify({ accion: 'aceptar' }),
+          });
+        } catch (e) {
+          console.error('Error al auto-aceptar la invitación:', e);
+        }
+      }
+
+      // 2. Persistimos el JWT devuelto. Esto dispara reactivamente la redirección a /(tabs)
+      // en InitialLayout gracias al hook useAuth()
       await signIn(response.token);
-      // El layout root redireccionará a (tabs) automáticamente cuando token cambie.
     } catch (error: any) {
       Alert.alert('Error de autenticación', error.message);
     } finally {
@@ -36,6 +70,7 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Cabecera del Branding */}
       <View style={styles.logoContainer}>
         <Text style={styles.titlePrefix}>Gestor de</Text>
         <GradientText text="Herencia Digital" style={styles.titleGradient} />
@@ -44,6 +79,7 @@ export default function LoginScreen() {
         </View>
       </View>
 
+      {/* Formulario de entradas del usuario */}
       <View style={styles.formContainer}>
         <AuthInput 
           placeholder="Email" 
@@ -58,6 +94,7 @@ export default function LoginScreen() {
           onChangeText={setPassword}
         />
         
+        {/* Acceso auxiliar para recuperar contraseña (vista simulada de maqueta) */}
         <TouchableOpacity style={styles.forgotPassword}>
           <Text style={styles.forgotText}>¿Olvidaste tu contraseña?</Text>
         </TouchableOpacity>

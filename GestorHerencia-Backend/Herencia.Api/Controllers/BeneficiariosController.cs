@@ -134,6 +134,18 @@ public class BeneficiariosController : ControllerBase
         {
             var beneficiarioCreado = await _beneficiarioService.CrearBeneficiarioAsync(beneficiarioCreacionDTO);
 
+            // Simulación de correo en consola
+            var link = $"http://localhost:8081/invitacion?id={beneficiarioCreado.Id}";
+            Console.ForegroundColor = ConsoleColor.Magenta;
+            Console.WriteLine();
+            Console.WriteLine("======================================================================");
+            Console.WriteLine($"[EMAIL SIMULADO] Se envió invitación a: {beneficiarioCreado.Email}");
+            Console.WriteLine($"Enlace de aceptación de herencia:");
+            Console.WriteLine($"👉 {link}");
+            Console.WriteLine("======================================================================");
+            Console.WriteLine();
+            Console.ResetColor();
+
             return CreatedAtAction(
                 nameof(ObtenerPorId),
                 new { id = beneficiarioCreado.Id },

@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { Archive, Users, CheckCircle, Lock, User, AlertCircle, Info } from 'lucide-react-native';
 import Animated, {
   useSharedValue,
@@ -56,9 +57,12 @@ export default function Dashboard({
   showSuccessNotification = false,
 }: DashboardProps) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
 
   // Escala compartida para animar la pulsación del botón principal.
   const addBtnScale = useSharedValue(1);
+  // Escala compartida para animar la pulsación del botón de herencias (naranja).
+  const inheritancesBtnScale = useSharedValue(1);
 
   /**
    * Genera el estilo animado de escala para el botón de agregar activo.
@@ -66,6 +70,15 @@ export default function Dashboard({
   const animatedAddBtnStyle = useAnimatedStyle(() => {
     return {
       transform: [{ scale: addBtnScale.value }],
+    };
+  });
+
+  /**
+   * Genera el estilo animado de escala para el botón de herencias.
+   */
+  const animatedInheritancesBtnStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: inheritancesBtnScale.value }],
     };
   });
 
@@ -248,15 +261,27 @@ export default function Dashboard({
             </Pressable>
           </View>
 
-          {/* BOTÓN "+ AGREGAR NUEVO ACTIVO" */}
+          {/* BOTÓN GREEN "+ AGREGAR NUEVO ACTIVO" (Fiel al Frame 41) */}
           <Animated.View style={animatedAddBtnStyle}>
             <Pressable
-              style={styles.addButton}
+              style={styles.addButtonGreen}
               onPress={defaultOnAddAsset}
               onPressIn={() => handlePressIn(addBtnScale)}
               onPressOut={() => handlePressOut(addBtnScale)}
             >
-              <Text style={styles.addButtonText}>+ Agregar nuevo activo</Text>
+              <Text style={styles.addButtonGreenText}>+ Agregar nuevo activo</Text>
+            </Pressable>
+          </Animated.View>
+
+          {/* BOTÓN ORANGE "+ AGREGAR NUEVO ACTIVO" (Fiel al Frame 41, redirige a "Mis Herencias") */}
+          <Animated.View style={[animatedInheritancesBtnStyle, { marginTop: 16 }]}>
+            <Pressable
+              style={styles.addButtonOrange}
+              onPress={() => router.push('/mis-herencias')}
+              onPressIn={() => handlePressIn(inheritancesBtnScale)}
+              onPressOut={() => handlePressOut(inheritancesBtnScale)}
+            >
+              <Text style={styles.addButtonOrangeText}>Mis herencias</Text>
             </Pressable>
           </Animated.View>
         </View>
@@ -384,20 +409,34 @@ const styles = StyleSheet.create({
   textMuted: {
     color: '#8A9E95',
   },
-  addButton: {
+  addButtonGreen: {
     marginTop: 28,
-    backgroundColor: 'transparent',
+    backgroundColor: '#EEFDE2', // Fondo verde claro pastel
     borderWidth: 1.5,
-    borderColor: '#54BA93', // Borde verde menta
+    borderColor: '#2E7D32', // Borde verde oscuro
     borderRadius: 16,
-    paddingVertical: 20,
+    paddingVertical: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addButtonText: {
+  addButtonGreenText: {
     fontFamily: 'MPLUS2-Bold',
     fontSize: 16,
-    color: '#54BA93',
+    color: '#2E7D32',
+  },
+  addButtonOrange: {
+    backgroundColor: '#FFF9E6', // Fondo naranja claro pastel
+    borderWidth: 1.5,
+    borderColor: '#E2A53C', // Borde naranja
+    borderRadius: 16,
+    paddingVertical: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addButtonOrangeText: {
+    fontFamily: 'MPLUS2-Bold',
+    fontSize: 16,
+    color: '#E2A53C',
   },
   notificationPill: {
     position: 'absolute',

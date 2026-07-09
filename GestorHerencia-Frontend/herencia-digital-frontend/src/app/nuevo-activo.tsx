@@ -1,3 +1,26 @@
+/**
+ * @file nuevo-activo.tsx
+ * @description Pantalla de creación y registro de nuevos activos digitales.
+ * 
+ * Implementa un formulario modular e interactivo fiel a las maquetas de Figma.
+ * 
+ * ### Estrategia de Serialización en Cliente:
+ * Debido a la estructura simplificada del esquema de base de datos relacional del backend
+ * (que almacena un campo de texto genérico 'Descripcion'), esta pantalla realiza una
+ * serialización o "empaquetamiento" previo de la información del activo:
+ * - Cripto: Empaqueta blockchain, wallet y clave privada cifrada.
+ * - Banco: Empaqueta banco, cuenta, CBU/Alias y tipo de cuenta.
+ * - Archivo: Vincula el nombre del archivo simulado adjunto.
+ * Todo esto se formatea y concatena en el campo 'descripcion' antes de enviarse mediante POST
+ * a la API, permitiendo guardar activos complejos sin requerir cambios inmediatos en el esquema SQL.
+ * 
+ * ### Navegación y UI:
+ * - Emplea acordeones colapsables en línea (dropdowns inline) en lugar de modales flotantes,
+ *   preservando el foco visual y reduciendo el salto de pantallas.
+ * - Tras un guardado exitoso, redirige directamente al Dashboard de pestañas (`/(tabs)`)
+ *   pasando el parámetro `success=true` en la URL.
+ */
+
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -26,13 +49,18 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { AssetsService, BeneficiarioDTO } from '../services/assets.service';
 
+/**
+ * Representa los tipos de activos disponibles para su registro, mapeando
+ * su ID con el enumerador TipoActivoDigital del backend.
+ */
 type AssetType = {
-  id: number; // TipoActivoDigital enum
+  id: number; // Mapea con TipoActivoDigital (0=Banco, 2=Cripto, 4=Archivo)
   label: string;
   description: string;
   icon: any;
 };
 
+// Colección estática de tipos de activos soportados para renderizado en los selectores.
 const ASSET_TYPES: AssetType[] = [
   { id: 2, label: 'Cripto', description: 'Wallets, Bitcoin, Ethereum..', icon: Bitcoin },
   { id: 0, label: 'Cuenta bancaria', description: 'CBU, alias, numero de cu..', icon: Landmark },
@@ -46,43 +74,51 @@ export default function NuevoActivoScreen() {
   const router = useRouter();
   const { token } = useAuth();
 
-  // Estados del formulario general
+  // ==========================================
+  // ESTADOS DEL FORMULARIO GENERAL
+  // ==========================================
   const [nombre, setNombre] = useState('');
   const [tipo, setTipo] = useState<AssetType | null>(null);
   const [instrucciones, setInstrucciones] = useState('');
   const [prioridad, setPrioridad] = useState('Media');
   const [beneficiario, setBeneficiario] = useState<BeneficiarioDTO | null>(null);
 
-  // Estados dinámicos para "Cripto"
+  // ==========================================
+  // ESTADOS DINÁMICOS POR TIPO DE ACTIVO
+  // ==========================================
+  // Cripto:
   const [blockchain, setBlockchain] = useState('');
   const [wallet, setWallet] = useState('');
   const [clavePrivada, setClavePrivada] = useState('');
 
-  // Estados dinámicos para "Cuenta bancaria"
+  // Cuenta bancaria:
   const [banco, setBanco] = useState('');
   const [numeroCuenta, setNumeroCuenta] = useState('');
   const [cbuAlias, setCbuAlias] = useState('');
   const [tipoCuenta, setTipoCuenta] = useState('Caja de ahorro');
   const [tipoCuentaExpanded, setTipoCuentaExpanded] = useState(false);
 
-  // Estados dinámicos para "Archivo"
+  // Archivo:
   const [archivoAdjunto, setArchivoAdjunto] = useState<string | null>(null);
   const [loadingArchivo, setLoadingArchivo] = useState(false);
 
-  // Beneficiarios cargados de la API
+  // ==========================================
+  // ESTADOS AUXILIARES (APIs Y CONTROL DE UI)
+  // ==========================================
   const [beneficiariosList, setBeneficiariosList] = useState<BeneficiarioDTO[]>([]);
   const [loadingBeneficiarios, setLoadingBeneficiarios] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Control de expansión de acordeones (dropdowns inline)
+  // Control de expansión de acordeones (evita que dos acordeones se desplieguen a la vez)
   const [tipoExpanded, setTipoExpanded] = useState(false);
   const [prioridadExpanded, setPrioridadExpanded] = useState(false);
   const [beneficiarioExpanded, setBeneficiarioExpanded] = useState(false);
 
-  // Estado de validación
+  // Bandera para disparar el cartel flotante de error en validaciones locales
   const [showValidationError, setShowValidationError] = useState(false);
 
-  // Cargar beneficiarios al montar la pantalla
+  // Cargar beneficiarios del backend al montar la pantalla.
+  // El backend exige autenticación, por lo que requerimos el JWT token del AuthContext.
   useEffect(() => {
     const fetchBeneficiarios = async () => {
       if (!token) return;
@@ -99,7 +135,10 @@ export default function NuevoActivoScreen() {
     fetchBeneficiarios();
   }, [token]);
 
-  // Simulación de adjuntar archivo
+  /**
+   * Simulación del proceso de carga asíncrona de un archivo adjunto.
+   * Cambia el estado del loader y asocia un nombre de archivo mock.
+   */
   const handleAttachFile = () => {
     setLoadingArchivo(true);
     setTimeout(() => {
@@ -108,14 +147,17 @@ export default function NuevoActivoScreen() {
     }, 1000);
   };
 
+  /**
+   * Ejecuta las validaciones locales de datos e inicia el proceso de persistencia.
+   */
   const handleSave = async () => {
-    // Validación de campos obligatorios comunes
+    // 1. Validación de campos obligatorios comunes
     if (!nombre || !tipo || !beneficiario) {
       setShowValidationError(true);
       return;
     }
 
-    // Validación de campos específicos por tipo de activo
+    // 2. Validación de campos específicos por tipo de activo
     if (tipo.label === 'Cripto' && (!blockchain || !wallet || !clavePrivada)) {
       setShowValidationError(true);
       return;
@@ -135,7 +177,8 @@ export default function NuevoActivoScreen() {
     try {
       if (!token) throw new Error('Usuario no autenticado.');
 
-      // Serializamos la información específica dentro del campo descripcion
+      // 3. Serializamos la información específica estructurada en un bloque legible
+      // de texto plano para insertarlo en la columna genérica 'Descripcion'.
       let descripcionFinal = '';
       if (tipo.label === 'Cripto') {
         descripcionFinal = `[CRIPTO] Blockchain: ${blockchain} | Wallet: ${wallet} | Clave Privada: ${clavePrivada}\n\nInstrucciones:\n${instrucciones}`;
@@ -145,6 +188,7 @@ export default function NuevoActivoScreen() {
         descripcionFinal = `[ARCHIVO] Adjunto: ${archivoAdjunto}\n\nInstrucciones:\n${instrucciones}`;
       }
 
+      // 4. Invocamos al AssetsService para persistir el activo y su asignación
       await AssetsService.createAsset(
         token,
         {
@@ -156,6 +200,8 @@ export default function NuevoActivoScreen() {
         prioridad
       );
 
+      // 5. Redireccionamos exitosamente al Dashboard inyectando la bandera
+      // 'success=true' en los parámetros locales.
       router.replace({
         pathname: '/(tabs)',
         params: { success: 'true' },
