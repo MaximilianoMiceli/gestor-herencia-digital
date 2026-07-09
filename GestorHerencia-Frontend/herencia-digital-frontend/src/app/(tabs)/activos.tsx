@@ -1,14 +1,14 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ThemedText } from '../components/themed-text';
+import { ThemedText } from '../../components/themed-text';
 import { LinearGradient } from 'expo-linear-gradient';
 
 /**
- * Pantalla para la gestión de opciones de seguridad de la cuenta del usuario.
- * Permite la configuración del segundo factor de autenticación (2FA) y el manejo de claves.
+ * Pantalla para la administración de activos digitales del usuario.
+ * Permite registrar, listar y categorizar los diferentes bienes (cuentas, claves, documentos).
  */
-export default function SeguridadScreen() {
+export default function ActivosScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -19,11 +19,11 @@ export default function SeguridadScreen() {
       >
         <SafeAreaView edges={['top']} style={styles.headerSafeArea}>
           <ThemedText style={styles.headerSubtitle}>Gestor de Herencia Digital</ThemedText>
-          <ThemedText style={styles.headerTitle}>Seguridad</ThemedText>
+          <ThemedText style={styles.headerTitle}>Activos</ThemedText>
         </SafeAreaView>
       </LinearGradient>
       <View style={styles.content}>
-        <ThemedText style={styles.placeholderText}>Pantalla de Seguridad</ThemedText>
+        <ThemedText style={styles.placeholderText}>Pantalla de Activos</ThemedText>
       </View>
     </View>
   );

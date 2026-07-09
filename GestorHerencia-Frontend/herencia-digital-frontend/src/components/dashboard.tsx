@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Archive, Users, CheckCircle, Lock, User, AlertCircle } from 'lucide-react-native';
+import { Archive, Users, CheckCircle, Lock, User, AlertCircle, Info } from 'lucide-react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -36,6 +36,8 @@ interface DashboardProps {
   onAddAsset?: () => void;
   /** Callback para la navegación hacia otras pestañas principales. */
   onNavigateToTab?: (tabName: string) => void;
+  /** Indica si se debe mostrar la notificación de éxito tras guardar un activo. */
+  showSuccessNotification?: boolean;
 }
 
 /**
@@ -51,6 +53,7 @@ export default function Dashboard({
   is2FAActive = false,
   onAddAsset,
   onNavigateToTab,
+  showSuccessNotification = false,
 }: DashboardProps) {
   const insets = useSafeAreaInsets();
 
@@ -100,6 +103,13 @@ export default function Dashboard({
         end={{ x: 1, y: 0.5 }}
         style={[styles.header, { paddingTop: insets.top + 20 }]}
       >
+        {/* NOTIFICACIÓN ÉXITO (MOCKUP FRAME 34) */}
+        {showSuccessNotification && (
+          <View style={[styles.notificationPill, { top: insets.top + 4 }]}>
+            <Info size={16} color="#1a2e2e" />
+            <Text style={styles.notificationText}>Activo guardado con exito</Text>
+          </View>
+        )}
         <View style={styles.centeredWrapper}>
           <View style={styles.headerContent}>
             <View style={styles.headerTextContainer}>
@@ -388,5 +398,29 @@ const styles = StyleSheet.create({
     fontFamily: 'MPLUS2-Bold',
     fontSize: 16,
     color: '#54BA93',
+  },
+  notificationPill: {
+    position: 'absolute',
+    alignSelf: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#C1E3A4',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#1a2e2e',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+    zIndex: 999,
+  },
+  notificationText: {
+    fontFamily: 'MPLUS2-Bold',
+    fontSize: 13,
+    color: '#1a2e2e',
+    marginLeft: 8,
   },
 });

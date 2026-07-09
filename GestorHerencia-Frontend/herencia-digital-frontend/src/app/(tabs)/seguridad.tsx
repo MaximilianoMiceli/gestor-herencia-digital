@@ -1,14 +1,14 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ThemedText } from '../components/themed-text';
+import { ThemedText } from '../../components/themed-text';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useAuth } from '../../context/AuthContext';
+import { LogOut } from 'lucide-react-native';
 
-/**
- * Pantalla para la asignación y gestión de beneficiarios.
- * Permite definir quiénes recibirán el acceso a los activos digitales tras la herencia y asociar contactos de confianza.
- */
-export default function BeneficiariosScreen() {
+export default function SeguridadScreen() {
+  const { signOut } = useAuth();
+
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -19,11 +19,16 @@ export default function BeneficiariosScreen() {
       >
         <SafeAreaView edges={['top']} style={styles.headerSafeArea}>
           <ThemedText style={styles.headerSubtitle}>Gestor de Herencia Digital</ThemedText>
-          <ThemedText style={styles.headerTitle}>Beneficiarios</ThemedText>
+          <ThemedText style={styles.headerTitle}>Seguridad</ThemedText>
         </SafeAreaView>
       </LinearGradient>
       <View style={styles.content}>
-        <ThemedText style={styles.placeholderText}>Pantalla de Beneficiarios</ThemedText>
+        <ThemedText style={styles.placeholderText}>Opciones de Seguridad de la cuenta</ThemedText>
+        
+        <TouchableOpacity style={styles.logoutButton} onPress={signOut}>
+          <LogOut color="#A83232" size={20} style={{ marginRight: 8 }} />
+          <Text style={styles.logoutText}>Cerrar sesión</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -60,10 +65,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
+    gap: 20,
   },
   placeholderText: {
     fontFamily: 'MPLUS2-Regular',
     fontSize: 16,
     color: '#1a2e2e',
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#A83232',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    backgroundColor: '#FFFFFF',
+    marginTop: 20,
+    shadowColor: '#A83232',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  logoutText: {
+    fontFamily: 'MPLUS2-Bold',
+    fontSize: 16,
+    color: '#A83232',
   },
 });

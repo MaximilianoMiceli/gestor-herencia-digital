@@ -11,6 +11,7 @@ export function useColorScheme() {
 
   useEffect(() => {
     // Se ejecuta al montar el cliente, confirmando que la fase de hidratación culminó.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHasHydrated(true);
   }, []);
 

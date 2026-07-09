@@ -264,7 +264,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 // UseCors() debe ir ANTES de UseAuthentication()/UseAuthorization(): el
 // navegador primero necesita saber (via los headers de respuesta que agrega
@@ -290,5 +293,12 @@ app.UseAuthorization();
 // Habilita el enrutamiento hacia los Controllers registrados arriba, en base
 // a los atributos [Route]/[HttpGet]/[HttpPost]/etc. de cada uno.
 app.MapControllers();
+
+// Aplicar migraciones automáticamente al iniciar la app
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    context.Database.Migrate();
+}
 
 app.Run();

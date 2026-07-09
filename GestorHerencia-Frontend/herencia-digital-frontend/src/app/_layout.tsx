@@ -1,21 +1,37 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { useEffect } from 'react';
+import { DarkTheme, DefaultTheme, ThemeProvider, Slot, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useColorScheme } from 'react-native';
 import { useFonts, MPLUS2_400Regular, MPLUS2_700Bold } from '@expo-google-fonts/m-plus-2';
 
 import { AnimatedSplashOverlay } from '../components/animated-icon';
-import AppTabs from '../components/app-tabs';
+import { AuthProvider, useAuth } from '../context/AuthContext';
 
-// Evita que la pantalla de carga nativa se oculte sola para permitir que la animación
-// personalizada de AnimatedSplashOverlay maneje la transición de salida de forma suave.
 SplashScreen.preventAutoHideAsync();
 
-/**
- * Layout principal de la aplicación. Carga las fuentes del sistema, configura
- * el proveedor de temas (oscuro/claro) y orquesta la presentación del overlay
- * de la pantalla de carga y el menú de navegación principal.
- */
-export default function TabLayout() {
+function InitialLayout() {
+  const { token, isLoading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+
+    if (!token && !inAuthGroup) {
+      // Si no hay token, redirigir al login
+      router.replace('/(auth)/welcome');
+    } else if (token && inAuthGroup) {
+      // Si hay token y estamos en auth, redirigir a tabs
+      router.replace('/');
+    }
+  }, [token, isLoading, segments]);
+
+  return <Slot />;
+}
+
+export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [fontsLoaded] = useFonts({
     'MPLUS2-Regular': MPLUS2_400Regular,
@@ -28,8 +44,10 @@ export default function TabLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
+      <AuthProvider>
+        <AnimatedSplashOverlay />
+        <InitialLayout />
+      </AuthProvider>
     </ThemeProvider>
   );
 }

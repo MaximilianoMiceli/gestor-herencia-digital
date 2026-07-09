@@ -1,14 +1,14 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ThemedText } from '../components/themed-text';
+import { ThemedText } from '../../components/themed-text';
 import { LinearGradient } from 'expo-linear-gradient';
 
 /**
- * Pantalla para la administración de activos digitales del usuario.
- * Permite registrar, listar y categorizar los diferentes bienes (cuentas, claves, documentos).
+ * Pantalla para la asignación y gestión de beneficiarios.
+ * Permite definir quiénes recibirán el acceso a los activos digitales tras la herencia y asociar contactos de confianza.
  */
-export default function ActivosScreen() {
+export default function BeneficiariosScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -19,11 +19,11 @@ export default function ActivosScreen() {
       >
         <SafeAreaView edges={['top']} style={styles.headerSafeArea}>
           <ThemedText style={styles.headerSubtitle}>Gestor de Herencia Digital</ThemedText>
-          <ThemedText style={styles.headerTitle}>Activos</ThemedText>
+          <ThemedText style={styles.headerTitle}>Beneficiarios</ThemedText>
         </SafeAreaView>
       </LinearGradient>
       <View style={styles.content}>
-        <ThemedText style={styles.placeholderText}>Pantalla de Activos</ThemedText>
+        <ThemedText style={styles.placeholderText}>Pantalla de Beneficiarios</ThemedText>
       </View>
     </View>
   );

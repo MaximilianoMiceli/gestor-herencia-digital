@@ -27,7 +27,7 @@ function TabIcon({ IconComponent, color, focused }: TabIconProps) {
   useEffect(() => {
     // Aplica una física de resorte (spring bounce) al cambiar el estado de foco.
     scale.value = withSpring(focused ? 1.2 : 1.0, { damping: 12, stiffness: 200 });
-  }, [focused]);
+  }, [focused, scale]);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
