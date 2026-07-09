@@ -213,6 +213,75 @@ public class BeneficiarioService : IBeneficiarioService
         }
     }
 
+    // CambiarEstadoAsync: mueve al Beneficiario de "Pendiente" hacia un
+    // estado FINAL ("Aceptado" o "Rechazado"). Este metodo es el nucleo de la
+    // regla de negocio pedida: PROTEGER LA INTEGRIDAD del proceso de
+    // aceptacion de la herencia digital, impidiendo que una decision ya
+    // tomada se pise o se revierta por accidente (o intencionalmente) mas
+    // adelante.
+    public async Task<BeneficiarioDTO> CambiarEstadoAsync(int beneficiarioId, EstadoBeneficiario nuevoEstado)
+    {
+        // Validacion 0: "nuevoEstado" tiene que ser una decision real
+        // (Aceptado o Rechazado), nunca "Pendiente". "Pendiente" es un
+        // estado que SOLO el sistema asigna automaticamente al crear el
+        // beneficiario (ver Beneficiario.Estado); permitir que alguien lo
+        // vuelva a fijar manualmente equivaldria a "deshacer" una decision
+        // que todavia no se tomo, lo cual no tiene sentido de negocio.
+        if (nuevoEstado == EstadoBeneficiario.Pendiente)
+        {
+            throw new ReglaNegocioException(
+                "No se puede establecer el estado en Pendiente manualmente: ese es el estado inicial que el sistema asigna automaticamente.");
+        }
+
+        try
+        {
+            var beneficiario = await _beneficiarioRepository.ObtenerPorIdAsync(beneficiarioId);
+
+            if (beneficiario is null)
+            {
+                throw new RecursoNoEncontradoException($"No se encontro el beneficiario con Id {beneficiarioId}.");
+            }
+
+            // --- VALIDACION CRITICA (protege la integridad del proceso) ---
+            // Una vez que el beneficiario ya "Acepto" o "Rechazo" la
+            // herencia, ese estado es DEFINITIVO: no se permite ninguna
+            // transicion posterior, ni siquiera para "corregir" un error
+            // (eso evitaria, por ejemplo, que alguien que ya rechazo una
+            // herencia la vuelva a aceptar mas tarde con intereses distintos
+            // a los que tenia en el momento de la decision original, o que
+            // un Aceptado se cambie a Rechazado despues de que el titular ya
+            // avanzo con la liberacion de activos asumiendo que estaba
+            // confirmado). Si se necesitara alguna vez permitir una
+            // correccion, deberia ser una operacion administrativa aparte y
+            // auditada, no este mismo endpoint de uso general.
+            if (beneficiario.Estado != EstadoBeneficiario.Pendiente)
+            {
+                throw new ReglaNegocioException(
+                    "El estado ya fue procesado y no puede modificarse.");
+            }
+
+            beneficiario.Estado = nuevoEstado;
+            beneficiario.FechaModificacion = DateTime.UtcNow;
+            beneficiario.UsuarioModificacion = "sistema";
+
+            await _beneficiarioRepository.ActualizarAsync(beneficiario);
+
+            return MapearADTO(beneficiario);
+        }
+        catch (RecursoNoEncontradoException)
+        {
+            throw;
+        }
+        catch (ReglaNegocioException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new ReglaNegocioException("Ocurrio un error al cambiar el estado del beneficiario.", ex);
+        }
+    }
+
     // MapearADTO centraliza la conversion Entidad -> DTO de salida.
     private static BeneficiarioDTO MapearADTO(Beneficiario beneficiario)
     {
@@ -222,6 +291,7 @@ public class BeneficiarioService : IBeneficiarioService
             Nombre = beneficiario.Nombre,
             Email = beneficiario.Email,
             Parentesco = beneficiario.Parentesco,
+            Estado = beneficiario.Estado,
             UsuarioId = beneficiario.UsuarioId
         };
     }

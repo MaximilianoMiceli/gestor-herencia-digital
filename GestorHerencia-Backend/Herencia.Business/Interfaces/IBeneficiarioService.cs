@@ -1,4 +1,5 @@
 using Herencia.Business.Dtos;
+using Herencia.Data.Models;
 
 namespace Herencia.Business.Interfaces;
 
@@ -26,4 +27,19 @@ public interface IBeneficiarioService
 
     // Elimina un Beneficiario existente.
     Task EliminarBeneficiarioAsync(int id);
+
+    // CambiarEstadoAsync: implementa el flujo de ACEPTACION/RECHAZO de la
+    // herencia digital. El beneficiario (o, en el estado actual de la Api,
+    // el usuario titular en su nombre - ver la nota de ownership en
+    // BeneficiariosController) usa este metodo para pasar su designacion de
+    // "Pendiente" a un estado FINAL: "Aceptado" o "Rechazado".
+    //
+    // Puede lanzar:
+    //  - RecursoNoEncontradoException: si el beneficiarioId no existe.
+    //  - ReglaNegocioException: si el estado actual del beneficiario YA es
+    //    "Aceptado" o "Rechazado" (una decision final no puede revisarse ni
+    //    revertirse), o si "nuevoEstado" es "Pendiente" (no tiene sentido
+    //    "volver atras" a un estado que solo el sistema asigna automaticamente
+    //    al crear el beneficiario).
+    Task<BeneficiarioDTO> CambiarEstadoAsync(int beneficiarioId, EstadoBeneficiario nuevoEstado);
 }
