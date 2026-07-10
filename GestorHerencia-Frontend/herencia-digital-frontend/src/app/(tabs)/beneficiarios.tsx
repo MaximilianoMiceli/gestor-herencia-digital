@@ -78,12 +78,17 @@ export default function BeneficiariosScreen() {
   }, [deleted]);
 
   /**
-   * Determina si un beneficiario está verificado o pendiente.
-   * Por regla de negocio lógica: es "Verificado" si coincide con los nombres semilla de la demo
-   * que ya tienen cuentas creadas (Ana, Laura), de lo contrario es "Pendiente".
+   * Determina si un beneficiario está verificado, pendiente o rechazado.
+   * Lee la propiedad de estado real de la base de datos (1 = Pendiente, 2 = Verificado/Aceptado, 3 = Rechazado)
+   * con fallback basado en el nombre para la demo original.
    */
-  const obtenerEstadoBeneficiario = (nombre: string): 'Verificado' | 'Pendiente' => {
-    const n = nombre.toLowerCase();
+  const obtenerEstadoBeneficiario = (item: BeneficiarioDTO): 'Verificado' | 'Pendiente' | 'Rechazado' => {
+    if (item.estado !== undefined) {
+      if (item.estado === 2) return 'Verificado';
+      if (item.estado === 3) return 'Rechazado';
+      return 'Pendiente';
+    }
+    const n = item.nombre.toLowerCase();
     if (n.includes('ana') || n.includes('laura')) {
       return 'Verificado';
     }
@@ -149,7 +154,7 @@ export default function BeneficiariosScreen() {
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => {
-              const estado = obtenerEstadoBeneficiario(item.nombre);
+              const estado = obtenerEstadoBeneficiario(item);
               return (
                 <View style={styles.beneficiaryCard}>
                   <View style={styles.cardHeaderRow}>
@@ -157,7 +162,12 @@ export default function BeneficiariosScreen() {
                       <Text style={styles.cardName}>{item.nombre}</Text>
                       <Text style={styles.cardRelation}>{item.parentesco}</Text>
                     </View>
-                    <Text style={[styles.cardStatus, estado === 'Verificado' ? styles.statusVerified : styles.statusPending]}>
+                    <Text style={[
+                      styles.cardStatus,
+                      estado === 'Verificado' && styles.statusVerified,
+                      estado === 'Pendiente' && styles.statusPending,
+                      estado === 'Rechazado' && styles.statusRejected
+                    ]}>
                       {estado}
                     </Text>
                   </View>
@@ -279,6 +289,9 @@ const styles = StyleSheet.create({
   },
   statusPending: {
     color: '#E2A53C', // Naranja/Amarillo
+  },
+  statusRejected: {
+    color: '#D32F2F', // Rojo
   },
   detailsButton: {
     backgroundColor: '#7EA49E', // Color verde-gris opaco del mockup

@@ -123,10 +123,16 @@ export default function DetalleBeneficiarioScreen() {
   };
 
   /**
-   * Determina el estado del beneficiario según el criterio de nombres semilla.
+   * Determina el estado del beneficiario según la base de datos (1 = Pendiente, 2 = Verificado/Aceptado, 3 = Rechazado)
+   * con un fallback basado en nombres semilla para compatibilidad con datos demo.
    */
-  const obtenerEstadoBeneficiario = (nombre: string): 'Verificado' | 'Pendiente' => {
-    const n = nombre.toLowerCase();
+  const obtenerEstadoBeneficiario = (item: BeneficiarioDTO): 'Verificado' | 'Pendiente' | 'Rechazado' => {
+    if (item.estado !== undefined) {
+      if (item.estado === 2) return 'Verificado';
+      if (item.estado === 3) return 'Rechazado';
+      return 'Pendiente';
+    }
+    const n = item.nombre.toLowerCase();
     if (n.includes('ana') || n.includes('laura')) {
       return 'Verificado';
     }
@@ -177,7 +183,7 @@ export default function DetalleBeneficiarioScreen() {
     );
   }
 
-  const estado = obtenerEstadoBeneficiario(beneficiario.nombre);
+  const estado = obtenerEstadoBeneficiario(beneficiario);
 
   return (
     <View style={styles.container}>
@@ -218,8 +224,18 @@ export default function DetalleBeneficiarioScreen() {
 
             <View style={styles.infoGroup}>
               <Text style={styles.infoLabel}>Estado</Text>
-              <View style={[styles.statusBadge, estado === 'Verificado' ? styles.badgeVerified : styles.badgePending]}>
-                <Text style={[styles.statusBadgeText, estado === 'Verificado' ? styles.textVerified : styles.textPending]}>
+              <View style={[
+                styles.statusBadge,
+                estado === 'Verificado' && styles.badgeVerified,
+                estado === 'Pendiente' && styles.badgePending,
+                estado === 'Rechazado' && styles.badgeRejected
+              ]}>
+                <Text style={[
+                  styles.statusBadgeText,
+                  estado === 'Verificado' && styles.textVerified,
+                  estado === 'Pendiente' && styles.textPending,
+                  estado === 'Rechazado' && styles.textRejected
+                ]}>
                   {estado}
                 </Text>
               </View>
@@ -413,6 +429,9 @@ const styles = StyleSheet.create({
   badgePending: {
     backgroundColor: '#FFF9E6', // Naranja claro translúcido
   },
+  badgeRejected: {
+    backgroundColor: '#FADBD8', // Rojo claro translúcido
+  },
   statusBadgeText: {
     fontSize: 13,
     fontFamily: 'MPLUS2-Bold',
@@ -422,6 +441,9 @@ const styles = StyleSheet.create({
   },
   textPending: {
     color: '#E2A53C',
+  },
+  textRejected: {
+    color: '#C0392B',
   },
   sectionTitle: {
     fontSize: 14,

@@ -21,7 +21,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, ChevronDown } from 'lucide-react-native';
+import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
@@ -119,7 +119,20 @@ export default function EditarActivoScreen() {
   };
 
   /**
-   * Guarda las modificaciones del activo y recrea las asignaciones
+   * Guarda las modificaciones del activo y recrea las asignaciones de herencia.
+   * 
+   * ¿Por qué recreamos las asignaciones en lugar de actualizarlas?:
+   * El backend expone endpoints separados para actualizar los datos base del activo (Nombre, Tipo, 
+   * Descripcion en PUT /api/activosdigitales/{id}) y para gestionar las asignaciones (POST 
+   * /api/activosdigitales/{id}/asignaciones y DELETE /api/asignaciones/{asigId}).
+   * Dado que la aplicación móvil simplifica el modelo de herencia asignando el 100% de un activo 
+   * a un único beneficiario, la forma más limpia y transaccional de re-asignar un activo sin alterar 
+   * el backend es:
+   * 1. Actualizar los datos del activo.
+   * 2. Eliminar todas las asignaciones previas asociadas a su ID.
+   * 3. Crear una nueva asignación limpia vinculando al beneficiario seleccionado.
+   * Esto previene colisiones con la validación de negocio del backend que prohíbe superar el 100% 
+   * acumulado de herencia para un mismo activo.
    */
   const handleGuardarCambios = async () => {
     if (!token) return;
@@ -266,15 +279,25 @@ export default function EditarActivoScreen() {
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Nivel de prioridad</Text>
             <TouchableOpacity
-              style={styles.dropdownButton}
+              style={[
+                styles.dropdownButton,
+                showPrioridadDropdown && styles.dropdownButtonActive,
+              ]}
               activeOpacity={0.8}
               onPress={() => {
                 setShowPrioridadDropdown(!showPrioridadDropdown);
                 setShowBeneficiarioDropdown(false);
               }}
             >
-              <Text style={styles.dropdownButtonText}>{prioridad}</Text>
-              <ChevronDown size={20} color="#1a2e2e" />
+              <Text style={[
+                styles.dropdownButtonText,
+                showPrioridadDropdown && styles.dropdownButtonTextActive,
+              ]}>{prioridad}</Text>
+              {showPrioridadDropdown ? (
+                <ChevronUp size={20} color="#2E7D32" />
+              ) : (
+                <ChevronDown size={20} color="#1a2e2e" />
+              )}
             </TouchableOpacity>
 
             {showPrioridadDropdown && (
@@ -309,19 +332,29 @@ export default function EditarActivoScreen() {
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Seleccionar relacion</Text>
             <TouchableOpacity
-              style={styles.dropdownButton}
+              style={[
+                styles.dropdownButton,
+                showBeneficiarioDropdown && styles.dropdownButtonActive,
+              ]}
               activeOpacity={0.8}
               onPress={() => {
                 setShowBeneficiarioDropdown(!showBeneficiarioDropdown);
                 setShowPrioridadDropdown(false);
               }}
             >
-              <Text style={styles.dropdownButtonText}>
+              <Text style={[
+                styles.dropdownButtonText,
+                showBeneficiarioDropdown && styles.dropdownButtonTextActive,
+              ]}>
                 {selectedBeneficiarioId
                   ? beneficiarios.find((b) => b.id === selectedBeneficiarioId)?.nombre || 'Seleccionar'
                   : 'Seleccionar'}
               </Text>
-              <ChevronDown size={20} color="#1a2e2e" />
+              {showBeneficiarioDropdown ? (
+                <ChevronUp size={20} color="#2E7D32" />
+              ) : (
+                <ChevronDown size={20} color="#1a2e2e" />
+              )}
             </TouchableOpacity>
 
             {showBeneficiarioDropdown && (
@@ -487,7 +520,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#C1E3A4',
+    borderColor: '#C1E3A4', // Borde verde claro suave
     height: 48,
     paddingHorizontal: 16,
     color: '#1a2e2e',
@@ -515,45 +548,53 @@ const styles = StyleSheet.create({
   },
   dropdownButton: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 12, // Menos redondeado (rectangular suave)
     borderWidth: 1,
-    borderColor: '#C1E3A4',
+    borderColor: '#C1E3A4', // Borde verde claro suave
     height: 48,
     paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  dropdownButtonActive: {
+    borderColor: '#2E7D32', // Borde verde oscuro activo
+    borderWidth: 1.5,
+  },
   dropdownButtonText: {
-    fontFamily: 'MPLUS2-Regular',
+    fontFamily: 'MPLUS2-Bold',
     fontSize: 15,
-    color: '#1a2e2e',
+    color: '#000000',
+  },
+  dropdownButtonTextActive: {
+    color: '#2E7D32', // Texto verde oscuro activo
   },
   dropdownInlineList: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 12, // Menos redondeado
     borderWidth: 1,
-    borderColor: '#C1E3A4',
-    padding: 6,
+    borderColor: '#C1E3A4', // Borde verde claro suave
+    padding: 10,
+    marginTop: 6,
     gap: 2,
     maxHeight: 180,
   },
   dropdownInlineOption: {
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 8,
+    borderRadius: 8, // Esquinas más suaves para selección interna
   },
   dropdownInlineOptionSelected: {
-    backgroundColor: '#DAF8BD',
+    backgroundColor: '#DAF8BD', // Fondo verde claro pastel de selección
   },
   dropdownInlineOptionText: {
     fontFamily: 'MPLUS2-Regular',
-    fontSize: 14,
-    color: '#1a2e2e',
+    fontSize: 15,
+    color: '#333333',
   },
   dropdownInlineOptionTextSelected: {
     fontFamily: 'MPLUS2-Bold',
-    color: '#2E7D32',
+    color: '#2E7D32', // Texto verde oscuro para la opción seleccionada
   },
   dropdownEmptyContainer: {
     padding: 12,
