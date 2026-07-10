@@ -116,15 +116,21 @@ public class InvitacionesController : ControllerBase
 
             if (request.Accion.Equals("rechazar", StringComparison.OrdinalIgnoreCase))
             {
-                // Si rechaza la invitación, eliminamos el registro del Beneficiario para romper el vínculo.
-                _context.Beneficiarios.Remove(beneficiario);
+                // Ahora que existe la columna Estado, el rechazo no elimina el registro de la BD,
+                // sino que transiciona su estado a Rechazado (3) como decisión final de negocio.
+                beneficiario.Estado = EstadoBeneficiario.Rechazado;
+                beneficiario.FechaModificacion = DateTime.UtcNow;
+                beneficiario.UsuarioModificacion = "sistema";
                 await _context.SaveChangesAsync();
-                return Ok(new { mensaje = "Invitación rechazada con éxito y removida del sistema." });
+                return Ok(new { mensaje = "Invitación rechazada con éxito." });
             }
             else if (request.Accion.Equals("aceptar", StringComparison.OrdinalIgnoreCase))
             {
-                // Aceptar la invitación no requiere cambios en BD ya que el vínculo es por Email.
-                // Retornamos éxito para confirmar que la app puede proceder al flujo de autenticación/registro.
+                // Aceptar la invitación transiciona el estado del beneficiario a Aceptado (2).
+                beneficiario.Estado = EstadoBeneficiario.Aceptado;
+                beneficiario.FechaModificacion = DateTime.UtcNow;
+                beneficiario.UsuarioModificacion = "sistema";
+                await _context.SaveChangesAsync();
                 return Ok(new { mensaje = "Invitación aceptada con éxito." });
             }
 

@@ -61,7 +61,14 @@ export default function MisHerenciasScreen() {
   }, [token]);
 
   /**
-   * Agrupa las asignaciones por titular emisor para consolidar la tarjeta del Frame 24
+   * Agrupa las asignaciones por titular emisor para consolidar la tarjeta del Frame 24.
+   * 
+   * ¿Por qué agrupamos en el cliente?: El backend devuelve un listado plano de asignaciones 
+   * individuales de activos. Para cumplir de forma fiel con la interfaz premium del Frame 24 
+   * de Figma, necesitamos agrupar los activos recibidos bajo una única tarjeta por cada titular 
+   * emisor. Al iterar las herencias, indexamos por 'titularNombre' acumulando la cantidad de 
+   * activos asociados (excluyendo el caso especial de 'Ninguno', que representa herencias vacías 
+   * de herederos recién invitados sin activos asignados).
    */
   const obtenerHerenciasAgrupadas = () => {
     const agrupado: { [key: string]: { titular: string; parentesco: string; count: number; disponible: boolean } } = {};

@@ -207,13 +207,7 @@ export default function Dashboard({
             {/* Fila 3: Verificación de Vida */}
             <Pressable
               style={styles.cardRow}
-              onPress={() => {
-                if (isLifeVerificationActive) {
-                  Alert.alert('Verificación de Vida', 'El sistema está monitoreando activamente su estado.');
-                } else {
-                  Alert.alert('Configuración', 'Redirigiendo a configurar la verificación de vida...');
-                }
-              }}
+              onPress={() => router.push('/verificacion-vida' as any)}
             >
               <View style={styles.rowIconContainer}>
                 {/* Muestra un check de éxito (verde) si está activa, o una alerta (naranja) si está pendiente */}

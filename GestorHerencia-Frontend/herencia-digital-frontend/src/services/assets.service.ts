@@ -44,6 +44,7 @@ export interface BeneficiarioDTO {
   nombre: string;
   email: string;
   parentesco: string;
+  estado?: number;
 }
 
 /**

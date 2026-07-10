@@ -65,6 +65,8 @@ interface AuthContextData {
   token: string | null;
   /** Nombre del usuario autenticado, extraído del JWT de forma segura, o null */
   userName: string | null;
+  /** Correo del usuario autenticado, extraído del JWT de forma segura, o null */
+  userEmail: string | null;
   /** Bandera reactiva que indica si la app está cargando y leyendo el token desde SecureStore */
   isLoading: boolean;
   /** Método para almacenar el token en SecureStore e iniciar la sesión */
@@ -91,6 +93,7 @@ export function useAuth() {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Inicializar estado de autenticación al arrancar la app.
@@ -127,11 +130,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Extraemos únicamente el primer nombre (ej: "Augusto" en lugar de "Augusto Miceli")
         const firstName = fullName ? fullName.trim().split(/\s+/)[0] : null;
         setUserName(firstName);
+
+        // Extraemos el email del usuario logueado
+        const email = payload.email || 
+                      payload['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'] || 
+                      null;
+        setUserEmail(email);
       } else {
         setUserName(null);
+        setUserEmail(null);
       }
     } else {
       setUserName(null);
+      setUserEmail(null);
     }
   }, [token]);
 
@@ -164,7 +175,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ token, userName, isLoading, signIn, signOut }}>
+    <AuthContext.Provider value={{ token, userName, userEmail, isLoading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

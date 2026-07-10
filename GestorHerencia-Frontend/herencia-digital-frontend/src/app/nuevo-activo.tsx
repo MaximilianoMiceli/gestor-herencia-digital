@@ -3,22 +3,11 @@
  * @description Pantalla de creación y registro de nuevos activos digitales.
  * 
  * Implementa un formulario modular e interactivo fiel a las maquetas de Figma.
- * 
- * ### Estrategia de Serialización en Cliente:
- * Debido a la estructura simplificada del esquema de base de datos relacional del backend
- * (que almacena un campo de texto genérico 'Descripcion'), esta pantalla realiza una
- * serialización o "empaquetamiento" previo de la información del activo:
- * - Cripto: Empaqueta blockchain, wallet y clave privada cifrada.
- * - Banco: Empaqueta banco, cuenta, CBU/Alias y tipo de cuenta.
- * - Archivo: Vincula el nombre del archivo simulado adjunto.
- * Todo esto se formatea y concatena en el campo 'descripcion' antes de enviarse mediante POST
- * a la API, permitiendo guardar activos complejos sin requerir cambios inmediatos en el esquema SQL.
- * 
- * ### Navegación y UI:
- * - Emplea acordeones colapsables en línea (dropdowns inline) en lugar de modales flotantes,
- *   preservando el foco visual y reduciendo el salto de pantallas.
- * - Tras un guardado exitoso, redirige directamente al Dashboard de pestañas (`/(tabs)`)
- *   pasando el parámetro `success=true` en la URL.
+ * Utiliza selectores dropdown con diseño idéntico al de Verificación de Vida (Frame 11):
+ * - Botón de cabecera en forma de cápsula con borde negro fino (#1A202C).
+ * - Borde verde destacado (#2E7D32) cuando el selector está abierto.
+ * - Tarjeta de opciones flotante con bordes redondeados (borderRadius: 20) y borde verde suave.
+ * - Opción seleccionada con fondo verde pastel (#DAF8BD) y texto verde negrita (#2E7D32).
  */
 
 import React, { useState, useEffect } from 'react';
@@ -35,7 +24,7 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ArrowLeft,
@@ -49,18 +38,13 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { AssetsService, BeneficiarioDTO } from '../services/assets.service';
 
-/**
- * Representa los tipos de activos disponibles para su registro, mapeando
- * su ID con el enumerador TipoActivoDigital del backend.
- */
 type AssetType = {
-  id: number; // Mapea con TipoActivoDigital (0=Banco, 2=Cripto, 4=Archivo)
+  id: number;
   label: string;
   description: string;
   icon: any;
 };
 
-// Colección estática de tipos de activos soportados para renderizado en los selectores.
 const ASSET_TYPES: AssetType[] = [
   { id: 2, label: 'Cripto', description: 'Wallets, Bitcoin, Ethereum..', icon: Bitcoin },
   { id: 0, label: 'Cuenta bancaria', description: 'CBU, alias, numero de cu..', icon: Landmark },
@@ -72,21 +56,17 @@ const TIPO_CUENTAS = ['Caja de ahorro', 'Cuenta corriente'];
 
 export default function NuevoActivoScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { token } = useAuth();
 
-  // ==========================================
   // ESTADOS DEL FORMULARIO GENERAL
-  // ==========================================
   const [nombre, setNombre] = useState('');
   const [tipo, setTipo] = useState<AssetType | null>(null);
   const [instrucciones, setInstrucciones] = useState('');
   const [prioridad, setPrioridad] = useState('Media');
   const [beneficiario, setBeneficiario] = useState<BeneficiarioDTO | null>(null);
 
-  // ==========================================
   // ESTADOS DINÁMICOS POR TIPO DE ACTIVO
-  // ==========================================
-  // Cripto:
   const [blockchain, setBlockchain] = useState('');
   const [wallet, setWallet] = useState('');
   const [clavePrivada, setClavePrivada] = useState('');
@@ -102,23 +82,18 @@ export default function NuevoActivoScreen() {
   const [archivoAdjunto, setArchivoAdjunto] = useState<string | null>(null);
   const [loadingArchivo, setLoadingArchivo] = useState(false);
 
-  // ==========================================
-  // ESTADOS AUXILIARES (APIs Y CONTROL DE UI)
-  // ==========================================
+  // AUXILIARES
   const [beneficiariosList, setBeneficiariosList] = useState<BeneficiarioDTO[]>([]);
   const [loadingBeneficiarios, setLoadingBeneficiarios] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Control de expansión de acordeones (evita que dos acordeones se desplieguen a la vez)
+  // Control de expansión
   const [tipoExpanded, setTipoExpanded] = useState(false);
   const [prioridadExpanded, setPrioridadExpanded] = useState(false);
   const [beneficiarioExpanded, setBeneficiarioExpanded] = useState(false);
 
-  // Bandera para disparar el cartel flotante de error en validaciones locales
   const [showValidationError, setShowValidationError] = useState(false);
 
-  // Cargar beneficiarios del backend al montar la pantalla.
-  // El backend exige autenticación, por lo que requerimos el JWT token del AuthContext.
   useEffect(() => {
     const fetchBeneficiarios = async () => {
       if (!token) return;
@@ -135,10 +110,6 @@ export default function NuevoActivoScreen() {
     fetchBeneficiarios();
   }, [token]);
 
-  /**
-   * Simulación del proceso de carga asíncrona de un archivo adjunto.
-   * Cambia el estado del loader y asocia un nombre de archivo mock.
-   */
   const handleAttachFile = () => {
     setLoadingArchivo(true);
     setTimeout(() => {
@@ -147,17 +118,12 @@ export default function NuevoActivoScreen() {
     }, 1000);
   };
 
-  /**
-   * Ejecuta las validaciones locales de datos e inicia el proceso de persistencia.
-   */
   const handleSave = async () => {
-    // 1. Validación de campos obligatorios comunes
     if (!nombre || !tipo || !beneficiario) {
       setShowValidationError(true);
       return;
     }
 
-    // 2. Validación de campos específicos por tipo de activo
     if (tipo.label === 'Cripto' && (!blockchain || !wallet || !clavePrivada)) {
       setShowValidationError(true);
       return;
@@ -177,8 +143,6 @@ export default function NuevoActivoScreen() {
     try {
       if (!token) throw new Error('Usuario no autenticado.');
 
-      // 3. Serializamos la información específica estructurada en un bloque legible
-      // de texto plano para insertarlo en la columna genérica 'Descripcion'.
       let descripcionFinal = '';
       if (tipo.label === 'Cripto') {
         descripcionFinal = `[CRIPTO] Blockchain: ${blockchain} | Wallet: ${wallet} | Clave Privada: ${clavePrivada}\n\nInstrucciones:\n${instrucciones}`;
@@ -188,7 +152,6 @@ export default function NuevoActivoScreen() {
         descripcionFinal = `[ARCHIVO] Adjunto: ${archivoAdjunto}\n\nInstrucciones:\n${instrucciones}`;
       }
 
-      // 4. Invocamos al AssetsService para persistir el activo y su asignación
       await AssetsService.createAsset(
         token,
         {
@@ -200,14 +163,14 @@ export default function NuevoActivoScreen() {
         prioridad
       );
 
-      // 5. Redireccionamos exitosamente al Dashboard inyectando la bandera
-      // 'success=true' en los parámetros locales.
-      router.replace({
-        pathname: '/(tabs)',
-        params: { success: 'true' },
-      });
-    } catch (error: any) {
-      Alert.alert('Error al guardar', error.message);
+      Alert.alert(
+        'Activo guardado',
+        'El activo digital ha sido registrado y asignado exitosamente.',
+        [{ text: 'Entendido', onPress: () => router.replace('/(tabs)?success=true' as any) }]
+      );
+    } catch (err: any) {
+      console.error('Error al guardar activo:', err);
+      Alert.alert('Error', err.message || 'No se pudo guardar el activo.');
     } finally {
       setSaving(false);
     }
@@ -215,23 +178,26 @@ export default function NuevoActivoScreen() {
 
   return (
     <View style={styles.container}>
-      {/* HEADER CON GRADIENTE */}
+      {/* HEADER DE ALTA FIDELIDAD CON GRADIENTE */}
       <LinearGradient
         colors={['#23856C', '#022739']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0.5 }}
-        style={styles.header}
+        style={[styles.header, { paddingTop: insets.top + 20 }]}
       >
-        <SafeAreaView edges={['top']} style={styles.headerContent}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <View style={styles.headerContent}>
+          <TouchableOpacity
+            onPress={() => router.replace('/')}
+            style={styles.backButton}
+            activeOpacity={0.7}
+          >
             <ArrowLeft color="#FFFFFF" size={24} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Agregar nuevo activo</Text>
           <View style={{ width: 24 }} />
-        </SafeAreaView>
+        </View>
       </LinearGradient>
 
-      {/* FORMULARIO */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
@@ -252,31 +218,47 @@ export default function NuevoActivoScreen() {
               }}
             />
 
-            {/* TIPO DE ACTIVO SELECT INLINE */}
+            {/* TIPO DE ACTIVO SELECT */}
             <Text style={styles.fieldLabel}>Tipo de activo</Text>
             <View style={styles.dropdownContainer}>
               <TouchableOpacity
-                style={styles.dropdownHeader}
+                style={[
+                  styles.dropdownHeader,
+                  tipoExpanded && styles.dropdownHeaderActive
+                ]}
+                activeOpacity={0.8}
                 onPress={() => {
                   setTipoExpanded(!tipoExpanded);
                   setPrioridadExpanded(false);
                   setBeneficiarioExpanded(false);
                 }}
               >
-                <Text style={[styles.selectText, !tipo && styles.placeholderText]}>
+                <Text style={[
+                  styles.selectText,
+                  tipoExpanded && styles.selectTextActive,
+                  !tipo && styles.placeholderText
+                ]}>
                   {tipo ? tipo.label : 'Seleccionar tipo'}
                 </Text>
-                {tipoExpanded ? <ChevronUp color="#000" size={20} /> : <ChevronDown color="#000" size={20} />}
+                {tipoExpanded ? (
+                  <ChevronUp color="#2E7D32" size={20} />
+                ) : (
+                  <ChevronDown color="#000000" size={20} />
+                )}
               </TouchableOpacity>
 
               {tipoExpanded && (
                 <View style={styles.dropdownOptionsList}>
                   {ASSET_TYPES.map((item) => {
                     const IconComp = item.icon;
+                    const isSelected = tipo?.id === item.id;
                     return (
                       <TouchableOpacity
                         key={item.id}
-                        style={styles.tipoOptionRow}
+                        style={[
+                          styles.tipoOptionRow,
+                          isSelected && styles.optionSelected
+                        ]}
                         onPress={() => {
                           setTipo(item);
                           setTipoExpanded(false);
@@ -284,10 +266,13 @@ export default function NuevoActivoScreen() {
                         }}
                       >
                         <View style={styles.optionIconWrapper}>
-                          <IconComp color="#000" size={24} />
+                          <IconComp color={isSelected ? '#2E7D32' : '#000000'} size={24} />
                         </View>
                         <View style={styles.optionTextWrapper}>
-                          <Text style={styles.optionTitle}>{item.label}</Text>
+                          <Text style={[
+                            styles.optionTitle,
+                            isSelected && styles.optionSelectedText
+                          ]}>{item.label}</Text>
                           <Text style={styles.optionSubtitle}>{item.description}</Text>
                         </View>
                       </TouchableOpacity>
@@ -297,11 +282,12 @@ export default function NuevoActivoScreen() {
               )}
             </View>
 
-            {/* INFORMACIÓN DINÁMICA DEL ACTIVO (CARD CON BORDE VERDE) */}
+            {/* INFORMACIÓN DINÁMICA DEL ACTIVO */}
             {tipo && (
               <View style={styles.dynamicInfoWrapper}>
                 <Text style={styles.sectionHeader}>INFORMACIÓN DEL ACTIVO</Text>
                 <View style={styles.infoCard}>
+                  
                   {tipo.label === 'Cripto' && (
                     <View>
                       <Text style={styles.infoFieldLabel}>Red de blockchain</Text>
@@ -364,29 +350,49 @@ export default function NuevoActivoScreen() {
                       />
 
                       <Text style={styles.infoFieldLabel}>Tipo de cuenta</Text>
-                      <View style={styles.nestedDropdownContainer}>
+                      <View style={{ width: '100%', marginBottom: 14 }}>
                         <TouchableOpacity
-                          style={styles.nestedDropdownHeader}
+                          style={[
+                            styles.nestedDropdownHeader,
+                            tipoCuentaExpanded && styles.nestedDropdownHeaderActive
+                          ]}
+                          activeOpacity={0.8}
                           onPress={() => setTipoCuentaExpanded(!tipoCuentaExpanded)}
                         >
-                          <Text style={styles.selectText}>{tipoCuenta}</Text>
-                          {tipoCuentaExpanded ? <ChevronUp color="#000" size={20} /> : <ChevronDown color="#000" size={20} />}
+                          <Text style={[
+                            styles.selectText,
+                            tipoCuentaExpanded && styles.selectTextActive
+                          ]}>{tipoCuenta}</Text>
+                          {tipoCuentaExpanded ? (
+                            <ChevronUp color="#2E7D32" size={20} />
+                          ) : (
+                            <ChevronDown color="#000000" size={20} />
+                          )}
                         </TouchableOpacity>
 
                         {tipoCuentaExpanded && (
                           <View style={styles.nestedDropdownList}>
-                            {TIPO_CUENTAS.map((tc) => (
-                              <TouchableOpacity
-                                key={tc}
-                                style={styles.nestedDropdownOption}
-                                onPress={() => {
-                                  setTipoCuenta(tc);
-                                  setTipoCuentaExpanded(false);
-                                }}
-                              >
-                                <Text style={styles.optionTitle}>{tc}</Text>
-                              </TouchableOpacity>
-                            ))}
+                            {TIPO_CUENTAS.map((tc) => {
+                              const isSelected = tipoCuenta === tc;
+                              return (
+                                <TouchableOpacity
+                                  key={tc}
+                                  style={[
+                                    styles.nestedDropdownOption,
+                                    isSelected && styles.optionSelected
+                                  ]}
+                                  onPress={() => {
+                                    setTipoCuenta(tc);
+                                    setTipoCuentaExpanded(false);
+                                  }}
+                                >
+                                  <Text style={[
+                                    styles.optionTitle,
+                                    isSelected && styles.optionSelectedText
+                                  ]}>{tc}</Text>
+                                </TouchableOpacity>
+                              );
+                            })}
                           </View>
                         )}
                       </View>
@@ -434,44 +440,68 @@ export default function NuevoActivoScreen() {
               }}
             />
 
-            {/* PRIORIDAD SELECT INLINE */}
+            {/* PRIORIDAD SELECT */}
             <Text style={styles.fieldLabel}>Nivel de prioridad</Text>
             <View style={styles.dropdownContainer}>
               <TouchableOpacity
-                style={styles.dropdownHeader}
+                style={[
+                  styles.dropdownHeader,
+                  prioridadExpanded && styles.dropdownHeaderActive
+                ]}
+                activeOpacity={0.8}
                 onPress={() => {
                   setPrioridadExpanded(!prioridadExpanded);
                   setTipoExpanded(false);
                   setBeneficiarioExpanded(false);
                 }}
               >
-                <Text style={styles.selectText}>{prioridad}</Text>
-                {prioridadExpanded ? <ChevronUp color="#000" size={20} /> : <ChevronDown color="#000" size={20} />}
+                <Text style={[
+                  styles.selectText,
+                  prioridadExpanded && styles.selectTextActive
+                ]}>{prioridad}</Text>
+                {prioridadExpanded ? (
+                  <ChevronUp color="#2E7D32" size={20} />
+                ) : (
+                  <ChevronDown color="#000000" size={20} />
+                )}
               </TouchableOpacity>
 
               {prioridadExpanded && (
                 <View style={styles.dropdownOptionsList}>
-                  {PRIORITIES.map((p) => (
-                    <TouchableOpacity
-                      key={p}
-                      style={styles.simpleOptionRow}
-                      onPress={() => {
-                        setPrioridad(p);
-                        setPrioridadExpanded(false);
-                      }}
-                    >
-                      <Text style={styles.optionTitle}>{p}</Text>
-                    </TouchableOpacity>
-                  ))}
+                  {PRIORITIES.map((p) => {
+                    const isSelected = prioridad === p;
+                    return (
+                      <TouchableOpacity
+                        key={p}
+                        style={[
+                          styles.simpleOptionRow,
+                          isSelected && styles.optionSelected
+                        ]}
+                        onPress={() => {
+                          setPrioridad(p);
+                          setPrioridadExpanded(false);
+                        }}
+                      >
+                        <Text style={[
+                          styles.optionTitle,
+                          isSelected && styles.optionSelectedText
+                        ]}>{p}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               )}
             </View>
 
-            {/* BENEFICIARIO SELECT INLINE */}
+            {/* BENEFICIARIO SELECT */}
             <Text style={styles.fieldLabel}>Beneficiario asignado</Text>
             <View style={styles.dropdownContainer}>
               <TouchableOpacity
-                style={styles.dropdownHeader}
+                style={[
+                  styles.dropdownHeader,
+                  beneficiarioExpanded && styles.dropdownHeaderActive
+                ]}
+                activeOpacity={0.8}
                 onPress={() => {
                   setBeneficiarioExpanded(!beneficiarioExpanded);
                   setTipoExpanded(false);
@@ -482,11 +512,19 @@ export default function NuevoActivoScreen() {
                 {loadingBeneficiarios ? (
                   <ActivityIndicator size="small" color="#0E4A4C" />
                 ) : (
-                  <Text style={[styles.selectText, !beneficiario && styles.placeholderText]}>
+                  <Text style={[
+                    styles.selectText,
+                    beneficiarioExpanded && styles.selectTextActive,
+                    !beneficiario && styles.placeholderText
+                  ]}>
                     {beneficiario ? beneficiario.nombre : 'Seleccionar beneficiario'}
                   </Text>
                 )}
-                {beneficiarioExpanded ? <ChevronUp color="#000" size={20} /> : <ChevronDown color="#000" size={20} />}
+                {beneficiarioExpanded ? (
+                  <ChevronUp color="#2E7D32" size={20} />
+                ) : (
+                  <ChevronDown color="#000000" size={20} />
+                )}
               </TouchableOpacity>
 
               {beneficiarioExpanded && (
@@ -505,32 +543,41 @@ export default function NuevoActivoScreen() {
                       </TouchableOpacity>
                     </View>
                   ) : (
-                    beneficiariosList.map((item) => (
-                      <TouchableOpacity
-                        key={item.id}
-                        style={styles.beneficiarioOptionRow}
-                        onPress={() => {
-                          setBeneficiario(item);
-                          setBeneficiarioExpanded(false);
-                          if (showValidationError) setShowValidationError(false);
-                        }}
-                      >
-                        <View style={styles.optionTextWrapper}>
-                          <Text style={styles.optionTitle}>{item.nombre}</Text>
-                          <Text style={styles.optionSubtitle}>{item.parentesco}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))
+                    beneficiariosList.map((item) => {
+                      const isSelected = beneficiario?.id === item.id;
+                      return (
+                        <TouchableOpacity
+                          key={item.id}
+                          style={[
+                            styles.beneficiarioOptionRow,
+                            isSelected && styles.optionSelected
+                          ]}
+                          onPress={() => {
+                            setBeneficiario(item);
+                            setBeneficiarioExpanded(false);
+                            if (showValidationError) setShowValidationError(false);
+                          }}
+                        >
+                          <View style={styles.optionTextWrapper}>
+                            <Text style={[
+                              styles.optionTitle,
+                              isSelected && styles.optionSelectedText
+                            ]}>{item.nombre}</Text>
+                            <Text style={styles.optionSubtitle}>{item.email}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })
                   )}
                 </View>
               )}
             </View>
 
-            {/* VALIDACIÓN DE CAMPOS (MOCKUP FRAME 31) */}
+            {/* ERROR DE VALIDACIÓN */}
             {showValidationError && (
               <View style={styles.validationBox}>
-                <AlertTriangle color="#A83232" size={18} style={styles.validationIcon} />
-                <Text style={styles.validationText}>Completa todos los campos</Text>
+                <AlertTriangle color="#A83232" size={20} style={styles.validationIcon} />
+                <Text style={styles.validationText}>Por favor, completa todos los campos requeridos.</Text>
               </View>
             )}
 
@@ -539,13 +586,15 @@ export default function NuevoActivoScreen() {
               style={styles.saveButton}
               onPress={handleSave}
               disabled={saving}
+              activeOpacity={0.8}
             >
               {saving ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={styles.saveButtonText}>Guardar en bóveda</Text>
+                <Text style={styles.saveButtonText}>Guardar activo</Text>
               )}
             </TouchableOpacity>
+
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -556,49 +605,49 @@ export default function NuevoActivoScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#DAF8BD', // Fondo general verde claro
+    backgroundColor: '#DAF8BD', // Fondo verde claro pastel Figma
   },
   header: {
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
-    paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 8,
   },
   backButton: {
     padding: 4,
   },
   headerTitle: {
-    fontFamily: 'MPLUS2-Bold',
-    fontSize: 18,
     color: '#FFFFFF',
+    fontFamily: 'MPLUS2-Bold',
+    fontSize: 20,
+    textAlign: 'center',
   },
   scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 20,
+    padding: 24,
     paddingBottom: 40,
   },
   form: {
-    flex: 1,
+    width: '100%',
+    maxWidth: 600,
+    alignSelf: 'center',
   },
   fieldLabel: {
     fontFamily: 'MPLUS2-Bold',
     fontSize: 14,
-    color: '#1a2e2e',
+    color: '#1A202C',
     marginBottom: 8,
     marginLeft: 4,
   },
   input: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#C1E3A4',
+    borderColor: '#C1E3A4', // Borde verde claro suave
     paddingHorizontal: 16,
     height: 52,
     fontSize: 15,
@@ -611,12 +660,7 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   dropdownContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#C1E3A4',
     marginBottom: 16,
-    overflow: 'hidden',
   },
   dropdownHeader: {
     height: 52,
@@ -625,14 +669,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#FFFFFF',
+    borderRadius: 12, // Menos redondeado (rectangular suave)
+    borderWidth: 1,
+    borderColor: '#C1E3A4', // Borde verde claro suave
+  },
+  dropdownHeaderActive: {
+    borderColor: '#2E7D32',
+    borderWidth: 1.5,
   },
   dropdownOptionsList: {
     backgroundColor: '#FFFFFF',
+    borderRadius: 12, // Menos redondeado
+    borderWidth: 1,
+    borderColor: '#C1E3A4', // Borde verde claro suave
+    padding: 10,
+    marginTop: 6,
+    gap: 2,
+    overflow: 'hidden',
   },
   selectText: {
     fontSize: 15,
     fontFamily: 'MPLUS2-Bold',
-    color: '#333',
+    color: '#000000',
+  },
+  selectTextActive: {
+    color: '#2E7D32',
   },
   placeholderText: {
     color: '#999',
@@ -642,23 +703,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#C1E3A4',
+    borderRadius: 8, // Esquinas más suaves para la selección interna
   },
   simpleOptionRow: {
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#C1E3A4',
+    borderRadius: 8, // Esquinas más suaves
     height: 48,
     justifyContent: 'center',
   },
   beneficiarioOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#C1E3A4',
+    borderRadius: 8, // Esquinas más suaves
     justifyContent: 'center',
+  },
+  optionSelected: {
+    backgroundColor: '#DAF8BD', // Fondo verde claro de selección
+  },
+  optionSelectedText: {
+    color: '#2E7D32',
+    fontFamily: 'MPLUS2-Bold',
   },
   optionIconWrapper: {
     width: 36,
@@ -686,8 +753,6 @@ const styles = StyleSheet.create({
   emptyOptionRow: {
     alignItems: 'center',
     paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#C1E3A4',
   },
   emptyText: {
     fontFamily: 'MPLUS2-Regular',
@@ -706,7 +771,6 @@ const styles = StyleSheet.create({
     fontFamily: 'MPLUS2-Bold',
     fontSize: 14,
   },
-  // Estilos de la tarjeta dinámica
   dynamicInfoWrapper: {
     marginBottom: 16,
   },
@@ -744,13 +808,6 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 14,
   },
-  // Dropdown anidado para tipo de cuenta
-  nestedDropdownContainer: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E2E2E2',
-    overflow: 'hidden',
-  },
   nestedDropdownHeader: {
     height: 44,
     paddingHorizontal: 12,
@@ -758,17 +815,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#C1E3A4', // Borde verde claro suave
+  },
+  nestedDropdownHeaderActive: {
+    borderColor: '#2E7D32',
+    borderWidth: 1.5,
   },
   nestedDropdownList: {
     backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#C1E3A4', // Borde verde claro suave
+    marginTop: 4,
+    overflow: 'hidden',
   },
   nestedDropdownOption: {
     paddingVertical: 12,
     paddingHorizontal: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+    borderRadius: 8, // Esquinas más suaves para selección interna
   },
-  // Caja de archivo adjunto
   fileBoxBorder: {
     borderWidth: 1.5,
     borderColor: '#C1E3A4',
@@ -790,15 +857,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   attachButton: {
-    backgroundColor: '#D97706', // Naranja del mockup
+    backgroundColor: '#D97706',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 6,
-    shadowColor: '#D97706',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 2,
   },
   attachButtonText: {
     color: '#FFFFFF',
@@ -830,11 +892,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
-    shadowColor: '#42C167',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 3,
     marginTop: 8,
   },
   saveButtonText: {
