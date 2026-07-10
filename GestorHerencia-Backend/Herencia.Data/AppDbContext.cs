@@ -21,6 +21,8 @@ public class AppDbContext : DbContext
     public DbSet<Usuario> Usuarios => Set<Usuario>();
     public DbSet<ActivoDigital> ActivosDigitales => Set<ActivoDigital>();
     public DbSet<AsignacionHerencia> AsignacionesHerencia => Set<AsignacionHerencia>();
+    public DbSet<ConfiguracionVerificacionVida> ConfiguracionesVerificacionVida => Set<ConfiguracionVerificacionVida>();
+    public DbSet<CertificadoDefuncion> CertificadosDefuncion => Set<CertificadoDefuncion>();
 
     // OnModelCreating es el lugar donde, con Fluent API, le decimos EXPLICITAMENTE
     // a EF Core como mapear cada entidad: claves primarias, foraneas, longitudes
@@ -235,7 +237,117 @@ public class AppDbContext : DbContext
         });
 
         // ==========================================================
-        // 4) SEEDERS (HasData) - datos de prueba
+        // 4) CONFIGURACION DE ConfiguracionVerificacionVida (1-1 con Usuario)
+        // ==========================================================
+        modelBuilder.Entity<ConfiguracionVerificacionVida>(entity =>
+        {
+            // --- Clave primaria COMPARTIDA con Usuario ---
+            // UsuarioId es, a la vez, la PK de esta tabla y la FK hacia
+            // Usuario: es la forma estandar en EF Core de modelar una
+            // relacion 1-1 OBLIGATORIA (un Usuario tiene, como maximo, una
+            // sola fila de configuracion, nunca varias), sin necesitar un
+            // Id autoincremental propio que nunca tendria sentido de negocio.
+            entity.HasKey(c => c.UsuarioId);
+
+            entity.Property(c => c.FrecuenciaMeses)
+                  .IsRequired();
+
+            entity.Property(c => c.Metodo)
+                  .IsRequired();
+
+            entity.Property(c => c.UltimoCheckIn)
+                  .IsRequired();
+
+            // Mismo criterio que AsignacionHerencia.Estado: default a nivel
+            // de base de datos como segunda capa de defensa ademas del
+            // default ya fijado en el modelo (Estado = Activo).
+            entity.Property(c => c.Estado)
+                  .IsRequired()
+                  .HasDefaultValue(EstadoVerificacionVida.Activo);
+
+            // --- FK 1: UsuarioId (PK compartida) -> Usuario (rol TITULAR) ---
+            // Cascade: si se borra el Usuario, no tiene sentido conservar
+            // "huerfana" su propia configuracion de monitoreo. A diferencia
+            // del caso de AsignacionHerencia (ver seccion 3), esta es la
+            // UNICA ruta de cascada que llega a esta tabla desde Usuario
+            // (la otra FK de abajo, ContactoConfianzaId, va con Restrict),
+            // asi que Cascade aca no genera ninguna ambiguedad.
+            entity.HasOne(c => c.Usuario)
+                  .WithOne()
+                  .HasForeignKey<ConfiguracionVerificacionVida>(c => c.UsuarioId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            // --- FK 2: ContactoConfianzaId -> Usuario (rol CONTACTO) ---
+            // Segunda FK hacia la MISMA tabla Usuarios: igual que
+            // AsignacionHerencia.UsuarioId (ver el comentario detallado en
+            // la seccion 3), debe ir con Restrict para no generar una
+            // segunda ruta de cascada convergente sobre esta tabla. Ademas,
+            // de negocio: si el contacto de confianza elimina su cuenta, no
+            // queremos que la configuracion del titular desaparezca en
+            // silencio junto con el (obligaria a elegir uno nuevo, no a
+            // perder toda la configuracion de frecuencia/metodo).
+            entity.HasOne(c => c.ContactoConfianza)
+                  .WithMany()
+                  .HasForeignKey(c => c.ContactoConfianzaId)
+                  .IsRequired(false)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ==========================================================
+        // 5) CONFIGURACION DE CertificadoDefuncion
+        // ==========================================================
+        modelBuilder.Entity<CertificadoDefuncion>(entity =>
+        {
+            entity.HasKey(c => c.Id);
+
+            entity.Property(c => c.RutaArchivo)
+                  .IsRequired()
+                  .HasMaxLength(300);
+
+            entity.Property(c => c.NombreArchivoOriginal)
+                  .IsRequired()
+                  .HasMaxLength(260);
+
+            entity.Property(c => c.Estado)
+                  .IsRequired()
+                  .HasDefaultValue(EstadoCertificadoDefuncion.Pendiente);
+
+            entity.Property(c => c.MotivoRechazo)
+                  .HasMaxLength(500);
+
+            // --- TRES FKs distintas hacia la MISMA tabla Usuarios ---
+            // (titular fallecido, heredero que subio el documento, admin
+            // que lo reviso). Las TRES van con Restrict, por el mismo
+            // motivo ya justificado en AsignacionHerencia.UsuarioId (seccion
+            // 3) y en ConfiguracionVerificacionVida.ContactoConfianzaId
+            // (seccion 4): con multiples FKs hacia una misma tabla, a lo
+            // sumo UNA puede ir en Cascade sin generar rutas convergentes
+            // ambiguas, y esta tabla en particular no tiene ninguna razon
+            // de negocio para borrar certificados en cascada al eliminar
+            // CUALQUIERA de los tres usuarios involucrados: son, ante todo,
+            // un registro de auditoria que debe sobrevivir a la baja de
+            // cualquiera de las cuentas que participaron.
+            entity.HasOne(c => c.UsuarioTitular)
+                  .WithMany()
+                  .HasForeignKey(c => c.UsuarioTitularId)
+                  .IsRequired()
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(c => c.SubidoPor)
+                  .WithMany()
+                  .HasForeignKey(c => c.SubidoPorUsuarioId)
+                  .IsRequired()
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(c => c.RevisadoPor)
+                  .WithMany()
+                  .HasForeignKey(c => c.RevisadoPorUsuarioId)
+                  .IsRequired(false)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ==========================================================
+        // 6) SEEDERS (HasData) - datos de prueba
         // ==========================================================
         // IMPORTANTE: HasData exige valores ESTATICOS y solo propiedades escalares
         // (no se pueden asignar objetos de navegacion). Por eso cada semilla fija

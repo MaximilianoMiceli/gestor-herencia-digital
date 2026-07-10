@@ -1,0 +1,128 @@
+using System.Security.Claims;
+using Herencia.Business.Dtos;
+using Herencia.Business.Exceptions;
+using Herencia.Business.Interfaces;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Herencia.Api.Controllers;
+
+// VerificacionVidaController expone el monitoreo de actividad del titular
+// AUTENTICADO: consultar/guardar su propia configuracion, y confirmar
+// actividad (check-in). Todas las operaciones son siempre sobre "el propio
+// usuario del token", nunca sobre un Id recibido en la ruta o el body (ver
+// el mismo criterio de OWNERSHIP que ActivosDigitalesController): no existe
+// ningun escenario legitimo donde alguien deba poder tocar la configuracion
+// de OTRO usuario desde este controller (eso, en cambio, lo hace el
+// Administrador indirectamente al aprobar un certificado, nunca editando
+// esta configuracion a mano).
+[ApiController]
+[Authorize]
+[Route("api/verificacion-vida")]
+public class VerificacionVidaController : ControllerBase
+{
+    private readonly IVerificacionVidaService _verificacionVidaService;
+    private readonly ILogger<VerificacionVidaController> _logger;
+
+    public VerificacionVidaController(
+        IVerificacionVidaService verificacionVidaService,
+        ILogger<VerificacionVidaController> logger)
+    {
+        _verificacionVidaService = verificacionVidaService;
+        _logger = logger;
+    }
+
+    private int? ObtenerUsuarioIdAutenticado()
+    {
+        var claim = User.FindFirst(ClaimTypes.NameIdentifier);
+        return (claim is not null && int.TryParse(claim.Value, out var usuarioId)) ? usuarioId : null;
+    }
+
+    // GET api/verificacion-vida/configuracion
+    [HttpGet("configuracion")]
+    public async Task<ActionResult<ConfiguracionVerificacionVidaDTO>> ObtenerConfiguracion()
+    {
+        try
+        {
+            var usuarioAutenticadoId = ObtenerUsuarioIdAutenticado();
+
+            if (usuarioAutenticadoId is null)
+            {
+                return Unauthorized(new { mensaje = "El token no contiene un identificador de usuario valido." });
+            }
+
+            var configuracion = await _verificacionVidaService.ObtenerConfiguracionAsync(usuarioAutenticadoId.Value);
+
+            return Ok(configuracion);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error inesperado al obtener la configuracion de verificacion de vida.");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { mensaje = "Ocurrio un error interno al procesar la solicitud." });
+        }
+    }
+
+    // PUT api/verificacion-vida/configuracion
+    [HttpPut("configuracion")]
+    public async Task<ActionResult<ConfiguracionVerificacionVidaDTO>> GuardarConfiguracion(
+        ConfiguracionVerificacionVidaActualizacionDTO configuracionDTO)
+    {
+        try
+        {
+            var usuarioAutenticadoId = ObtenerUsuarioIdAutenticado();
+
+            if (usuarioAutenticadoId is null)
+            {
+                return Unauthorized(new { mensaje = "El token no contiene un identificador de usuario valido." });
+            }
+
+            var configuracionGuardada = await _verificacionVidaService.GuardarConfiguracionAsync(usuarioAutenticadoId.Value, configuracionDTO);
+
+            return Ok(configuracionGuardada);
+        }
+        catch (RecursoNoEncontradoException ex)
+        {
+            return NotFound(new { mensaje = ex.Message });
+        }
+        catch (ReglaNegocioException ex)
+        {
+            return BadRequest(new { mensaje = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error inesperado al guardar la configuracion de verificacion de vida.");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { mensaje = "Ocurrio un error interno al procesar la solicitud." });
+        }
+    }
+
+    // POST api/verificacion-vida/check-in
+    [HttpPost("check-in")]
+    public async Task<ActionResult<ConfiguracionVerificacionVidaDTO>> RegistrarCheckIn()
+    {
+        try
+        {
+            var usuarioAutenticadoId = ObtenerUsuarioIdAutenticado();
+
+            if (usuarioAutenticadoId is null)
+            {
+                return Unauthorized(new { mensaje = "El token no contiene un identificador de usuario valido." });
+            }
+
+            var configuracionActualizada = await _verificacionVidaService.RegistrarCheckInAsync(usuarioAutenticadoId.Value);
+
+            return Ok(configuracionActualizada);
+        }
+        catch (RecursoNoEncontradoException ex)
+        {
+            return NotFound(new { mensaje = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error inesperado al registrar el check-in de verificacion de vida.");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { mensaje = "Ocurrio un error interno al procesar la solicitud." });
+        }
+    }
+}

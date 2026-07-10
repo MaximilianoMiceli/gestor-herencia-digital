@@ -1,4 +1,5 @@
 using System.Text;
+using Herencia.Api.Jobs;
 using Herencia.Business.Interfaces;
 using Herencia.Business.Services;
 using Herencia.Data;
@@ -110,6 +111,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
 builder.Services.AddScoped<IActivoDigitalRepository, ActivoDigitalRepository>();
 builder.Services.AddScoped<IAsignacionHerenciaRepository, AsignacionHerenciaRepository>();
+builder.Services.AddScoped<IConfiguracionVerificacionVidaRepository, ConfiguracionVerificacionVidaRepository>();
+builder.Services.AddScoped<ICertificadoDefuncionRepository, CertificadoDefuncionRepository>();
 
 // --- Registro de la capa Business: Servicios ---
 // Igual criterio: se registran las implementaciones concretas contra sus
@@ -120,6 +123,19 @@ builder.Services.AddScoped<IAsignacionHerenciaRepository, AsignacionHerenciaRepo
 builder.Services.AddScoped<IUsuarioService, UsuarioService>();
 builder.Services.AddScoped<IActivoDigitalService, ActivoDigitalService>();
 builder.Services.AddScoped<IAsignacionHerenciaService, AsignacionHerenciaService>();
+builder.Services.AddScoped<IVerificacionVidaService, VerificacionVidaService>();
+builder.Services.AddScoped<ICertificadoDefuncionService, CertificadoDefuncionService>();
+
+// --- Servicios de infraestructura del monitoreo de verificacion de vida ---
+// INotificationService (notificaciones simuladas por consola, ver el
+// comentario detallado en NotificacionSimuladaService) e
+// IAlmacenamientoArchivosService (guardado de certificados en disco local,
+// ver AlmacenamientoLocalService) son, igual que ISeguridadService/
+// ITokenService, servicios utilitarios sin dependencia de AppDbContext:
+// se registran igual como Scoped por consistencia con el resto de la
+// solucion.
+builder.Services.AddScoped<INotificationService, NotificacionSimuladaService>();
+builder.Services.AddScoped<IAlmacenamientoArchivosService, AlmacenamientoLocalService>();
 
 // --- Registro de la capa Business: Servicios de seguridad ---
 // ISeguridadService (hash/salt de contrasenas) y ITokenService (emision de
@@ -191,6 +207,14 @@ builder.Services.AddAuthorization();
 // Habilita el uso de Controllers basados en atributos ([ApiController],
 // [HttpGet], [Route], etc.), como UsuariosController y ActivosDigitalesController.
 builder.Services.AddControllers();
+
+// --- Background Service: escaneo periodico de verificacion de vida ---
+// AddHostedService registra VerificacionVidaBackgroundService para que el
+// propio host de ASP.NET Core lo arranque automaticamente al levantar la
+// Api (y lo detenga prolijamente al apagarla), sin necesitar ningun
+// disparador HTTP externo: es lo que permite detectar titulares vencidos
+// aunque nadie abra la app.
+builder.Services.AddHostedService<VerificacionVidaBackgroundService>();
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi

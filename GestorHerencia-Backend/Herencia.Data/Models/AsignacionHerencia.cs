@@ -74,6 +74,17 @@ public class AsignacionHerencia : EntidadBaseAuditable
     // beneficiario", no de la persona beneficiaria en abstracto.
     public EstadoBeneficiario Estado { get; set; } = EstadoBeneficiario.Pendiente;
 
+    // Momento en que se liberaron efectivamente los bienes de esta
+    // asignacion hacia el beneficiario, tras la confirmacion de
+    // fallecimiento del otorgante (ver CertificadoDefuncionService.AprobarAsync).
+    // Es NULLABLE y deliberadamente independiente de "Estado" (que sigue
+    // siendo, exclusivamente, el flujo de ACEPTACION de la invitacion): una
+    // fila puede llevar meses en Estado=Aceptado sin que el otorgante haya
+    // fallecido todavia, y recien en ese momento (no antes) se completa este
+    // campo. Solo las filas ya Aceptado pueden liberarse: no tiene sentido
+    // liberar un reparto que el beneficiario nunca confirmo o que rechazo.
+    public DateTime? FechaLiberacion { get; set; }
+
     // --- Identificador PUBLICO no adivinable de esta invitacion ---
     // TokenInvitacion es un valor aleatorio (generado en
     // AsignacionHerenciaService.CrearAsignacionesAsync) que identifica a esta

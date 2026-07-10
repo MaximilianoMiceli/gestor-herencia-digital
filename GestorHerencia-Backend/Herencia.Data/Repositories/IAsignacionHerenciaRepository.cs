@@ -40,4 +40,17 @@ public interface IAsignacionHerenciaRepository : IRepositorioBase<AsignacionHere
     // relacionado. La usa InvitacionesController, que expone esta entidad
     // por Internet sin exigir un Token JWT.
     Task<AsignacionHerencia?> ObtenerPorTokenInvitacionAsync(string token);
+
+    // Devuelve todas las AsignacionHerencia YA ACEPTADAS cuyo ActivoDigital
+    // pertenece al Usuario indicado en su rol de OTORGANTE (es decir, "los
+    // herederos aceptados de este titular"), con su Usuario beneficiario ya
+    // cargado (Include). La usan VerificacionVidaService.EjecutarEscaneoAsync
+    // (para notificar a los herederos al activarse el protocolo) y
+    // CertificadoDefuncionService (para validar que quien sube un
+    // certificado sea uno de estos herederos, y para liberar los bienes de
+    // TODOS ellos al aprobarse el certificado). Se resuelve con un JOIN real
+    // (via la propiedad de navegacion ActivoDigital.UsuarioId), no con un
+    // bucle N+1 sobre cada ActivoDigital del titular, porque este mismo
+    // resultado se reutiliza en tres puntos distintos del dominio.
+    Task<IEnumerable<AsignacionHerencia>> ObtenerAceptadasPorOtorganteAsync(int usuarioOtorganteId);
 }

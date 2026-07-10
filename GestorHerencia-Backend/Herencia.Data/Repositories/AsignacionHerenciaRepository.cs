@@ -68,4 +68,16 @@ public class AsignacionHerenciaRepository : RepositorioBase<AsignacionHerencia>,
             .Include(a => a.ActivoDigital)
             .FirstOrDefaultAsync(a => a.TokenInvitacion == token);
     }
+
+    // ObtenerAceptadasPorOtorganteAsync: todas las asignaciones Aceptado de
+    // un titular, resueltas con un JOIN real contra ActivoDigital (via
+    // Where sobre la propiedad de navegacion), no con Skip/Take sobre una
+    // lista de Ids traida antes por separado.
+    public async Task<IEnumerable<AsignacionHerencia>> ObtenerAceptadasPorOtorganteAsync(int usuarioOtorganteId)
+    {
+        return await _contexto.AsignacionesHerencia
+            .Include(a => a.Usuario)
+            .Where(a => a.ActivoDigital.UsuarioId == usuarioOtorganteId && a.Estado == EstadoBeneficiario.Aceptado)
+            .ToListAsync();
+    }
 }
