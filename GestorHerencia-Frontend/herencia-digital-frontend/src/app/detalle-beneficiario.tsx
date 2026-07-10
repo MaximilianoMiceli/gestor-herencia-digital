@@ -1,11 +1,11 @@
 /**
  * @file detalle-beneficiario.tsx
  * @description Pantalla de detalle y gestión de beneficiarios (Frames 9, 28 y 33).
- * 
- * Permite visualizar el perfil del heredero, listando los activos digitales del usuario titular
- * que posee asignados con un enlace directo a sus detalles.
- * Dispone de la funcionalidad de borrado con confirmación modal translúcida (Frame 28).
- * Al eliminarlo, retorna al listado inyectando parámetros locales para mostrar el banner de éxito (Frame 33).
+ *
+ * Muestra el email del beneficiario (identificador real, ya que el backend no expone un
+ * "nombre" ni un Id propio para esta persona) y la lista de activos que tiene asignados.
+ * Al eliminarlo, se borran TODAS las asignaciones de herencia que lo vinculan con mis activos
+ * (no hay una entidad "Beneficiario" separada que borrar).
  */
 
 import React, { useState, useEffect } from 'react';
@@ -21,29 +21,20 @@ import {
   ScrollView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, ArrowRight, Info, AlertTriangle } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
-import { AssetsService, BeneficiarioDTO } from '../services/assets.service';
-
-interface ActivoAsignado {
-  id: number;
-  nombre: string;
-  tipoString: string;
-}
+import { AssetsService, BeneficiarioResumen } from '../services/assets.service';
 
 export default function DetalleBeneficiarioScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
-  const { id } = useLocalSearchParams();
-
-  const beneficiarioId = Number(id);
+  const { email } = useLocalSearchParams<{ email: string }>();
 
   const [loading, setLoading] = useState(true);
-  const [beneficiario, setBeneficiario] = useState<BeneficiarioDTO | null>(null);
-  const [activosAsignados, setActivosAsignados] = useState<ActivoAsignado[]>([]);
+  const [beneficiario, setBeneficiario] = useState<BeneficiarioResumen | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -55,37 +46,16 @@ export default function DetalleBeneficiarioScreen() {
 
     const loadDatos = async () => {
       try {
-        // 1. Obtener detalles del beneficiario
-        const bData = await AssetsService.getBeneficiarioPorId(token, beneficiarioId);
-        setBeneficiario(bData);
+        const todos = await AssetsService.getMisBeneficiarios(token);
+        const encontrado = todos.find((b) => b.email === email);
 
-        // 2. Obtener todos los activos del usuario
-        const todosLosActivos = await AssetsService.getAssets(token);
-        
-        // 3. Consultar las asignaciones de cada activo en paralelo
-        const asignacionesPromises = todosLosActivos.map(async (activo) => {
-          try {
-            const asignaciones = await AssetsService.getAssignmentsForAsset(token, activo.id);
-            // Filtrar si este beneficiario está asignado al activo
-            const tieneAsignacion = asignaciones.some(asig => asig.beneficiarioId === beneficiarioId);
-            if (tieneAsignacion) {
-              return {
-                id: activo.id,
-                nombre: activo.nombre,
-                tipoString: mapearTipoActivo(activo.tipo),
-              };
-            }
-          } catch (e) {
-            console.log('Error fetching assignments for asset', activo.id, e);
-          }
-          return null;
-        });
+        if (!encontrado) {
+          Alert.alert('No encontrado', 'No se encontró el beneficiario solicitado.');
+          router.back();
+          return;
+        }
 
-        const resultados = await Promise.all(asignacionesPromises);
-        // Filtrar nulos
-        const asignadosValidos = resultados.filter((item): item is ActivoAsignado => item !== null);
-        setActivosAsignados(asignadosValidos);
-
+        setBeneficiario(encontrado);
       } catch (err: any) {
         console.log('Error al cargar detalle del beneficiario', err.message);
         Alert.alert('Error de carga', err.message);
@@ -96,7 +66,7 @@ export default function DetalleBeneficiarioScreen() {
     };
 
     loadDatos();
-  }, [token, id]);
+  }, [token, email]);
 
   /**
    * Mapea el número del enum TipoActivoDigital a un String descriptivo.
@@ -112,44 +82,35 @@ export default function DetalleBeneficiarioScreen() {
   };
 
   /**
-   * Genera las iniciales a partir del nombre completo del beneficiario
+   * Genera las iniciales a partir del email del beneficiario (no hay nombre disponible).
    */
-  const obtenerIniciales = (nombre: string) => {
-    const partes = nombre.trim().split(' ');
-    if (partes.length >= 2) {
-      return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
-    }
-    return nombre.substring(0, 2).toUpperCase();
-  };
+  const obtenerIniciales = (correo: string) => correo.substring(0, 2).toUpperCase();
 
   /**
-   * Determina el estado del beneficiario según la base de datos (1 = Pendiente, 2 = Verificado/Aceptado, 3 = Rechazado)
-   * con un fallback basado en nombres semilla para compatibilidad con datos demo.
+   * Determina el estado del beneficiario según su primera asignación
+   * (1 = Pendiente, 2 = Verificado/Aceptado, 3 = Rechazado).
    */
-  const obtenerEstadoBeneficiario = (item: BeneficiarioDTO): 'Verificado' | 'Pendiente' | 'Rechazado' => {
-    if (item.estado !== undefined) {
-      if (item.estado === 2) return 'Verificado';
-      if (item.estado === 3) return 'Rechazado';
-      return 'Pendiente';
-    }
-    const n = item.nombre.toLowerCase();
-    if (n.includes('ana') || n.includes('laura')) {
-      return 'Verificado';
-    }
+  const obtenerEstadoBeneficiario = (item: BeneficiarioResumen): 'Verificado' | 'Pendiente' | 'Rechazado' => {
+    if (item.estado === 2) return 'Verificado';
+    if (item.estado === 3) return 'Rechazado';
     return 'Pendiente';
   };
 
   /**
-   * Ejecuta el borrado del beneficiario y maneja errores por restricciones (por ej. si tiene asignaciones).
+   * Elimina todas las asignaciones de herencia del beneficiario (borrado completo, ya que
+   * no existe una entidad "Beneficiario" separada para eliminar).
    */
   const handleEliminarBeneficiario = async () => {
     if (!token || !beneficiario) return;
 
     setDeleting(true);
     try {
-      await AssetsService.deleteBeneficiario(token, beneficiario.id);
+      await AssetsService.eliminarBeneficiario(
+        token,
+        beneficiario.asignaciones.map((a) => a.id)
+      );
       setShowConfirmModal(false);
-      
+
       // Redirigir al listado inyectando parámetro de éxito para el banner (Frame 33)
       router.replace({
         pathname: '/(tabs)/beneficiarios',
@@ -157,10 +118,7 @@ export default function DetalleBeneficiarioScreen() {
       });
     } catch (err: any) {
       setShowConfirmModal(false);
-      Alert.alert(
-        'No se puede eliminar',
-        'Este beneficiario tiene activos asignados. Primero desvincula o elimina los activos asociados para poder borrarlo.'
-      );
+      Alert.alert('No se pudo eliminar', err.message || 'Ocurrió un error al eliminar el beneficiario.');
     } finally {
       setDeleting(false);
     }
@@ -205,21 +163,16 @@ export default function DetalleBeneficiarioScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.centeredWrapper}>
-          
+
           {/* TARJETA DE PERFIL (Frame 9) */}
           <View style={styles.profileCard}>
             <View style={styles.avatarCircle}>
-              <Text style={styles.avatarText}>{obtenerIniciales(beneficiario.nombre)}</Text>
+              <Text style={styles.avatarText}>{obtenerIniciales(beneficiario.email)}</Text>
             </View>
 
             <View style={styles.infoGroup}>
-              <Text style={styles.infoLabel}>Nombre</Text>
-              <Text style={styles.infoValue}>{beneficiario.nombre}</Text>
-            </View>
-
-            <View style={styles.infoGroup}>
-              <Text style={styles.infoLabel}>Relación</Text>
-              <Text style={styles.infoValue}>{beneficiario.parentesco}</Text>
+              <Text style={styles.infoLabel}>Email</Text>
+              <Text style={styles.infoValue}>{beneficiario.email}</Text>
             </View>
 
             <View style={styles.infoGroup}>
@@ -245,22 +198,22 @@ export default function DetalleBeneficiarioScreen() {
           {/* SECCIÓN ACTIVOS ASIGNADOS */}
           <Text style={styles.sectionTitle}>ACTIVOS ASIGNADOS</Text>
 
-          {activosAsignados.length === 0 ? (
+          {beneficiario.asignaciones.length === 0 ? (
             <View style={styles.emptyAssetsCard}>
               <Text style={styles.emptyAssetsText}>No posee activos asignados actualmente.</Text>
             </View>
           ) : (
             <View style={styles.assetsListContainer}>
-              {activosAsignados.map((activo) => (
+              {beneficiario.asignaciones.map((asignacion) => (
                 <TouchableOpacity
-                  key={activo.id}
+                  key={asignacion.id}
                   style={styles.assetCard}
                   activeOpacity={0.8}
                   onPress={() => router.replace({ pathname: '/(tabs)/activos' })}
                 >
                   <View style={styles.assetInfo}>
-                    <Text style={styles.assetName}>{activo.nombre}</Text>
-                    <Text style={styles.assetType}>{activo.tipoString}</Text>
+                    <Text style={styles.assetName}>{asignacion.activoNombre}</Text>
+                    <Text style={styles.assetType}>{mapearTipoActivo(asignacion.activoTipo)}</Text>
                   </View>
                   <ArrowRight size={20} color="#005B9A" />
                 </TouchableOpacity>
@@ -289,7 +242,7 @@ export default function DetalleBeneficiarioScreen() {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>¿Estas seguro?</Text>
             <Text style={styles.modalText}>
-              Se borraran todos los datos del beneficiario. Esta accion no se puede deshacer.
+              Se eliminarán todas las asignaciones de herencia de este beneficiario. Esta accion no se puede deshacer.
             </Text>
 
             <View style={styles.modalButtonsRow}>

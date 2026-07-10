@@ -356,12 +356,12 @@ public class AppDbContext : DbContext
         // identica y reproducible entre entornos.
         var fechaSeed = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        // Hash/salt de ejemplo: en un escenario real estos bytes los calcula la
-        // capa Business (ej: HMACSHA512) antes de guardar el Usuario. Aqui usamos
-        // valores fijos solo para poder sembrar usuarios de prueba sin depender
-        // de logica de negocio dentro de la capa Data.
-        var passwordHashSeed = Convert.FromBase64String("aGFzaERlUHJ1ZWJhU2VtaWxsYTEyMzQ1Ng==");
-        var passwordSaltSeed = Convert.FromBase64String("c2FsdERlUHJ1ZWJhU2VtaWxsYTEyMzQ1Ng==");
+        // Hash/salt REALES (no un placeholder): calculados una sola vez, fuera de
+        // este proyecto, con el mismo algoritmo que usa SeguridadService.CrearPasswordHash
+        // (HMACSHA512), para que los 3 usuarios de prueba puedan loguearse de verdad.
+        // La contrasena en texto plano de los 3 es: "Test123456!"
+        var passwordHashSeed = Convert.FromBase64String("7lDUenhjxBwPX/DKjqDlkN4PIKL8ydsEt3aTmhITAoBXodJ0wdibMst4wfaWliKF6CeW51ys8aI3tBm4C4eRuw==");
+        var passwordSaltSeed = Convert.FromBase64String("HHYRrwJEzysVkjRbfTwwuY628CYOQv9HgbWh5w3jOl9YRsO/9lz1t6a+dPFFe0oO479Mdtn4KPNYpZ/N4hajHdTehwBvW+6pWR4uVmsC4eJ7GB/zgWA4VngYKcunwnffJalF6V9pC2IzEhQeiUvWXybgDsz0IxSIAxM65VFKqTU=");
 
         // --- 3 Usuarios de prueba ---
         // Los 3 son necesarios para demostrar el modelo de DOBLE ROL con una

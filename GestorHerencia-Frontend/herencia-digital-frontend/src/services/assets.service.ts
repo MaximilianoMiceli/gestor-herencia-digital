@@ -2,9 +2,16 @@
  * @file assets.service.ts
  * @description Servicio de comunicación HTTP encargado de la gestión de activos digitales
  * y asignaciones de herencia contra la API de ASP.NET Core.
- * 
+ *
  * Implementa la lógica de consumo de endpoints protegidos mediante token JWT, integrando
- * la creación transaccional de un activo y su inmediata vinculación a un beneficiario asignado.
+ * la creación transaccional de un activo y su inmediata vinculación a un beneficiario invitado
+ * por email.
+ *
+ * IMPORTANTE: el backend no tiene ninguna entidad "Beneficiario" independiente. Invitar a
+ * alguien y asignarle un activo son la MISMA operación (POST /activosdigitales/{id}/asignaciones
+ * con su email); no existe ningún endpoint "/api/beneficiarios" ni un Id de beneficiario propio.
+ * Por eso "BeneficiarioResumen" (más abajo) es un agregado armado en el cliente a partir de las
+ * asignaciones reales, no un recurso que exista tal cual en el servidor.
  */
 
 import { API_BASE_URL } from '../constants/api';
@@ -24,98 +31,76 @@ export interface ActivoDigitalCreacionDTO {
 
 /**
  * DTO para la creación de una asignación de herencia.
- * Mapea directamente con el modelo esperado en el endpoint 'POST {id}/asignaciones' del backend.
+ * Mapea directamente con 'AsignacionHerenciaCreacionDTO' del backend: el beneficiario se
+ * identifica por email (no por un Id propio), ya que puede no tener cuenta todavía.
  */
 export interface AsignacionHerenciaCreacionDTO {
-  /** ID único del beneficiario al cual se le transfiere el activo */
-  beneficiarioId: number;
-  /** Porcentaje de herencia asignado (actualmente fijado al 100% por defecto para el primer beneficiario) */
+  /** Email de la persona invitada como beneficiaria del activo */
+  emailBeneficiario: string;
+  /** Porcentaje de herencia asignado (actualmente fijado al 100% para el único beneficiario) */
   porcentajeAsignado: number;
   /** Nivel de prioridad u otras condiciones bajo las cuales se liberará el activo en el futuro */
   condicionLiberacion: string;
 }
 
 /**
- * DTO que representa a un beneficiario en el sistema.
- * Coincide con la respuesta del endpoint 'GET /api/beneficiarios' del backend.
+ * DTO que representa una asignación de herencia devuelta por el backend.
+ * Mapea directamente con 'AsignacionHerenciaDTO' (ver Herencia.Business/Dtos).
  */
-export interface BeneficiarioDTO {
+export interface AsignacionDTO {
   id: number;
-  nombre: string;
-  email: string;
-  parentesco: string;
-  estado?: number;
+  activoDigitalId: number;
+  /** Id del Usuario beneficiario, o null si todavía no reclamó la invitación con una cuenta */
+  usuarioBeneficiarioId: number | null;
+  /** Email con el que se invitó a esta persona, exista o no cuenta todavía */
+  emailInvitado: string;
+  porcentajeAsignado: number;
+  condicionLiberacion: string;
+  /** 1 = Pendiente, 2 = Aceptado, 3 = Rechazado (EstadoBeneficiario del backend) */
+  estado: number;
+  usuarioOtorganteId: number;
+  tokenInvitacion: string;
 }
 
 /**
- * Clase de servicio que encapsula las llamadas fetch relativas a activos digitales y beneficiarios.
+ * Una asignación puntual, enriquecida con los datos del activo al que pertenece.
+ * Se arma en el cliente combinando AsignacionDTO con el activo que la originó.
+ */
+export interface AsignacionConActivo extends AsignacionDTO {
+  activoNombre: string;
+  activoTipo: number;
+}
+
+/**
+ * Resumen de un beneficiario agrupado por email, construido en el cliente a partir de
+ * todas las asignaciones (posiblemente sobre varios activos distintos) que comparten el
+ * mismo 'emailInvitado'. No existe como recurso propio en el backend.
+ */
+export interface BeneficiarioResumen {
+  email: string;
+  usuarioBeneficiarioId: number | null;
+  /** Estado de la primera asignación encontrada; se usa como estado representativo del beneficiario */
+  estado: number;
+  asignaciones: AsignacionConActivo[];
+}
+
+/**
+ * Clase de servicio que encapsula las llamadas fetch relativas a activos digitales,
+ * asignaciones de herencia y su agregación en beneficiarios.
  */
 export class AssetsService {
   /**
-   * Obtiene la lista completa de beneficiarios asociados al usuario autenticado.
-   * Llama a: GET /api/beneficiarios
-   * 
-   * @param token Token JWT del usuario autenticado actual.
-   * @returns Promesa con el listado de beneficiarios.
-   * @throws Error si el servidor responde con un código no exitoso (401, 404, 500).
-   */
-  static async getBeneficiarios(token: string): Promise<BeneficiarioDTO[]> {
-    const response = await fetch(`${API_BASE_URL}/beneficiarios`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      let errorMsg = 'Error al obtener beneficiarios';
-      try {
-        const errorData = await response.json();
-        errorMsg = errorData.mensaje || errorData.message || errorMsg;
-      } catch (e) {}
-      throw new Error(errorMsg);
-    }
-
-    return response.json();
-  }
-
-  /**
-   * Obtiene un beneficiario por su ID (Frame 9).
-   * Llama a: GET /api/beneficiarios/{id}
-   */
-  static async getBeneficiarioPorId(token: string, id: number): Promise<BeneficiarioDTO> {
-    const response = await fetch(`${API_BASE_URL}/beneficiarios/${id}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      let errorMsg = 'Error al obtener detalles del beneficiario';
-      try {
-        const errorData = await response.json();
-        errorMsg = errorData.mensaje || errorData.message || errorMsg;
-      } catch (e) {}
-      throw new Error(errorMsg);
-    }
-
-    return response.json();
-  }
-
-  /**
-   * Registra un nuevo activo digital y, si se provee un beneficiario, realiza inmediatamente
-   * la asignación de herencia del 100% al mismo mediante una llamada transaccional encadenada.
-   * 
+   * Registra un nuevo activo digital y, si se provee el email de un beneficiario, realiza
+   * inmediatamente la asignación de herencia del 100% al mismo mediante una llamada
+   * transaccional encadenada.
+   *
    * Llama a:
    * 1. POST /api/activosdigitales (Crea el activo)
-   * 2. POST /api/activosdigitales/{id}/asignaciones (Asigna el beneficiario al activo)
-   * 
+   * 2. POST /api/activosdigitales/{id}/asignaciones (Invita y asigna al beneficiario por email)
+   *
    * @param token Token JWT del usuario autenticado actual.
    * @param asset Datos de creación del activo.
-   * @param beneficiarioId ID del beneficiario a asignar (opcional).
+   * @param emailBeneficiario Email del beneficiario a invitar y asignar (opcional).
    * @param prioridad Prioridad asignada (opcional, se guarda dentro de la condición de liberación).
    * @returns Promesa con los datos del activo digital creado.
    * @throws Error con el mensaje devuelto por la API en caso de fallar cualquiera de los dos pasos.
@@ -123,7 +108,7 @@ export class AssetsService {
   static async createAsset(
     token: string,
     asset: ActivoDigitalCreacionDTO,
-    beneficiarioId?: number,
+    emailBeneficiario?: string,
     prioridad?: string
   ): Promise<any> {
     // 1. Crear el activo digital principal
@@ -147,14 +132,14 @@ export class AssetsService {
 
     const createdAsset = await assetResponse.json();
 
-    // 2. Si se asignó un beneficiario, crear la asignación en la tabla intermedia
-    if (beneficiarioId) {
+    // 2. Si se invitó a un beneficiario por email, crear la asignación en la tabla intermedia
+    if (emailBeneficiario) {
       // El backend recibe un array de asignaciones para permitir divisiones múltiples.
       // Aquí, por simplicidad de la pantalla, asignamos el 100% a un único beneficiario.
       const asignacionBody: AsignacionHerenciaCreacionDTO[] = [
         {
-          beneficiarioId,
-          porcentajeAsignado: 100, 
+          emailBeneficiario,
+          porcentajeAsignado: 100,
           // Guardamos la prioridad como metadato dentro del campo de condición de liberación
           condicionLiberacion: prioridad ? `Prioridad: ${prioridad}` : 'Asignado desde la app móvil',
         },
@@ -211,63 +196,8 @@ export class AssetsService {
   }
 
   /**
-   * Registra un nuevo beneficiario asociado al usuario autenticado (Frame 10).
-   * Llama a: POST /api/beneficiarios
-   * 
-   * @param token Token JWT del usuario autenticado actual.
-   * @param beneficiario Datos de creación del beneficiario (nombre, email, parentesco).
-   */
-  static async createBeneficiario(
-    token: string,
-    beneficiario: { nombre: string; email: string; parentesco: string }
-  ): Promise<BeneficiarioDTO> {
-    const response = await fetch(`${API_BASE_URL}/beneficiarios`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(beneficiario),
-    });
-
-    if (!response.ok) {
-      let errorMsg = 'Error al crear el beneficiario';
-      try {
-        const errorData = await response.json();
-        errorMsg = errorData.mensaje || errorData.message || errorMsg;
-      } catch (e) {}
-      throw new Error(errorMsg);
-    }
-
-    return response.json();
-  }
-
-  /**
-   * Elimina un beneficiario de la base de datos (Frame 9 / 28).
-   * Llama a: DELETE /api/beneficiarios/{id}
-   */
-  static async deleteBeneficiario(token: string, id: number): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/beneficiarios/${id}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      let errorMsg = 'Error al eliminar el beneficiario';
-      try {
-        const errorData = await response.json();
-        errorMsg = errorData.mensaje || errorData.message || errorMsg;
-      } catch (e) {}
-      throw new Error(errorMsg);
-    }
-  }
-
-  /**
-   * Obtiene la lista de asignaciones de herencia asociadas a un activo (Frame 9).
-   * Llama a: GET /api/activos/{assetId}/asignaciones
+   * Obtiene la lista de asignaciones de herencia asociadas a un activo.
+   * Llama a: GET /api/activosdigitales/{assetId}/asignaciones
    */
   static async getAssignmentsForAsset(token: string, assetId: number): Promise<AsignacionDTO[]> {
     const response = await fetch(`${API_BASE_URL}/activosdigitales/${assetId}/asignaciones`, {
@@ -421,18 +351,57 @@ export class AssetsService {
 
     return response.json();
   }
-}
 
-/**
- * DTO que representa una asignación de herencia.
- */
-export interface AsignacionDTO {
-  id: number;
-  activoDigitalId: number;
-  beneficiarioId: number;
-  porcentajeAsignado: number;
-  condicionLiberacion: string;
-  usuarioId: number;
+  /**
+   * Arma el listado de "mis beneficiarios" agregando, en el cliente, todas las asignaciones
+   * de todos mis activos y agrupándolas por email invitado.
+   *
+   * No existe un endpoint "/api/beneficiarios": un beneficiario es, en el modelo real del
+   * backend, simplemente la persona (identificada por email) a la que le asigné uno o más
+   * de mis activos. Por eso se arma recorriendo GET /api/activos y, para cada uno,
+   * GET /api/activosdigitales/{id}/asignaciones.
+   */
+  static async getMisBeneficiarios(token: string): Promise<BeneficiarioResumen[]> {
+    const activos = await this.getAssets(token);
+
+    const listasPorActivo = await Promise.all(
+      activos.map(async (activo): Promise<AsignacionConActivo[]> => {
+        const asignaciones = await this.getAssignmentsForAsset(token, activo.id);
+        return asignaciones.map((asignacion) => ({
+          ...asignacion,
+          activoNombre: activo.nombre,
+          activoTipo: activo.tipo,
+        }));
+      })
+    );
+
+    const mapaPorEmail = new Map<string, BeneficiarioResumen>();
+
+    for (const asignacion of listasPorActivo.flat()) {
+      const existente = mapaPorEmail.get(asignacion.emailInvitado);
+      if (existente) {
+        existente.asignaciones.push(asignacion);
+      } else {
+        mapaPorEmail.set(asignacion.emailInvitado, {
+          email: asignacion.emailInvitado,
+          usuarioBeneficiarioId: asignacion.usuarioBeneficiarioId,
+          estado: asignacion.estado,
+          asignaciones: [asignacion],
+        });
+      }
+    }
+
+    return Array.from(mapaPorEmail.values());
+  }
+
+  /**
+   * "Elimina" a un beneficiario eliminando todas sus asignaciones de herencia.
+   * Como el beneficiario no es una entidad propia del backend, quitarlo del todo equivale
+   * a borrar cada AsignacionHerencia que lo vincula con alguno de mis activos.
+   */
+  static async eliminarBeneficiario(token: string, asignacionIds: number[]): Promise<void> {
+    await Promise.all(asignacionIds.map((id) => this.deleteAssignment(token, id)));
+  }
 }
 
 /**

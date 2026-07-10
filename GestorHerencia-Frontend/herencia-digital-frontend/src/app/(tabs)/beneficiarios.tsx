@@ -1,12 +1,12 @@
 /**
  * @file beneficiarios.tsx
  * @description Pantalla que lista los beneficiarios del usuario autenticado (Frame 8).
- * 
- * Consume el endpoint GET /api/beneficiarios para listar a las personas asignadas.
- * Determina el estado ("Verificado" / "Pendiente") de manera inteligente:
- * - Los beneficiarios semilla Ana y Laura figuran como "Verificado" para demos.
- * - Los beneficiarios nuevos o Martín figuran como "Pendiente" (esperando registro).
- * Dispone de un botón para agregar un nuevo beneficiario redirigiendo al formulario.
+ *
+ * El backend no tiene ninguna entidad "Beneficiario" propia: una persona es beneficiaria
+ * porque tiene una o más AsignacionHerencia sobre mis activos. Por eso el listado se arma
+ * agregando, por email, todas mis asignaciones (ver AssetsService.getMisBeneficiarios).
+ * Agregar un beneficiario nuevo se hace, en consecuencia, desde "Nuevo activo" (ahí es donde
+ * el backend realmente invita/asigna a alguien).
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -18,14 +18,13 @@ import {
   ActivityIndicator,
   FlatList,
   Platform,
-  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { ArrowLeft, ArrowRight, HelpCircle, Info } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { AssetsService, BeneficiarioDTO } from '../../services/assets.service';
+import { AssetsService, BeneficiarioResumen } from '../../services/assets.service';
 
 export default function BeneficiariosScreen() {
   const router = useRouter();
@@ -35,13 +34,13 @@ export default function BeneficiariosScreen() {
   const { deleted } = useLocalSearchParams();
   const [showSuccessBanner, setShowSuccessBanner] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [beneficiarios, setBeneficiarios] = useState<BeneficiarioDTO[]>([]);
+  const [beneficiarios, setBeneficiarios] = useState<BeneficiarioResumen[]>([]);
 
   // Función para volver a cargar la lista (se puede invocar al enfocar la pantalla)
   const fetchBeneficiarios = async () => {
     if (!token) return;
     try {
-      const data = await AssetsService.getBeneficiarios(token);
+      const data = await AssetsService.getMisBeneficiarios(token);
       setBeneficiarios(data);
     } catch (err: any) {
       console.log('Error loading beneficiaries:', err.message);
@@ -78,30 +77,23 @@ export default function BeneficiariosScreen() {
   }, [deleted]);
 
   /**
-   * Determina si un beneficiario está verificado, pendiente o rechazado.
-   * Lee la propiedad de estado real de la base de datos (1 = Pendiente, 2 = Verificado/Aceptado, 3 = Rechazado)
-   * con fallback basado en el nombre para la demo original.
+   * Determina si un beneficiario está verificado, pendiente o rechazado a partir del
+   * estado real de su primera asignación (1 = Pendiente, 2 = Aceptado/Verificado, 3 = Rechazado).
    */
-  const obtenerEstadoBeneficiario = (item: BeneficiarioDTO): 'Verificado' | 'Pendiente' | 'Rechazado' => {
-    if (item.estado !== undefined) {
-      if (item.estado === 2) return 'Verificado';
-      if (item.estado === 3) return 'Rechazado';
-      return 'Pendiente';
-    }
-    const n = item.nombre.toLowerCase();
-    if (n.includes('ana') || n.includes('laura')) {
-      return 'Verificado';
-    }
+  const obtenerEstadoBeneficiario = (item: BeneficiarioResumen): 'Verificado' | 'Pendiente' | 'Rechazado' => {
+    if (item.estado === 2) return 'Verificado';
+    if (item.estado === 3) return 'Rechazado';
     return 'Pendiente';
   };
 
   /**
-   * Navega a la pantalla de detalle del beneficiario (Frame 9).
+   * Navega a la pantalla de detalle del beneficiario (Frame 9), identificado por su email
+   * (no hay un Id propio de beneficiario en el backend).
    */
-  const handleVerDetalles = (item: BeneficiarioDTO) => {
+  const handleVerDetalles = (item: BeneficiarioResumen) => {
     router.push({
       pathname: '/detalle-beneficiario',
-      params: { id: item.id.toString() },
+      params: { email: item.email },
     });
   };
 
@@ -144,13 +136,14 @@ export default function BeneficiariosScreen() {
             <HelpCircle size={48} color="#8A9E95" strokeWidth={1.5} />
             <Text style={styles.emptyStateTitle}>Sin beneficiarios aún</Text>
             <Text style={styles.emptyStateText}>
-              Presiona el botón de abajo para registrar a tu primer heredero y asignarle activos.
+              Los beneficiarios se agregan al crear un activo y asignárselo. Presioná el botón de abajo
+              para registrar tu primer activo y designar a su heredero.
             </Text>
           </View>
         ) : (
           <FlatList
             data={beneficiarios}
-            keyExtractor={(item) => item.id.toString()}
+            keyExtractor={(item) => item.email}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => {
@@ -159,8 +152,12 @@ export default function BeneficiariosScreen() {
                 <View style={styles.beneficiaryCard}>
                   <View style={styles.cardHeaderRow}>
                     <View style={styles.cardHeaderLeft}>
-                      <Text style={styles.cardName}>{item.nombre}</Text>
-                      <Text style={styles.cardRelation}>{item.parentesco}</Text>
+                      <Text style={styles.cardName}>{item.email}</Text>
+                      <Text style={styles.cardRelation}>
+                        {item.asignaciones.length === 1
+                          ? '1 activo asignado'
+                          : `${item.asignaciones.length} activos asignados`}
+                      </Text>
                     </View>
                     <Text style={[
                       styles.cardStatus,
@@ -187,7 +184,7 @@ export default function BeneficiariosScreen() {
 
         <TouchableOpacity
           style={styles.addBeneficiaryButton}
-          onPress={() => router.push('/agregar-beneficiario')}
+          onPress={() => router.push('/nuevo-activo')}
         >
           <Text style={styles.addBeneficiaryText}>+ Agregar beneficiario</Text>
         </TouchableOpacity>

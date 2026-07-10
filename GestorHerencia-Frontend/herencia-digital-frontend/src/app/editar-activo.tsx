@@ -25,7 +25,9 @@ import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
-import { AssetsService, BeneficiarioDTO, AsignacionDTO } from '../services/assets.service';
+import { AssetsService, AsignacionDTO } from '../services/assets.service';
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function EditarActivoScreen() {
   const router = useRouter();
@@ -45,15 +47,13 @@ export default function EditarActivoScreen() {
   const [tipoVal, setTipoVal] = useState(0);
   const [descripcion, setDescripcion] = useState('');
   const [prioridad, setPrioridad] = useState<'Alta' | 'Media' | 'Baja'>('Media');
-  const [selectedBeneficiarioId, setSelectedBeneficiarioId] = useState<number | null>(null);
+  const [beneficiarioEmail, setBeneficiarioEmail] = useState('');
+  const [emailError, setEmailError] = useState(false);
 
-  // Listas de selección
-  const [beneficiarios, setBeneficiarios] = useState<BeneficiarioDTO[]>([]);
   const [asignacionesExistentes, setAsignacionesExistentes] = useState<AsignacionDTO[]>([]);
-  
+
   // Control de dropdowns personalizados inline
   const [showPrioridadDropdown, setShowPrioridadDropdown] = useState(false);
-  const [showBeneficiarioDropdown, setShowBeneficiarioDropdown] = useState(false);
 
   useEffect(() => {
     if (!token) {
@@ -63,11 +63,7 @@ export default function EditarActivoScreen() {
 
     const cargarDatos = async () => {
       try {
-        // 1. Obtener la lista de beneficiarios para el dropdown
-        const bList = await AssetsService.getBeneficiarios(token);
-        setBeneficiarios(bList);
-
-        // 2. Obtener los activos para rellenar los datos (usamos la lista paginada filtrando por ID)
+        // 1. Obtener los activos para rellenar los datos (usamos la lista paginada filtrando por ID)
         const assets = await AssetsService.getAssets(token);
         const activo = assets.find(a => a.id === activoId);
 
@@ -81,14 +77,14 @@ export default function EditarActivoScreen() {
         setTipoVal(activo.tipo);
         setDescripcion(activo.descripcion || '');
 
-        // 3. Obtener asignaciones existentes para este activo
+        // 2. Obtener asignaciones existentes para este activo
         const asigs = await AssetsService.getAssignmentsForAsset(token, activoId);
         setAsignacionesExistentes(asigs);
 
         if (asigs.length > 0) {
           const primerAsig = asigs[0];
-          setSelectedBeneficiarioId(primerAsig.beneficiarioId);
-          
+          setBeneficiarioEmail(primerAsig.emailInvitado);
+
           // Parsear prioridad guardada en condicionLiberacion (ej: "Prioridad: Alta")
           const cond = primerAsig.condicionLiberacion || '';
           if (cond.includes('Alta')) setPrioridad('Alta');
@@ -136,12 +132,18 @@ export default function EditarActivoScreen() {
    */
   const handleGuardarCambios = async () => {
     if (!token) return;
+    setEmailError(false);
+
     if (!nombre.trim()) {
       Alert.alert('Campo requerido', 'El nombre del activo es obligatorio.');
       return;
     }
-    if (!selectedBeneficiarioId) {
-      Alert.alert('Campo requerido', 'Debes seleccionar un beneficiario.');
+    if (!beneficiarioEmail.trim()) {
+      Alert.alert('Campo requerido', 'Debes ingresar el email del beneficiario.');
+      return;
+    }
+    if (!EMAIL_REGEX.test(beneficiarioEmail.trim())) {
+      setEmailError(true);
       return;
     }
 
@@ -160,10 +162,10 @@ export default function EditarActivoScreen() {
       );
       await Promise.all(deletePromises);
 
-      // 3. Crear la nueva asignación para el beneficiario seleccionado
+      // 3. Crear la nueva asignación para el beneficiario indicado
       await AssetsService.createAssignments(token, activoId, [
         {
-          beneficiarioId: selectedBeneficiarioId,
+          emailBeneficiario: beneficiarioEmail.trim().toLowerCase(),
           porcentajeAsignado: 100,
           condicionLiberacion: `Prioridad: ${prioridad}`,
         }
@@ -284,10 +286,7 @@ export default function EditarActivoScreen() {
                 showPrioridadDropdown && styles.dropdownButtonActive,
               ]}
               activeOpacity={0.8}
-              onPress={() => {
-                setShowPrioridadDropdown(!showPrioridadDropdown);
-                setShowBeneficiarioDropdown(false);
-              }}
+              onPress={() => setShowPrioridadDropdown(!showPrioridadDropdown)}
             >
               <Text style={[
                 styles.dropdownButtonText,
@@ -328,66 +327,25 @@ export default function EditarActivoScreen() {
             )}
           </View>
 
-          {/* CAMPO: SELECCIONAR BENEFICIARIO (DROPDOWN INLINE) */}
+          {/* CAMPO: EMAIL DEL BENEFICIARIO */}
+          {/* El backend invita y asigna en la misma operación (POST .../asignaciones con un
+              email): no hay una lista de "beneficiarios" separada de la que elegir. */}
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Seleccionar relacion</Text>
-            <TouchableOpacity
-              style={[
-                styles.dropdownButton,
-                showBeneficiarioDropdown && styles.dropdownButtonActive,
-              ]}
-              activeOpacity={0.8}
-              onPress={() => {
-                setShowBeneficiarioDropdown(!showBeneficiarioDropdown);
-                setShowPrioridadDropdown(false);
+            <Text style={styles.inputLabel}>Email del beneficiario</Text>
+            <TextInput
+              style={[styles.textInput, emailError && styles.textInputError]}
+              value={beneficiarioEmail}
+              onChangeText={(text) => {
+                setBeneficiarioEmail(text);
+                if (emailError) setEmailError(false);
               }}
-            >
-              <Text style={[
-                styles.dropdownButtonText,
-                showBeneficiarioDropdown && styles.dropdownButtonTextActive,
-              ]}>
-                {selectedBeneficiarioId
-                  ? beneficiarios.find((b) => b.id === selectedBeneficiarioId)?.nombre || 'Seleccionar'
-                  : 'Seleccionar'}
-              </Text>
-              {showBeneficiarioDropdown ? (
-                <ChevronUp size={20} color="#2E7D32" />
-              ) : (
-                <ChevronDown size={20} color="#1a2e2e" />
-              )}
-            </TouchableOpacity>
-
-            {showBeneficiarioDropdown && (
-              <View style={styles.dropdownInlineList}>
-                {beneficiarios.length === 0 ? (
-                  <View style={styles.dropdownEmptyContainer}>
-                    <Text style={styles.dropdownEmptyText}>No tenés beneficiarios agregados.</Text>
-                  </View>
-                ) : (
-                  beneficiarios.map((b) => (
-                    <TouchableOpacity
-                      key={b.id}
-                      style={[
-                        styles.dropdownInlineOption,
-                        selectedBeneficiarioId === b.id && styles.dropdownInlineOptionSelected,
-                      ]}
-                      onPress={() => {
-                        setSelectedBeneficiarioId(b.id);
-                        setShowBeneficiarioDropdown(false);
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.dropdownInlineOptionText,
-                          selectedBeneficiarioId === b.id && styles.dropdownInlineOptionTextSelected,
-                        ]}
-                      >
-                        {b.nombre} ({b.parentesco})
-                      </Text>
-                    </TouchableOpacity>
-                  ))
-                )}
-              </View>
+              placeholder="beneficiario@email.com"
+              placeholderTextColor="#8A9E95"
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            {emailError && (
+              <Text style={styles.emailErrorText}>Ingresá un email válido.</Text>
             )}
           </View>
 
@@ -532,6 +490,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     textAlignVertical: 'top', // Para Android multiline
   },
+  textInputError: {
+    borderColor: '#C53929',
+    borderWidth: 1.5,
+  },
+  emailErrorText: {
+    fontFamily: 'MPLUS2-Regular',
+    fontSize: 13,
+    color: '#C53929',
+    marginTop: -4,
+  },
   disabledInput: {
     backgroundColor: '#CCD3CE', // Fondo gris de input deshabilitado (Frame 7)
     borderRadius: 12,
@@ -595,15 +563,6 @@ const styles = StyleSheet.create({
   dropdownInlineOptionTextSelected: {
     fontFamily: 'MPLUS2-Bold',
     color: '#2E7D32', // Texto verde oscuro para la opción seleccionada
-  },
-  dropdownEmptyContainer: {
-    padding: 12,
-    alignItems: 'center',
-  },
-  dropdownEmptyText: {
-    fontFamily: 'MPLUS2-Regular',
-    fontSize: 13,
-    color: '#8A9E95',
   },
   saveButton: {
     backgroundColor: '#39C55C', // Verde guardar cambios mockup (Frame 7)

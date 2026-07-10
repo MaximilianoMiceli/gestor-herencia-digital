@@ -36,7 +36,9 @@ import {
   ChevronUp,
 } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
-import { AssetsService, BeneficiarioDTO } from '../services/assets.service';
+import { AssetsService } from '../services/assets.service';
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type AssetType = {
   id: number;
@@ -64,7 +66,7 @@ export default function NuevoActivoScreen() {
   const [tipo, setTipo] = useState<AssetType | null>(null);
   const [instrucciones, setInstrucciones] = useState('');
   const [prioridad, setPrioridad] = useState('Media');
-  const [beneficiario, setBeneficiario] = useState<BeneficiarioDTO | null>(null);
+  const [beneficiarioEmail, setBeneficiarioEmail] = useState('');
 
   // ESTADOS DINÁMICOS POR TIPO DE ACTIVO
   const [blockchain, setBlockchain] = useState('');
@@ -83,32 +85,14 @@ export default function NuevoActivoScreen() {
   const [loadingArchivo, setLoadingArchivo] = useState(false);
 
   // AUXILIARES
-  const [beneficiariosList, setBeneficiariosList] = useState<BeneficiarioDTO[]>([]);
-  const [loadingBeneficiarios, setLoadingBeneficiarios] = useState(true);
   const [saving, setSaving] = useState(false);
 
   // Control de expansión
   const [tipoExpanded, setTipoExpanded] = useState(false);
   const [prioridadExpanded, setPrioridadExpanded] = useState(false);
-  const [beneficiarioExpanded, setBeneficiarioExpanded] = useState(false);
 
   const [showValidationError, setShowValidationError] = useState(false);
-
-  useEffect(() => {
-    const fetchBeneficiarios = async () => {
-      if (!token) return;
-      try {
-        const data = await AssetsService.getBeneficiarios(token);
-        setBeneficiariosList(data);
-      } catch (error) {
-        console.error('Error fetching beneficiaries:', error);
-      } finally {
-        setLoadingBeneficiarios(false);
-      }
-    };
-
-    fetchBeneficiarios();
-  }, [token]);
+  const [emailError, setEmailError] = useState(false);
 
   const handleAttachFile = () => {
     setLoadingArchivo(true);
@@ -119,8 +103,15 @@ export default function NuevoActivoScreen() {
   };
 
   const handleSave = async () => {
-    if (!nombre || !tipo || !beneficiario) {
+    setEmailError(false);
+
+    if (!nombre || !tipo || !beneficiarioEmail.trim()) {
       setShowValidationError(true);
+      return;
+    }
+
+    if (!EMAIL_REGEX.test(beneficiarioEmail.trim())) {
+      setEmailError(true);
       return;
     }
 
@@ -159,7 +150,7 @@ export default function NuevoActivoScreen() {
           tipo: tipo.id,
           descripcion: descripcionFinal,
         },
-        beneficiario.id,
+        beneficiarioEmail.trim().toLowerCase(),
         prioridad
       );
 
@@ -230,7 +221,6 @@ export default function NuevoActivoScreen() {
                 onPress={() => {
                   setTipoExpanded(!tipoExpanded);
                   setPrioridadExpanded(false);
-                  setBeneficiarioExpanded(false);
                 }}
               >
                 <Text style={[
@@ -452,7 +442,6 @@ export default function NuevoActivoScreen() {
                 onPress={() => {
                   setPrioridadExpanded(!prioridadExpanded);
                   setTipoExpanded(false);
-                  setBeneficiarioExpanded(false);
                 }}
               >
                 <Text style={[
@@ -493,85 +482,26 @@ export default function NuevoActivoScreen() {
               )}
             </View>
 
-            {/* BENEFICIARIO SELECT */}
-            <Text style={styles.fieldLabel}>Beneficiario asignado</Text>
-            <View style={styles.dropdownContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.dropdownHeader,
-                  beneficiarioExpanded && styles.dropdownHeaderActive
-                ]}
-                activeOpacity={0.8}
-                onPress={() => {
-                  setBeneficiarioExpanded(!beneficiarioExpanded);
-                  setTipoExpanded(false);
-                  setPrioridadExpanded(false);
-                }}
-                disabled={loadingBeneficiarios}
-              >
-                {loadingBeneficiarios ? (
-                  <ActivityIndicator size="small" color="#0E4A4C" />
-                ) : (
-                  <Text style={[
-                    styles.selectText,
-                    beneficiarioExpanded && styles.selectTextActive,
-                    !beneficiario && styles.placeholderText
-                  ]}>
-                    {beneficiario ? beneficiario.nombre : 'Seleccionar beneficiario'}
-                  </Text>
-                )}
-                {beneficiarioExpanded ? (
-                  <ChevronUp color="#2E7D32" size={20} />
-                ) : (
-                  <ChevronDown color="#000000" size={20} />
-                )}
-              </TouchableOpacity>
-
-              {beneficiarioExpanded && (
-                <View style={styles.dropdownOptionsList}>
-                  {beneficiariosList.length === 0 ? (
-                    <View style={styles.emptyOptionRow}>
-                      <Text style={styles.emptyText}>No tienes beneficiarios registrados.</Text>
-                      <TouchableOpacity
-                        onPress={() => {
-                          setBeneficiarioExpanded(false);
-                          router.push('/(tabs)/beneficiarios');
-                        }}
-                        style={styles.emptyButton}
-                      >
-                        <Text style={styles.emptyButtonText}>Crear un beneficiario</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    beneficiariosList.map((item) => {
-                      const isSelected = beneficiario?.id === item.id;
-                      return (
-                        <TouchableOpacity
-                          key={item.id}
-                          style={[
-                            styles.beneficiarioOptionRow,
-                            isSelected && styles.optionSelected
-                          ]}
-                          onPress={() => {
-                            setBeneficiario(item);
-                            setBeneficiarioExpanded(false);
-                            if (showValidationError) setShowValidationError(false);
-                          }}
-                        >
-                          <View style={styles.optionTextWrapper}>
-                            <Text style={[
-                              styles.optionTitle,
-                              isSelected && styles.optionSelectedText
-                            ]}>{item.nombre}</Text>
-                            <Text style={styles.optionSubtitle}>{item.email}</Text>
-                          </View>
-                        </TouchableOpacity>
-                      );
-                    })
-                  )}
-                </View>
-              )}
-            </View>
+            {/* BENEFICIARIO: EMAIL DE INVITACIÓN */}
+            {/* El backend invita y asigna en la misma operación (POST .../asignaciones con un
+                email): no existe una lista de "beneficiarios registrados" de la que elegir. */}
+            <Text style={styles.fieldLabel}>Email del beneficiario</Text>
+            <TextInput
+              style={[styles.input, emailError && styles.inputError]}
+              placeholder="beneficiario@email.com"
+              placeholderTextColor="#999"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={beneficiarioEmail}
+              onChangeText={(text) => {
+                setBeneficiarioEmail(text);
+                if (showValidationError) setShowValidationError(false);
+                if (emailError) setEmailError(false);
+              }}
+            />
+            {emailError && (
+              <Text style={styles.emailErrorText}>Ingresá un email válido.</Text>
+            )}
 
             {/* ERROR DE VALIDACIÓN */}
             {showValidationError && (
@@ -659,6 +589,18 @@ const styles = StyleSheet.create({
     height: 100,
     paddingTop: 16,
   },
+  inputError: {
+    borderColor: '#C53929',
+    borderWidth: 1.5,
+  },
+  emailErrorText: {
+    fontFamily: 'MPLUS2-Regular',
+    fontSize: 13,
+    color: '#C53929',
+    marginTop: -12,
+    marginBottom: 16,
+    marginLeft: 4,
+  },
   dropdownContainer: {
     marginBottom: 16,
   },
@@ -712,14 +654,6 @@ const styles = StyleSheet.create({
     height: 48,
     justifyContent: 'center',
   },
-  beneficiarioOptionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8, // Esquinas más suaves
-    justifyContent: 'center',
-  },
   optionSelected: {
     backgroundColor: '#DAF8BD', // Fondo verde claro de selección
   },
@@ -749,27 +683,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#777',
     marginTop: 1,
-  },
-  emptyOptionRow: {
-    alignItems: 'center',
-    paddingVertical: 16,
-  },
-  emptyText: {
-    fontFamily: 'MPLUS2-Regular',
-    fontSize: 14,
-    color: '#777',
-    marginBottom: 12,
-  },
-  emptyButton: {
-    backgroundColor: '#23856C',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
-  },
-  emptyButtonText: {
-    color: '#FFFFFF',
-    fontFamily: 'MPLUS2-Bold',
-    fontSize: 14,
   },
   dynamicInfoWrapper: {
     marginBottom: 16,

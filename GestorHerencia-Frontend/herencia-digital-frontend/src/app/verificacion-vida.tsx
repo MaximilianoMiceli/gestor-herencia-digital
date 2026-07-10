@@ -27,7 +27,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
-import { AssetsService, BeneficiarioDTO } from '../services/assets.service';
+import { AssetsService } from '../services/assets.service';
 
 export default function VerificacionVidaScreen() {
   const router = useRouter();
@@ -96,19 +96,17 @@ export default function VerificacionVidaScreen() {
     if (!contacto.trim()) {
       Alert.alert(
         'Contacto Requerido',
-        'Por favor, ingresa el nombre o email del contacto de confianza antes de activar la verificación.'
+        'Por favor, ingresa el email del contacto de confianza antes de activar la verificación.'
       );
       return;
     }
 
     try {
-      const bList = await AssetsService.getBeneficiarios(token!);
+      const bList = await AssetsService.getMisBeneficiarios(token!);
       const query = contacto.trim().toLowerCase();
 
-      // Buscamos coincidencia exacta por email o nombre
-      const contactBeneficiary = bList.find(
-        (b: BeneficiarioDTO) => b.email.toLowerCase() === query || b.nombre.toLowerCase() === query
-      );
+      // El backend no tiene "nombre" de beneficiario: la única coincidencia posible es por email
+      const contactBeneficiary = bList.find((b) => b.email.toLowerCase() === query);
 
       if (!contactBeneficiary) {
         Alert.alert(
@@ -332,8 +330,10 @@ export default function VerificacionVidaScreen() {
               style={styles.textInput}
               value={contacto}
               onChangeText={(text) => setContacto(text)}
-              placeholder="Nombre o email de contacto"
+              placeholder="Email del contacto de confianza"
               placeholderTextColor="#8A9E95"
+              keyboardType="email-address"
+              autoCapitalize="none"
             />
           </View>
 

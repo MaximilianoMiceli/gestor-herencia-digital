@@ -34,7 +34,7 @@ export default function HomeScreen() {
       const assets = await AssetsService.getAssets(token);
       setAssetsCount(assets.length);
 
-      const beneficiaries = await AssetsService.getBeneficiarios(token);
+      const beneficiaries = await AssetsService.getMisBeneficiarios(token);
       setBeneficiariosCount(beneficiaries.length);
 
       // Cargar la configuración de Verificación de Vida para el estado dinámico
