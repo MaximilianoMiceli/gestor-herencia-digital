@@ -1,7 +1,10 @@
 namespace Herencia.Data.Models;
 
 // EstadoBeneficiario representa en que punto del "flujo de aceptacion" se
-// encuentra un Beneficiario dentro del proceso de herencia digital.
+// encuentra UNA asignacion puntual (AsignacionHerencia.Estado) dentro del
+// proceso de herencia digital: es el estado del Usuario que actua como
+// BENEFICIARIO en esa fila especifica, no un atributo global de la persona
+// (que podria tener otras asignaciones en estados distintos).
 //
 // Por que un ENUM y no un simple booleano ("Aceptado: true/false") o un string
 // libre ("pendiente"/"Pendiente"/"ACEPTADO")?
@@ -40,7 +43,7 @@ public enum EstadoBeneficiario
     Aceptado = 2,
 
     // El beneficiario rechazo la designacion. Es una decision FINAL, igual
-    // que Aceptado: ver la regla de negocio en BeneficiarioService.CambiarEstadoAsync,
+    // que Aceptado: ver la regla de negocio en AsignacionHerenciaService.CambiarEstadoAsync,
     // que impide pasar de Aceptado/Rechazado a cualquier otro estado.
     Rechazado = 3
 }

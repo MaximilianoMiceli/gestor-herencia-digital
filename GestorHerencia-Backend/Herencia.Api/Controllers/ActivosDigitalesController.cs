@@ -414,8 +414,8 @@ public class ActivosDigitalesController : ControllerBase
     //
     // Ruta anidada MAESTRO-DETALLE: el "maestro" es el ActivoDigital
     // identificado por "{id}", y el "detalle" son sus AsignacionHerencia (a
-    // que Beneficiario, con que porcentaje, bajo que condicion se reparte).
-    // Sigue siendo un GET porque es una consulta de solo lectura.
+    // que Usuario beneficiario, con que porcentaje, bajo que condicion se
+    // reparte). Sigue siendo un GET porque es una consulta de solo lectura.
     [HttpGet("{id:int}/asignaciones")]
     public async Task<ActionResult<IEnumerable<AsignacionHerenciaDTO>>> ObtenerAsignaciones(int id)
     {
@@ -457,7 +457,8 @@ public class ActivosDigitalesController : ControllerBase
     // POST api/activosdigitales/{id}/asignaciones
     //
     // Verbo POST: crea un LOTE de asignaciones (reparte el ActivoDigital
-    // "{id}" entre uno o mas Beneficiarios) en una UNICA operacion atomica.
+    // "{id}" entre uno o mas beneficiarios, invitados por Email) en una
+    // UNICA operacion atomica.
     //
     // --- Transacciones y reversion ante error ---
     // El body es una LISTA de AsignacionHerenciaCreacionDTO (ej: "repartir
@@ -465,14 +466,11 @@ public class ActivosDigitalesController : ControllerBase
     // IAsignacionHerenciaService.CrearAsignacionesAsync procesa TODO el lote
     // dentro de una unica transaccion de base de datos (ver el detalle
     // completo en AsignacionHerenciaService y RepositorioBase.EjecutarEnTransaccionAsync):
-    // si CUALQUIER elemento del lote resulta invalido (un Beneficiario que no
-    // existe, que pertenece a otro titular, o que hace superar el 100% del
-    // activo), la transaccion completa se REVIERTE y NINGUNA asignacion del
-    // lote queda persistida, ni siquiera las que se hubieran procesado con
-    // exito antes de la que fallo. Esto evita que un ActivoDigital quede con
-    // un reparto "a medias" e inconsistente (ej: 50% asignado a un hijo, pero
-    // sin haber llegado a asignarle el otro 50% a la hija por un error a
-    // mitad de proceso).
+    // si CUALQUIER elemento del lote resulta invalido (el otorgante
+    // intentando asignarse el activo a si mismo, o un porcentaje que hace
+    // superar el 100% del activo), la transaccion completa se REVIERTE y
+    // NINGUNA asignacion del lote queda persistida, ni siquiera las que se
+    // hubieran procesado con exito antes de la que fallo.
     [HttpPost("{id:int}/asignaciones")]
     public async Task<ActionResult<IEnumerable<AsignacionHerenciaDTO>>> CrearAsignaciones(
         int id,
@@ -493,10 +491,9 @@ public class ActivosDigitalesController : ControllerBase
             }
 
             // Verificacion de OWNERSHIP: solo el titular del ActivoDigital
-            // puede repartirlo entre SUS PROPIOS beneficiarios (la regla de
-            // negocio de AsignacionHerenciaService, mas abajo, refuerza
-            // ademas que cada Beneficiario del lote pertenezca a este MISMO
-            // titular, no solo que el activo le pertenezca a el).
+            // puede repartirlo (la regla de negocio de
+            // AsignacionHerenciaService, mas abajo, refuerza ademas que el
+            // otorgante no pueda asignarse el activo a si mismo).
             var activoDigital = await _activoDigitalService.ObtenerActivoDigitalPorIdAsync(id);
 
             if (activoDigital.UsuarioId != usuarioAutenticadoId)
@@ -505,7 +502,51 @@ public class ActivosDigitalesController : ControllerBase
                     new { mensaje = "No tenes permiso para repartir este activo digital." });
             }
 
-            var asignacionesCreadas = await _asignacionHerenciaService.CrearAsignacionesAsync(id, asignacionesCreacionDTO);
+            var asignacionesCreadas = (await _asignacionHerenciaService.CrearAsignacionesAsync(id, asignacionesCreacionDTO)).ToList();
+
+            // --- Notificacion simulada (por consola) al/a los beneficiarios ---
+            // En un sistema real esto seria un correo (SMTP/SendGrid/etc.) o
+            // una notificacion push; aca se simula por consola para poder
+            // demostrar el flujo completo sin depender de infraestructura
+            // externa. El mensaje difiere segun el resultado de
+            // CrearAsignacionesAsync para cada fila:
+            //  - UsuarioBeneficiarioId con valor: la persona YA tenia cuenta,
+            //    asi que alcanza con una notificacion IN-APP (la va a ver la
+            //    proxima vez que abra "mis herencias").
+            //  - UsuarioBeneficiarioId null: la persona NO tiene cuenta
+            //    todavia, asi que se le simula un email invitandola a
+            //    crearse una para poder reclamar la herencia.
+            foreach (var asignacion in asignacionesCreadas)
+            {
+                Console.ForegroundColor = ConsoleColor.Magenta;
+                Console.WriteLine();
+                Console.WriteLine("======================================================================");
+
+                if (asignacion.UsuarioBeneficiarioId is null)
+                {
+                    // Se usa TokenInvitacion (no "asignacion.Id") en la URL:
+                    // este link se le entrega a alguien de afuera del
+                    // sistema, por Email, y los dos endpoints publicos que
+                    // lo consumen (InvitacionesController) no verifican
+                    // ownership por JWT. Usar el Id secuencial permitiria
+                    // enumerar invitaciones ajenas con solo cambiar un
+                    // numero en la URL (ver el comentario detallado en
+                    // AsignacionHerencia.TokenInvitacion).
+                    var link = $"http://localhost:8081/invitacion?token={asignacion.TokenInvitacion}";
+                    Console.WriteLine($"[EMAIL SIMULADO] Invitacion a crear cuenta enviada a: {asignacion.EmailInvitado}");
+                    Console.WriteLine("Para reclamar esta herencia, primero cree una cuenta con este mismo email:");
+                    Console.WriteLine($"👉 {link}");
+                }
+                else
+                {
+                    Console.WriteLine($"[NOTIFICACION IN-APP SIMULADA] {asignacion.EmailInvitado} ya tiene cuenta.");
+                    Console.WriteLine($"Se le notifico una nueva herencia pendiente (AsignacionId={asignacion.Id}) en su proxima sesion.");
+                }
+
+                Console.WriteLine("======================================================================");
+                Console.WriteLine();
+                Console.ResetColor();
+            }
 
             // 201 Created: se creo exitosamente el lote completo de
             // asignaciones. Se apunta el header "Location" hacia el listado
@@ -518,16 +559,15 @@ public class ActivosDigitalesController : ControllerBase
         }
         catch (RecursoNoEncontradoException ex)
         {
-            // El activo, o algun Beneficiario referenciado en el lote, no
-            // existe: 404 Not Found.
+            // El activo no existe: 404 Not Found.
             return NotFound(new { mensaje = ex.Message });
         }
         catch (ReglaNegocioException ex)
         {
-            // Porcentaje invalido, suma superior al 100%, o beneficiario de
-            // otro titular: 400 Bad Request, responsabilidad del cliente.
-            // Gracias a la transaccion, en este punto la base de datos NO
-            // tiene ningun rastro parcial del lote fallido.
+            // Porcentaje invalido, suma superior al 100%, o auto-asignacion:
+            // 400 Bad Request, responsabilidad del cliente. Gracias a la
+            // transaccion, en este punto la base de datos NO tiene ningun
+            // rastro parcial del lote fallido.
             return BadRequest(new { mensaje = ex.Message });
         }
         catch (Exception ex)

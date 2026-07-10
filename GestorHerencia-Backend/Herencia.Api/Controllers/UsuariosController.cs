@@ -352,6 +352,64 @@ public class UsuariosController : ControllerBase
         }
     }
 
+    // PUT api/usuarios/{id}/password
+    //
+    // Verbo PUT: reemplaza por completo la credencial de contraseña del
+    // Usuario (no es una modificacion parcial de un recurso con varios
+    // campos independientes, como si lo era PATCH .../estado en
+    // AsignacionesController: aca hay un unico "secreto" que se reemplaza
+    // entero). Requiere conocer la contraseña ACTUAL (ver CambiarPasswordDTO).
+    [HttpPut("{id:int}/password")]
+    public async Task<IActionResult> CambiarPassword(int id, CambiarPasswordDTO cambiarPasswordDTO)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        try
+        {
+            // --- Verificacion de OWNERSHIP: un usuario solo puede cambiar
+            // su PROPIA contraseña, nunca la de otro (aunque adivine su Id). ---
+            var usuarioAutenticadoId = ObtenerUsuarioIdAutenticado();
+
+            if (usuarioAutenticadoId is null)
+            {
+                return Unauthorized(new { mensaje = "El token no contiene un identificador de usuario valido." });
+            }
+
+            if (id != usuarioAutenticadoId)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    new { mensaje = "No tenes permiso para cambiar la contraseña de este usuario." });
+            }
+
+            await _usuarioService.CambiarPasswordAsync(id, cambiarPasswordDTO);
+
+            // 204 No Content: la contraseña se cambio con exito. No hay
+            // ningun dato sensible que devolver en el body (jamas se
+            // devuelve un hash ni la contraseña en texto plano).
+            return NoContent();
+        }
+        catch (RecursoNoEncontradoException ex)
+        {
+            return NotFound(new { mensaje = ex.Message });
+        }
+        catch (ReglaNegocioException ex)
+        {
+            // La contraseña actual ingresada no coincide, o la nueva no
+            // cumple el largo minimo: 400 Bad Request, responsabilidad del
+            // cliente.
+            return BadRequest(new { mensaje = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error inesperado al cambiar la contraseña del usuario con Id {Id}.", id);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { mensaje = "Ocurrio un error interno al procesar la solicitud." });
+        }
+    }
+
     // DELETE api/usuarios/{id}
     //
     // Verbo DELETE: se usa para ELIMINAR el recurso identificado por el Id de

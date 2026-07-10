@@ -5,7 +5,7 @@ namespace Herencia.Business.Dtos;
 // "ActivoDigitalPaginadoDTO" especifica) porque el CONCEPTO de paginacion
 // (una porcion de resultados + metadatos sobre el total) es independiente de
 // QUE tipo de dato se este paginando: el dia de mañana, si se pagina el
-// listado de Beneficiarios o de Usuarios, se reutiliza esta misma clase
+// listado de AsignacionHerencia o de Usuarios, se reutiliza esta misma clase
 // cambiando unicamente el parametro de tipo T.
 public class ResultadoPaginadoDTO<T>
 {

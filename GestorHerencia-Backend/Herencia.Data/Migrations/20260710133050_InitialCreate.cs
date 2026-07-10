@@ -23,6 +23,7 @@ namespace Herencia.Data.Migrations
                     Email = table.Column<string>(type: "TEXT", maxLength: 150, nullable: false),
                     PasswordHash = table.Column<byte[]>(type: "BLOB", nullable: false),
                     PasswordSalt = table.Column<byte[]>(type: "BLOB", nullable: false),
+                    Rol = table.Column<int>(type: "INTEGER", nullable: false),
                     FechaCreacion = table.Column<DateTime>(type: "TEXT", nullable: false),
                     UsuarioCreacion = table.Column<string>(type: "TEXT", nullable: false),
                     FechaModificacion = table.Column<DateTime>(type: "TEXT", nullable: true),
@@ -60,41 +61,17 @@ namespace Herencia.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Beneficiarios",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Nombre = table.Column<string>(type: "TEXT", maxLength: 150, nullable: false),
-                    Email = table.Column<string>(type: "TEXT", maxLength: 150, nullable: false),
-                    Parentesco = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    UsuarioId = table.Column<int>(type: "INTEGER", nullable: false),
-                    FechaCreacion = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    UsuarioCreacion = table.Column<string>(type: "TEXT", nullable: false),
-                    FechaModificacion = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    UsuarioModificacion = table.Column<string>(type: "TEXT", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Beneficiarios", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Beneficiarios_Usuarios_UsuarioId",
-                        column: x => x.UsuarioId,
-                        principalTable: "Usuarios",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "AsignacionesHerencia",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     ActivoDigitalId = table.Column<int>(type: "INTEGER", nullable: false),
-                    BeneficiarioId = table.Column<int>(type: "INTEGER", nullable: false),
+                    UsuarioId = table.Column<int>(type: "INTEGER", nullable: true),
+                    EmailInvitado = table.Column<string>(type: "TEXT", maxLength: 150, nullable: false),
                     PorcentajeAsignado = table.Column<decimal>(type: "TEXT", precision: 5, scale: 2, nullable: false),
                     CondicionLiberacion = table.Column<string>(type: "TEXT", maxLength: 300, nullable: false),
+                    Estado = table.Column<int>(type: "INTEGER", nullable: false, defaultValue: 1),
                     FechaCreacion = table.Column<DateTime>(type: "TEXT", nullable: false),
                     UsuarioCreacion = table.Column<string>(type: "TEXT", nullable: false),
                     FechaModificacion = table.Column<DateTime>(type: "TEXT", nullable: true),
@@ -110,20 +87,21 @@ namespace Herencia.Data.Migrations
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_AsignacionesHerencia_Beneficiarios_BeneficiarioId",
-                        column: x => x.BeneficiarioId,
-                        principalTable: "Beneficiarios",
+                        name: "FK_AsignacionesHerencia_Usuarios_UsuarioId",
+                        column: x => x.UsuarioId,
+                        principalTable: "Usuarios",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.InsertData(
                 table: "Usuarios",
-                columns: new[] { "Id", "Email", "FechaCreacion", "FechaModificacion", "Nombre", "PasswordHash", "PasswordSalt", "UsuarioCreacion", "UsuarioModificacion" },
+                columns: new[] { "Id", "Email", "FechaCreacion", "FechaModificacion", "Nombre", "PasswordHash", "PasswordSalt", "Rol", "UsuarioCreacion", "UsuarioModificacion" },
                 values: new object[,]
                 {
-                    { 1, "maximiceli@hotmail.com.ar", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Maximiliano Miceli", new byte[] { 104, 97, 115, 104, 68, 101, 80, 114, 117, 101, 98, 97, 83, 101, 109, 105, 108, 108, 97, 49, 50, 51, 52, 53, 54 }, new byte[] { 115, 97, 108, 116, 68, 101, 80, 114, 117, 101, 98, 97, 83, 101, 109, 105, 108, 108, 97, 49, 50, 51, 52, 53, 54 }, "seed", null },
-                    { 2, "ana.torres@example.com", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Ana Torres", new byte[] { 104, 97, 115, 104, 68, 101, 80, 114, 117, 101, 98, 97, 83, 101, 109, 105, 108, 108, 97, 49, 50, 51, 52, 53, 54 }, new byte[] { 115, 97, 108, 116, 68, 101, 80, 114, 117, 101, 98, 97, 83, 101, 109, 105, 108, 108, 97, 49, 50, 51, 52, 53, 54 }, "seed", null }
+                    { 1, "maximiceli@hotmail.com.ar", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Maximiliano Miceli", new byte[] { 104, 97, 115, 104, 68, 101, 80, 114, 117, 101, 98, 97, 83, 101, 109, 105, 108, 108, 97, 49, 50, 51, 52, 53, 54 }, new byte[] { 115, 97, 108, 116, 68, 101, 80, 114, 117, 101, 98, 97, 83, 101, 109, 105, 108, 108, 97, 49, 50, 51, 52, 53, 54 }, 1, "seed", null },
+                    { 2, "ana.torres@example.com", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Ana Torres", new byte[] { 104, 97, 115, 104, 68, 101, 80, 114, 117, 101, 98, 97, 83, 101, 109, 105, 108, 108, 97, 49, 50, 51, 52, 53, 54 }, new byte[] { 115, 97, 108, 116, 68, 101, 80, 114, 117, 101, 98, 97, 83, 101, 109, 105, 108, 108, 97, 49, 50, 51, 52, 53, 54 }, 0, "seed", null },
+                    { 3, "carlos.sosa@example.com", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Carlos Sosa", new byte[] { 104, 97, 115, 104, 68, 101, 80, 114, 117, 101, 98, 97, 83, 101, 109, 105, 108, 108, 97, 49, 50, 51, 52, 53, 54 }, new byte[] { 115, 97, 108, 116, 68, 101, 80, 114, 117, 101, 98, 97, 83, 101, 109, 105, 108, 108, 97, 49, 50, 51, 52, 53, 54 }, 0, "seed", null }
                 });
 
             migrationBuilder.InsertData(
@@ -145,30 +123,21 @@ namespace Herencia.Data.Migrations
                     { 12, "Perfil profesional con recomendaciones", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "LinkedIn profesional", 1, "seed", 2, null },
                     { 13, "Hardware wallet con Bitcoin", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Billetera Ledger", 2, "seed", 2, null },
                     { 14, "Cuenta de respaldo", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Correo Gmail secundario", 3, "seed", 2, null },
-                    { 15, "Suscripcion de streaming compartida", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Cuenta Netflix", 4, "seed", 2, null }
-                });
-
-            migrationBuilder.InsertData(
-                table: "Beneficiarios",
-                columns: new[] { "Id", "Email", "FechaCreacion", "FechaModificacion", "Nombre", "Parentesco", "UsuarioCreacion", "UsuarioId", "UsuarioModificacion" },
-                values: new object[,]
-                {
-                    { 1, "lucas.miceli@example.com", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Lucas Miceli", "Hijo", "seed", 1, null },
-                    { 2, "sofia.miceli@example.com", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Sofia Miceli", "Hija", "seed", 1, null },
-                    { 3, "carlos.torres@example.com", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Carlos Torres", "Conyuge", "seed", 2, null },
-                    { 4, "julia.torres@example.com", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Julia Torres", "Hermana", "seed", 2, null }
+                    { 15, "Suscripcion de streaming compartida", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Cuenta Netflix", 4, "seed", 2, null },
+                    { 16, "Caja de ahorro en pesos", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Cuenta Banco Macro", 0, "seed", 3, null },
+                    { 17, "Perfil personal", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Cuenta X (Twitter)", 1, "seed", 3, null }
                 });
 
             migrationBuilder.InsertData(
                 table: "AsignacionesHerencia",
-                columns: new[] { "Id", "ActivoDigitalId", "BeneficiarioId", "CondicionLiberacion", "FechaCreacion", "FechaModificacion", "PorcentajeAsignado", "UsuarioCreacion", "UsuarioModificacion" },
+                columns: new[] { "Id", "ActivoDigitalId", "CondicionLiberacion", "EmailInvitado", "Estado", "FechaCreacion", "FechaModificacion", "PorcentajeAsignado", "UsuarioCreacion", "UsuarioId", "UsuarioModificacion" },
                 values: new object[,]
                 {
-                    { 1, 1, 1, "Certificado de defuncion + 30 dias", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, 50.00m, "seed", null },
-                    { 2, 1, 2, "Certificado de defuncion + 30 dias", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, 50.00m, "seed", null },
-                    { 3, 5, 1, "Certificado de defuncion", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, 100.00m, "seed", null },
-                    { 4, 10, 3, "Certificado de defuncion", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, 100.00m, "seed", null },
-                    { 5, 13, 4, "Mayoria de edad del beneficiario", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, 100.00m, "seed", null }
+                    { 1, 1, "Certificado de defuncion + 30 dias", "ana.torres@example.com", 1, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, 50.00m, "seed", 2, null },
+                    { 2, 1, "Certificado de defuncion + 30 dias", "carlos.sosa@example.com", 1, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, 50.00m, "seed", 3, null },
+                    { 3, 10, "Certificado de defuncion", "carlos.sosa@example.com", 1, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, 100.00m, "seed", 3, null },
+                    { 4, 5, "Certificado de defuncion", "invitado.sinregistro@example.com", 1, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, 100.00m, "seed", null, null },
+                    { 5, 13, "Mayoria de edad del beneficiario", "maximiceli@hotmail.com.ar", 2, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, 100.00m, "seed", 1, null }
                 });
 
             migrationBuilder.CreateIndex(
@@ -182,13 +151,8 @@ namespace Herencia.Data.Migrations
                 column: "ActivoDigitalId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_AsignacionesHerencia_BeneficiarioId",
+                name: "IX_AsignacionesHerencia_UsuarioId",
                 table: "AsignacionesHerencia",
-                column: "BeneficiarioId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Beneficiarios_UsuarioId",
-                table: "Beneficiarios",
                 column: "UsuarioId");
 
             migrationBuilder.CreateIndex(
@@ -206,9 +170,6 @@ namespace Herencia.Data.Migrations
 
             migrationBuilder.DropTable(
                 name: "ActivosDigitales");
-
-            migrationBuilder.DropTable(
-                name: "Beneficiarios");
 
             migrationBuilder.DropTable(
                 name: "Usuarios");

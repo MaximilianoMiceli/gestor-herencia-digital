@@ -1,216 +1,260 @@
-using Herencia.Data;
-using Herencia.Data.Models;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using Herencia.Business.Exceptions;
+using Herencia.Business.Interfaces;
+using Herencia.Data.Models;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Herencia.Api.Controllers;
 
-/// <summary>
-/// DTO para retornar los datos de la invitación en un formato limpio para el cliente móvil.
-/// </summary>
+// DTO para retornar los datos de la invitacion en un formato limpio para el
+// cliente movil (Frame 21: la tarjeta de invitacion).
 public class InvitacionDTO
 {
-    public int Id { get; set; }
+    // Se expone el TOKEN (no el Id entero interno) para que la app movil lo
+    // reutilice tal cual al llamar a POST /api/invitaciones/{token}/procesar.
+    public string Token { get; set; } = string.Empty;
     public string EmisorNombre { get; set; } = string.Empty;
     public string BeneficiarioNombre { get; set; } = string.Empty;
     public string BeneficiarioEmail { get; set; } = string.Empty;
-    public string Parentesco { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// DTO que representa una herencia recibida para el listado de "Mis herencias" (Frame 24).
-/// </summary>
+// DTO que representa una herencia recibida para el listado de "Mis
+// herencias" (Frame 24).
 public class MiHerenciaDTO
 {
     public int AsignacionId { get; set; }
     public string TitularNombre { get; set; } = string.Empty;
-    public string Parentesco { get; set; } = string.Empty;
     public string ActivoNombre { get; set; } = string.Empty;
     public int ActivoTipo { get; set; }
     public decimal Porcentaje { get; set; }
     public string CondicionLiberacion { get; set; } = string.Empty;
-    public bool Disponible { get; set; }
+    public string Estado { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// Modelo de datos recibido para procesar la invitación.
-/// </summary>
+// Modelo de datos recibido para procesar la invitacion.
 public class ProcesarInvitacionRequest
 {
     public string Accion { get; set; } = string.Empty; // "aceptar" o "rechazar"
 }
 
-/// <summary>
-/// Controlador público de invitaciones. 
-/// Encargado de posibilitar la consulta y confirmación de invitaciones de herencia.
-/// Funciona de manera autónoma contra la base de datos sin alterar el esquema actual de tablas.
-/// </summary>
+// Controlador publico de invitaciones. Encargado de posibilitar la consulta
+// y confirmacion de invitaciones de herencia.
+//
+// --- ¿Por que ya NO trabaja directo contra AppDbContext? ---
+// La version anterior de este controller consultaba "_context.Beneficiarios"
+// directamente, saltandose por completo la capa Business (y, con ella, sus
+// validaciones y su traduccion de excepciones). Eso violaba la separacion de
+// capas que respeta el resto de la Api (ver, por comparacion, cualquier otro
+// controller: siempre dependen de una interfaz de Business, nunca de
+// AppDbContext). Ahora este controller es tan "delgado" como los demas:
+// delega TODA la logica a IAsignacionHerenciaService, IUsuarioService e
+// IActivoDigitalService, y solo traduce HTTP <-> llamadas a esos servicios.
+//
+// --- ¿Por que el modelo de doble rol cambia el significado de "invitacion"? ---
+// Con la entidad Beneficiario separada, se podia "invitar" a alguien sin
+// asociarlo todavia a ningun activo puntual. Con el modelo de doble rol, la
+// invitacion Y la asignacion de un activo puntual son la MISMA operacion
+// (ver AsignacionHerenciaService.CrearAsignacionesAsync): invitar a alguien
+// por Email es, directamente, crear una AsignacionHerencia con
+// UsuarioId en null. Por eso el "Id" de una invitacion, en este controller,
+// pasa a ser el TokenInvitacion de esa AsignacionHerencia (un identificador
+// PUBLICO no adivinable, generado aleatoriamente; ver el comentario
+// detallado en AsignacionHerencia.TokenInvitacion), nunca su Id entero
+// autoincremental: estos dos endpoints son PUBLICOS (sin [Authorize]) y no
+// verifican ownership por Token JWT, asi que la unica proteccion posible
+// contra que alguien enumere invitaciones ajenas es que el identificador en
+// si sea imposible de adivinar.
 [ApiController]
 [Route("api/invitaciones")]
 public class InvitacionesController : ControllerBase
 {
-    private readonly AppDbContext _context;
+    private readonly IAsignacionHerenciaService _asignacionHerenciaService;
+    private readonly IUsuarioService _usuarioService;
+    private readonly IActivoDigitalService _activoDigitalService;
     private readonly ILogger<InvitacionesController> _logger;
 
-    public InvitacionesController(AppDbContext context, ILogger<InvitacionesController> logger)
+    public InvitacionesController(
+        IAsignacionHerenciaService asignacionHerenciaService,
+        IUsuarioService usuarioService,
+        IActivoDigitalService activoDigitalService,
+        ILogger<InvitacionesController> logger)
     {
-        _context = context;
+        _asignacionHerenciaService = asignacionHerenciaService;
+        _usuarioService = usuarioService;
+        _activoDigitalService = activoDigitalService;
         _logger = logger;
     }
 
-    // GET api/invitaciones/{id}
+    // GET api/invitaciones/{token}
     //
-    // Endpoint público para que la app cargue los datos de la tarjeta de invitación (Frame 21)
-    // sin requerir que el usuario esté logueado aún.
-    [HttpGet("{id:int}")]
-    public async Task<ActionResult<InvitacionDTO>> ObtenerInvitacion(int id)
+    // Endpoint publico (sin [Authorize]) para que la app cargue los datos de
+    // la tarjeta de invitacion (Frame 21) sin requerir que el usuario este
+    // logueado todavia: el "token" es AsignacionHerencia.TokenInvitacion
+    // (ver el comentario de la clase).
+    [HttpGet("{token}")]
+    public async Task<ActionResult<InvitacionDTO>> ObtenerInvitacion(string token)
     {
         try
         {
-            var beneficiario = await _context.Beneficiarios
-                .Include(b => b.Usuario)
-                .FirstOrDefaultAsync(b => b.Id == id);
+            var asignacion = await _asignacionHerenciaService.ObtenerAsignacionPorTokenAsync(token);
 
-            if (beneficiario == null)
+            var emisor = await _usuarioService.ObtenerUsuarioPorIdAsync(asignacion.UsuarioOtorganteId);
+
+            // El beneficiario solo tiene "Nombre" si ya reclamo la
+            // invitacion con una cuenta propia (UsuarioBeneficiarioId no
+            // nulo); si todavia no se registro, solo se conoce su Email.
+            var beneficiarioNombre = string.Empty;
+
+            if (asignacion.UsuarioBeneficiarioId is not null)
             {
-                return NotFound(new { mensaje = "La invitación no existe o ha sido revocada." });
+                var beneficiario = await _usuarioService.ObtenerUsuarioPorIdAsync(asignacion.UsuarioBeneficiarioId.Value);
+                beneficiarioNombre = beneficiario.Nombre;
             }
 
             var dto = new InvitacionDTO
             {
-                Id = beneficiario.Id,
-                EmisorNombre = beneficiario.Usuario.Nombre,
-                BeneficiarioNombre = beneficiario.Nombre,
-                BeneficiarioEmail = beneficiario.Email,
-                Parentesco = beneficiario.Parentesco
+                Token = asignacion.TokenInvitacion,
+                EmisorNombre = emisor.Nombre,
+                BeneficiarioNombre = beneficiarioNombre,
+                BeneficiarioEmail = asignacion.EmailInvitado
             };
 
             return Ok(dto);
         }
+        catch (RecursoNoEncontradoException)
+        {
+            return NotFound(new { mensaje = "La invitacion no existe o ha sido revocada." });
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error inesperado al obtener la invitación {Id}.", id);
+            _logger.LogError(ex, "Error inesperado al obtener la invitacion con token {Token}.", token);
             return StatusCode(StatusCodes.Status500InternalServerError,
-                new { mensaje = "Ocurrió un error interno al procesar la solicitud." });
+                new { mensaje = "Ocurrio un error interno al procesar la solicitud." });
         }
     }
 
-    // POST api/invitaciones/{id}/procesar
+    // POST api/invitaciones/{token}/procesar
     //
-    // Endpoint público para que la app procese la aceptación o rechazo de una invitación.
-    [HttpPost("{id:int}/procesar")]
-    public async Task<IActionResult> ProcesarInvitacion(int id, [FromBody] ProcesarInvitacionRequest request)
+    // Endpoint publico (sin [Authorize]) para que la app procese la
+    // aceptacion o rechazo de una invitacion.
+    //
+    // --- ¿Por que sigue siendo PUBLICO, sin verificar quien llama? ---
+    // Es, deliberadamente, el MISMO modelo de confianza que ya tenia esta
+    // ruta antes del refactor: quien conoce el link/token de la invitacion
+    // (recibido de forma privada por Email) esta habilitado a decidir,
+    // igual que un link de confirmacion tradicional (ej: "confirmar tu
+    // email", "aceptar esta invitacion a un calendario"). Esto permite que
+    // alguien SIN cuenta todavia pueda rechazar (o aceptar) una herencia
+    // apenas recibe la invitacion, sin verse obligado a registrarse antes
+    // solo para poder decidir. El endpoint EQUIVALENTE para un Usuario YA
+    // autenticado, que ademas verifica ownership por Token JWT, es
+    // "PATCH api/asignaciones/{id}/estado" (AsignacionesController). Que
+    // este endpoint sea publico es exactamente por lo que
+    // TokenInvitacion tiene que ser no adivinable (ver el comentario en la
+    // entidad): es la UNICA proteccion posible en este punto de entrada.
+    [HttpPost("{token}/procesar")]
+    public async Task<IActionResult> ProcesarInvitacion(string token, [FromBody] ProcesarInvitacionRequest request)
     {
         try
         {
-            var beneficiario = await _context.Beneficiarios
-                .Include(b => b.Usuario)
-                .FirstOrDefaultAsync(b => b.Id == id);
-
-            if (beneficiario == null)
-            {
-                return NotFound(new { mensaje = "La invitación no existe." });
-            }
+            EstadoBeneficiario nuevoEstado;
 
             if (request.Accion.Equals("rechazar", StringComparison.OrdinalIgnoreCase))
             {
-                // Si rechaza la invitación, eliminamos el registro del Beneficiario para romper el vínculo.
-                _context.Beneficiarios.Remove(beneficiario);
-                await _context.SaveChangesAsync();
-                return Ok(new { mensaje = "Invitación rechazada con éxito y removida del sistema." });
+                nuevoEstado = EstadoBeneficiario.Rechazado;
             }
             else if (request.Accion.Equals("aceptar", StringComparison.OrdinalIgnoreCase))
             {
-                // Aceptar la invitación no requiere cambios en BD ya que el vínculo es por Email.
-                // Retornamos éxito para confirmar que la app puede proceder al flujo de autenticación/registro.
-                return Ok(new { mensaje = "Invitación aceptada con éxito." });
+                nuevoEstado = EstadoBeneficiario.Aceptado;
+            }
+            else
+            {
+                return BadRequest(new { mensaje = "Accion invalida. Utilice 'aceptar' o 'rechazar'." });
             }
 
-            return BadRequest(new { mensaje = "Acción inválida. Utilice 'aceptar' o 'rechazar'." });
+            // A diferencia de la version anterior (que en "rechazar" borraba
+            // directamente la fila de Beneficiario), aca se preserva la fila
+            // de AsignacionHerencia y solo se actualiza su Estado: perder el
+            // registro de "que activo, en que porcentaje, le fue ofrecido a
+            // quien" no tiene sentido ni siquiera cuando la respuesta es un
+            // rechazo (el otorgante sigue necesitando saber que ese reparto
+            // fue rechazado, para poder reasignarlo a otra persona).
+            await _asignacionHerenciaService.CambiarEstadoPorTokenAsync(token, nuevoEstado);
+
+            var mensaje = nuevoEstado == EstadoBeneficiario.Rechazado
+                ? "Invitacion rechazada con exito."
+                : "Invitacion aceptada con exito.";
+
+            return Ok(new { mensaje });
+        }
+        catch (RecursoNoEncontradoException)
+        {
+            return NotFound(new { mensaje = "La invitacion no existe." });
+        }
+        catch (ReglaNegocioException ex)
+        {
+            // Por ejemplo, si esta invitacion ya habia sido aceptada o
+            // rechazada antes (la regla critica de
+            // AsignacionHerenciaService.CambiarEstadoInternoAsync: "el
+            // estado ya fue procesado y no puede modificarse").
+            return BadRequest(new { mensaje = ex.Message });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error inesperado al procesar la invitación {Id}.", id);
+            _logger.LogError(ex, "Error inesperado al procesar la invitacion con token {Token}.", token);
             return StatusCode(StatusCodes.Status500InternalServerError,
-                new { mensaje = "Ocurrió un error interno al procesar la solicitud." });
+                new { mensaje = "Ocurrio un error interno al procesar la solicitud." });
         }
     }
 
     // GET api/invitaciones/mis-herencias
     //
-    // Endpoint protegido que devuelve el listado de herencias asignadas al usuario logueado.
-    // Busca coincidencias de su Email (desde claims) con la tabla Beneficiarios.
+    // Endpoint protegido que devuelve el listado de herencias asignadas al
+    // usuario logueado. Con el modelo de doble rol, esto ya NO necesita
+    // matchear por Email contra una tabla aparte: el propio Usuario
+    // autenticado ES el beneficiario (AsignacionHerencia.UsuarioId), asi que
+    // alcanza con pedirle al servicio "mis asignaciones recibidas" con el Id
+    // que ya viene, verificado, en el Token JWT.
     [Authorize]
     [HttpGet("mis-herencias")]
     public async Task<ActionResult<IEnumerable<MiHerenciaDTO>>> ObtenerMisHerencias()
     {
         try
         {
-            var emailClaim = User.FindFirst(ClaimTypes.Email);
-            if (emailClaim == null)
+            var claim = User.FindFirst(ClaimTypes.NameIdentifier);
+
+            if (claim is null || !int.TryParse(claim.Value, out var usuarioAutenticadoId))
             {
-                var idClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-                if (idClaim != null && int.TryParse(idClaim.Value, out var uId))
-                {
-                    var u = await _context.Usuarios.FindAsync(uId);
-                    if (u != null)
-                    {
-                        emailClaim = new Claim(ClaimTypes.Email, u.Email);
-                    }
-                }
+                return Unauthorized(new { mensaje = "El token no contiene un identificador de usuario valido." });
             }
 
-            if (emailClaim == null || string.IsNullOrEmpty(emailClaim.Value))
-            {
-                return BadRequest(new { mensaje = "No se pudo determinar el correo electrónico del usuario autenticado." });
-            }
-
-            var email = emailClaim.Value;
-
-            var beneficiarios = await _context.Beneficiarios
-                .Include(b => b.Usuario)
-                .Include(b => b.AsignacionesHerencia)
-                    .ThenInclude(ah => ah.ActivoDigital)
-                .Where(b => b.Email.ToLower() == email.ToLower())
-                .ToListAsync();
+            var herencias = await _asignacionHerenciaService.ObtenerAsignacionesPorUsuarioBeneficiarioAsync(usuarioAutenticadoId);
 
             var dtos = new List<MiHerenciaDTO>();
 
-            foreach (var b in beneficiarios)
+            // N+1 deliberado: se resuelven Nombre del otorgante y
+            // Nombre/Tipo del activo por cada fila, en vez de extender el
+            // DTO general "AsignacionHerenciaDTO" con estos datos (que solo
+            // este endpoint puntual necesita). Dado el volumen de datos de
+            // este proyecto (decenas de filas, no miles), el costo extra de
+            // estas consultas es insignificante frente a la simplicidad de
+            // no acoplar el DTO general a un caso de uso puntual.
+            foreach (var herencia in herencias)
             {
-                if (b.AsignacionesHerencia.Count == 0)
+                var titular = await _usuarioService.ObtenerUsuarioPorIdAsync(herencia.UsuarioOtorganteId);
+                var activo = await _activoDigitalService.ObtenerActivoDigitalPorIdAsync(herencia.ActivoDigitalId);
+
+                dtos.Add(new MiHerenciaDTO
                 {
-                    dtos.Add(new MiHerenciaDTO
-                    {
-                        AsignacionId = b.Id * -1, // ID negativo para invitaciones sin activos asignados
-                        TitularNombre = b.Usuario.Nombre,
-                        Parentesco = b.Parentesco,
-                        ActivoNombre = "Ninguno",
-                        ActivoTipo = 0,
-                        Porcentaje = 0,
-                        CondicionLiberacion = "Por definir",
-                        Disponible = false
-                    });
-                }
-                else
-                {
-                    foreach (var a in b.AsignacionesHerencia)
-                    {
-                        dtos.Add(new MiHerenciaDTO
-                        {
-                            AsignacionId = a.Id,
-                            TitularNombre = b.Usuario.Nombre,
-                            Parentesco = b.Parentesco,
-                            ActivoNombre = a.ActivoDigital.Nombre,
-                            ActivoTipo = (int)a.ActivoDigital.Tipo,
-                            Porcentaje = a.PorcentajeAsignado,
-                            CondicionLiberacion = a.CondicionLiberacion,
-                            Disponible = false
-                        });
-                    }
-                }
+                    AsignacionId = herencia.Id,
+                    TitularNombre = titular.Nombre,
+                    ActivoNombre = activo.Nombre,
+                    ActivoTipo = (int)activo.Tipo,
+                    Porcentaje = herencia.PorcentajeAsignado,
+                    CondicionLiberacion = herencia.CondicionLiberacion,
+                    Estado = herencia.Estado.ToString()
+                });
             }
 
             return Ok(dtos);
@@ -219,7 +263,7 @@ public class InvitacionesController : ControllerBase
         {
             _logger.LogError(ex, "Error al obtener mis herencias.");
             return StatusCode(StatusCodes.Status500InternalServerError,
-                new { mensaje = "Ocurrió un error interno al obtener las herencias." });
+                new { mensaje = "Ocurrio un error interno al obtener las herencias." });
         }
     }
 }

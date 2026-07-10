@@ -211,4 +211,93 @@ public class AuthController : ControllerBase
                 new { mensaje = "Ocurrio un error interno al procesar la solicitud." });
         }
     }
+
+    // POST api/auth/olvide-password
+    //
+    // Primer paso del flujo de "olvide mi contraseña": publico (sin
+    // [Authorize], igual que Login/Registro, porque quien lo necesita, por
+    // definicion, no puede loguearse).
+    //
+    // --- ¿Por que SIEMPRE se devuelve el mismo mensaje de exito? ---
+    // Exactamente el mismo criterio anti "user enumeration" que ya se
+    // documenta en Login: si este endpoint respondiera distinto segun el
+    // email exista o no en el sistema, cualquiera podria usarlo para
+    // averiguar que emails estan registrados probando miles de direcciones.
+    // Por eso, tanto si UsuarioService.SolicitarResetPasswordAsync devuelve
+    // un token real como si devuelve null (email inexistente), este action
+    // responde el MISMO 200 con el MISMO mensaje generico.
+    [HttpPost("olvide-password")]
+    public async Task<IActionResult> OlvidePassword(SolicitarResetPasswordDTO solicitarResetPasswordDTO)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        try
+        {
+            var token = await _usuarioService.SolicitarResetPasswordAsync(solicitarResetPasswordDTO.Email);
+
+            // Solo si REALMENTE existe una cuenta con ese email (token no
+            // nulo) se "envia" el correo. Igual que la invitacion de
+            // herencia (ver ActivosDigitalesController.CrearAsignaciones),
+            // en este proyecto academico se SIMULA por consola en vez de
+            // integrar un proveedor de correo real.
+            if (token is not null)
+            {
+                var link = $"http://localhost:8081/resetear-password?token={token}";
+                Console.ForegroundColor = ConsoleColor.Magenta;
+                Console.WriteLine();
+                Console.WriteLine("======================================================================");
+                Console.WriteLine($"[EMAIL SIMULADO] Reseteo de contraseña solicitado para: {solicitarResetPasswordDTO.Email}");
+                Console.WriteLine("Enlace para elegir una nueva contraseña (valido por 1 hora):");
+                Console.WriteLine($"👉 {link}");
+                Console.WriteLine("======================================================================");
+                Console.WriteLine();
+                Console.ResetColor();
+            }
+
+            return Ok(new { mensaje = "Si el email ingresado corresponde a una cuenta registrada, vas a recibir un enlace para resetear tu contraseña." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error inesperado al solicitar el reseteo de contraseña.");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { mensaje = "Ocurrio un error interno al procesar la solicitud." });
+        }
+    }
+
+    // POST api/auth/resetear-password
+    //
+    // Segundo y ultimo paso del flujo de "olvide mi contraseña": tambien
+    // publico, porque el propio Token (recibido por el link simulado del
+    // paso anterior) es la credencial que demuestra que quien llama accedio
+    // a la bandeja de entrada de esa cuenta.
+    [HttpPost("resetear-password")]
+    public async Task<IActionResult> ResetearPassword(ResetearPasswordDTO resetearPasswordDTO)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        try
+        {
+            await _usuarioService.ResetearPasswordAsync(resetearPasswordDTO);
+
+            return Ok(new { mensaje = "Contraseña actualizada con exito. Ya podes iniciar sesion con tu nueva contraseña." });
+        }
+        catch (ReglaNegocioException ex)
+        {
+            // Token invalido/expirado, o nueva contraseña demasiado corta:
+            // 400 Bad Request, responsabilidad del cliente.
+            return BadRequest(new { mensaje = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error inesperado al resetear la contraseña.");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { mensaje = "Ocurrio un error interno al procesar la solicitud." });
+        }
+    }
 }

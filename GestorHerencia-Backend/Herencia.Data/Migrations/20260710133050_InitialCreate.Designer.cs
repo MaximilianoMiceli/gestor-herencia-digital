@@ -11,8 +11,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Herencia.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260708231827_AgregarRolAUsuario")]
-    partial class AgregarRolAUsuario
+    [Migration("20260710133050_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -211,6 +211,26 @@ namespace Herencia.Data.Migrations
                             Tipo = 4,
                             UsuarioCreacion = "seed",
                             UsuarioId = 2
+                        },
+                        new
+                        {
+                            Id = 16,
+                            Descripcion = "Caja de ahorro en pesos",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Nombre = "Cuenta Banco Macro",
+                            Tipo = 0,
+                            UsuarioCreacion = "seed",
+                            UsuarioId = 3
+                        },
+                        new
+                        {
+                            Id = 17,
+                            Descripcion = "Perfil personal",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Nombre = "Cuenta X (Twitter)",
+                            Tipo = 1,
+                            UsuarioCreacion = "seed",
+                            UsuarioId = 3
                         });
                 });
 
@@ -223,13 +243,20 @@ namespace Herencia.Data.Migrations
                     b.Property<int>("ActivoDigitalId")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("BeneficiarioId")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("CondicionLiberacion")
                         .IsRequired()
                         .HasMaxLength(300)
                         .HasColumnType("TEXT");
+
+                    b.Property<string>("EmailInvitado")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Estado")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(1);
 
                     b.Property<DateTime>("FechaCreacion")
                         .HasColumnType("TEXT");
@@ -245,6 +272,9 @@ namespace Herencia.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("UsuarioId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("UsuarioModificacion")
                         .HasColumnType("TEXT");
 
@@ -252,7 +282,7 @@ namespace Herencia.Data.Migrations
 
                     b.HasIndex("ActivoDigitalId");
 
-                    b.HasIndex("BeneficiarioId");
+                    b.HasIndex("UsuarioId");
 
                     b.ToTable("AsignacionesHerencia");
 
@@ -261,38 +291,45 @@ namespace Herencia.Data.Migrations
                         {
                             Id = 1,
                             ActivoDigitalId = 1,
-                            BeneficiarioId = 1,
                             CondicionLiberacion = "Certificado de defuncion + 30 dias",
+                            EmailInvitado = "ana.torres@example.com",
+                            Estado = 1,
                             FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             PorcentajeAsignado = 50.00m,
-                            UsuarioCreacion = "seed"
+                            UsuarioCreacion = "seed",
+                            UsuarioId = 2
                         },
                         new
                         {
                             Id = 2,
                             ActivoDigitalId = 1,
-                            BeneficiarioId = 2,
                             CondicionLiberacion = "Certificado de defuncion + 30 dias",
+                            EmailInvitado = "carlos.sosa@example.com",
+                            Estado = 1,
                             FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             PorcentajeAsignado = 50.00m,
-                            UsuarioCreacion = "seed"
+                            UsuarioCreacion = "seed",
+                            UsuarioId = 3
                         },
                         new
                         {
                             Id = 3,
-                            ActivoDigitalId = 5,
-                            BeneficiarioId = 1,
+                            ActivoDigitalId = 10,
                             CondicionLiberacion = "Certificado de defuncion",
+                            EmailInvitado = "carlos.sosa@example.com",
+                            Estado = 1,
                             FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             PorcentajeAsignado = 100.00m,
-                            UsuarioCreacion = "seed"
+                            UsuarioCreacion = "seed",
+                            UsuarioId = 3
                         },
                         new
                         {
                             Id = 4,
-                            ActivoDigitalId = 10,
-                            BeneficiarioId = 3,
+                            ActivoDigitalId = 5,
                             CondicionLiberacion = "Certificado de defuncion",
+                            EmailInvitado = "invitado.sinregistro@example.com",
+                            Estado = 1,
                             FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             PorcentajeAsignado = 100.00m,
                             UsuarioCreacion = "seed"
@@ -301,97 +338,13 @@ namespace Herencia.Data.Migrations
                         {
                             Id = 5,
                             ActivoDigitalId = 13,
-                            BeneficiarioId = 4,
                             CondicionLiberacion = "Mayoria de edad del beneficiario",
+                            EmailInvitado = "maximiceli@hotmail.com.ar",
+                            Estado = 2,
                             FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             PorcentajeAsignado = 100.00m,
-                            UsuarioCreacion = "seed"
-                        });
-                });
-
-            modelBuilder.Entity("Herencia.Data.Models.Beneficiario", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("FechaCreacion")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("FechaModificacion")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Nombre")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Parentesco")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UsuarioCreacion")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("UsuarioId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("UsuarioModificacion")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UsuarioId");
-
-                    b.ToTable("Beneficiarios");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            Email = "lucas.miceli@example.com",
-                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Nombre = "Lucas Miceli",
-                            Parentesco = "Hijo",
                             UsuarioCreacion = "seed",
                             UsuarioId = 1
-                        },
-                        new
-                        {
-                            Id = 2,
-                            Email = "sofia.miceli@example.com",
-                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Nombre = "Sofia Miceli",
-                            Parentesco = "Hija",
-                            UsuarioCreacion = "seed",
-                            UsuarioId = 1
-                        },
-                        new
-                        {
-                            Id = 3,
-                            Email = "carlos.torres@example.com",
-                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Nombre = "Carlos Torres",
-                            Parentesco = "Conyuge",
-                            UsuarioCreacion = "seed",
-                            UsuarioId = 2
-                        },
-                        new
-                        {
-                            Id = 4,
-                            Email = "julia.torres@example.com",
-                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Nombre = "Julia Torres",
-                            Parentesco = "Hermana",
-                            UsuarioCreacion = "seed",
-                            UsuarioId = 2
                         });
                 });
 
@@ -464,13 +417,24 @@ namespace Herencia.Data.Migrations
                             PasswordSalt = new byte[] { 115, 97, 108, 116, 68, 101, 80, 114, 117, 101, 98, 97, 83, 101, 109, 105, 108, 108, 97, 49, 50, 51, 52, 53, 54 },
                             Rol = 0,
                             UsuarioCreacion = "seed"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Email = "carlos.sosa@example.com",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Nombre = "Carlos Sosa",
+                            PasswordHash = new byte[] { 104, 97, 115, 104, 68, 101, 80, 114, 117, 101, 98, 97, 83, 101, 109, 105, 108, 108, 97, 49, 50, 51, 52, 53, 54 },
+                            PasswordSalt = new byte[] { 115, 97, 108, 116, 68, 101, 80, 114, 117, 101, 98, 97, 83, 101, 109, 105, 108, 108, 97, 49, 50, 51, 52, 53, 54 },
+                            Rol = 0,
+                            UsuarioCreacion = "seed"
                         });
                 });
 
             modelBuilder.Entity("Herencia.Data.Models.ActivoDigital", b =>
                 {
                     b.HasOne("Herencia.Data.Models.Usuario", "Usuario")
-                        .WithMany("ActivosDigitales")
+                        .WithMany("ActivosOtorgados")
                         .HasForeignKey("UsuarioId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -486,24 +450,12 @@ namespace Herencia.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Herencia.Data.Models.Beneficiario", "Beneficiario")
-                        .WithMany("AsignacionesHerencia")
-                        .HasForeignKey("BeneficiarioId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                    b.HasOne("Herencia.Data.Models.Usuario", "Usuario")
+                        .WithMany("HerenciasRecibidas")
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("ActivoDigital");
-
-                    b.Navigation("Beneficiario");
-                });
-
-            modelBuilder.Entity("Herencia.Data.Models.Beneficiario", b =>
-                {
-                    b.HasOne("Herencia.Data.Models.Usuario", "Usuario")
-                        .WithMany("Beneficiarios")
-                        .HasForeignKey("UsuarioId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
 
                     b.Navigation("Usuario");
                 });
@@ -513,16 +465,11 @@ namespace Herencia.Data.Migrations
                     b.Navigation("AsignacionesHerencia");
                 });
 
-            modelBuilder.Entity("Herencia.Data.Models.Beneficiario", b =>
-                {
-                    b.Navigation("AsignacionesHerencia");
-                });
-
             modelBuilder.Entity("Herencia.Data.Models.Usuario", b =>
                 {
-                    b.Navigation("ActivosDigitales");
+                    b.Navigation("ActivosOtorgados");
 
-                    b.Navigation("Beneficiarios");
+                    b.Navigation("HerenciasRecibidas");
                 });
 #pragma warning restore 612, 618
         }

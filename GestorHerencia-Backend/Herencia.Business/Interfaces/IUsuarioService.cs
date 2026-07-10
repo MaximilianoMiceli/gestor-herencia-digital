@@ -18,8 +18,12 @@ namespace Herencia.Business.Interfaces;
 public interface IUsuarioService
 {
     // Da de alta un nuevo Usuario a partir de los datos basicos de registro.
-    // Devuelve el UsuarioDTO ya creado (con su Id autogenerado) para que quien
-    // llama pueda, por ejemplo, redirigir al cliente a "/api/usuarios/{id}".
+    // Ademas, reclama automaticamente cualquier AsignacionHerencia pendiente
+    // (invitacion sin cuenta) que lo nombraba por este mismo Email, dejandola
+    // vinculada a la cuenta recien creada (ver la implementacion para el
+    // detalle). Devuelve el UsuarioDTO ya creado (con su Id autogenerado)
+    // para que quien llama pueda, por ejemplo, redirigir al cliente a
+    // "/api/usuarios/{id}".
     // Puede lanzar ReglaNegocioException (datos invalidos o error tecnico).
     Task<UsuarioDTO> CrearUsuarioAsync(UsuarioCreacionDTO usuarioCreacionDTO);
 
@@ -39,7 +43,9 @@ public interface IUsuarioService
     Task<UsuarioDTO> ActualizarUsuarioAsync(int id, UsuarioActualizacionDTO usuarioActualizacionDTO);
 
     // Elimina un Usuario existente (y, por la configuracion de cascada del
-    // AppDbContext, tambien sus Beneficiarios y ActivosDigitales asociados).
+    // AppDbContext, tambien sus ActivosDigitales asociados, en su rol de
+    // otorgante). Si el Usuario todavia tiene HerenciasRecibidas activas (fue
+    // designado como beneficiario de algo), el borrado se rechaza.
     // Puede lanzar RecursoNoEncontradoException si el Id no existe, o
     // ReglaNegocioException si ocurre un error tecnico al eliminarlo.
     Task EliminarUsuarioAsync(int id);
@@ -54,4 +60,35 @@ public interface IUsuarioService
     // ningun Usuario registrado, o ReglaNegocioException si ocurre un error
     // tecnico al consultarlo.
     Task<UsuarioAutenticacionDTO> ObtenerUsuarioParaAutenticacionAsync(string email);
+
+    // CambiarPasswordAsync: cambia la contraseña de un Usuario YA
+    // AUTENTICADO que conoce su contraseña actual (ver CambiarPasswordDTO).
+    // Puede lanzar:
+    //  - RecursoNoEncontradoException: si el Id no existe.
+    //  - ReglaNegocioException: si "PasswordActual" no coincide con la
+    //    contraseña realmente persistida, si "PasswordNueva" no cumple el
+    //    largo minimo, o si ocurre un error tecnico al persistir el cambio.
+    Task CambiarPasswordAsync(int usuarioId, CambiarPasswordDTO cambiarPasswordDTO);
+
+    // SolicitarResetPasswordAsync: primer paso del flujo de "olvide mi
+    // contraseña". Genera un token de reseteo de un solo uso y vida corta,
+    // lo persiste junto a su fecha de expiracion, y lo devuelve en texto
+    // plano para que el CONTROLLER lo "envie" (simulado, por consola) al
+    // Email del usuario.
+    //
+    // Devuelve null (en vez de lanzar RecursoNoEncontradoException) si el
+    // email no corresponde a ningun Usuario registrado: esto es
+    // DELIBERADO, el mismo criterio anti "user enumeration" que ya aplica
+    // UsuarioService.ObtenerUsuarioParaAutenticacionAsync en el Login. El
+    // controller debe responder el MISMO mensaje generico de exito exista o
+    // no exista esa cuenta, para no revelar por la respuesta HTTP que
+    // emails estan registrados en el sistema.
+    Task<string?> SolicitarResetPasswordAsync(string email);
+
+    // ResetearPasswordAsync: segundo y ultimo paso del flujo de "olvide mi
+    // contraseña". Busca al Usuario por su PasswordResetToken vigente y,
+    // si todavia no expiro, reemplaza su contraseña por la nueva.
+    // Puede lanzar ReglaNegocioException si el token no existe, ya expiro, o
+    // "PasswordNueva" no cumple el largo minimo.
+    Task ResetearPasswordAsync(ResetearPasswordDTO resetearPasswordDTO);
 }

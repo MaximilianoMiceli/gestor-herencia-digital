@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using Herencia.Business.Dtos;
 using Herencia.Business.Exceptions;
@@ -33,15 +34,28 @@ public class UsuarioService : IUsuarioService
     // ISeguridadService para el detalle completo de por que se separo).
     private readonly ISeguridadService _seguridadService;
 
+    // IAsignacionHerenciaRepository se necesita UNICAMENTE para
+    // CrearUsuarioAsync: al registrarse alguien, hay que revisar si existen
+    // invitaciones pendientes (AsignacionHerencia.UsuarioId == null) que lo
+    // nombraban por este mismo Email, y "reclamarlas" automaticamente (ver
+    // el detalle en ese metodo). Es la contraparte, del lado del registro,
+    // de la invitacion por Email que arma AsignacionHerenciaService.CrearAsignacionesAsync.
+    private readonly IAsignacionHerenciaRepository _asignacionHerenciaRepository;
+
     // El contenedor de Inyeccion de Dependencias configurado en Program.cs
     // (etapa Api) sera el encargado de "resolver" automaticamente una
-    // instancia de IUsuarioRepository (tipicamente UsuarioRepository) y de
-    // ISeguridadService (tipicamente SeguridadService), y pasarlas aca por
-    // este constructor cuando se necesite un UsuarioService.
-    public UsuarioService(IUsuarioRepository usuarioRepository, ISeguridadService seguridadService)
+    // instancia de IUsuarioRepository (tipicamente UsuarioRepository), de
+    // ISeguridadService (tipicamente SeguridadService) y de
+    // IAsignacionHerenciaRepository, y pasarlas aca por este constructor
+    // cuando se necesite un UsuarioService.
+    public UsuarioService(
+        IUsuarioRepository usuarioRepository,
+        ISeguridadService seguridadService,
+        IAsignacionHerenciaRepository asignacionHerenciaRepository)
     {
         _usuarioRepository = usuarioRepository;
         _seguridadService = seguridadService;
+        _asignacionHerenciaRepository = asignacionHerenciaRepository;
     }
 
     // CrearUsuarioAsync: da de alta un nuevo Usuario a partir de un DTO de
@@ -122,6 +136,28 @@ public class UsuarioService : IUsuarioService
             // llamada HTTP a otro microservicio: solo conoce el contrato
             // "AgregarAsync(Usuario)".
             await _usuarioRepository.AgregarAsync(usuario);
+
+            // --- Reclamo automatico de invitaciones pendientes ---
+            // Si algun otorgante ya lo habia invitado como beneficiario ANTES
+            // de que esta persona tuviera cuenta (AsignacionHerenciaService.
+            // CrearAsignacionesAsync guarda esas filas con UsuarioId en null
+            // y el Email tipeado en AsignacionHerencia.EmailInvitado), este es
+            // el momento de vincularlas: se buscan todas las asignaciones sin
+            // reclamar que coincidan con el Email recien registrado, y se les
+            // completa el UsuarioId con el Id de la cuenta que se acaba de
+            // crear. De esta forma, apenas la persona inicia sesion por
+            // primera vez, sus herencias pendientes ya aparecen asociadas a
+            // su cuenta sin ningun paso manual adicional de su parte.
+            var invitacionesPendientes = await _asignacionHerenciaRepository.ObtenerPendientesPorEmailAsync(usuario.Email);
+
+            foreach (var invitacion in invitacionesPendientes)
+            {
+                invitacion.UsuarioId = usuario.Id;
+                invitacion.FechaModificacion = DateTime.UtcNow;
+                invitacion.UsuarioModificacion = "sistema";
+
+                await _asignacionHerenciaRepository.ActualizarAsync(invitacion);
+            }
 
             // Mapeamos la entidad YA PERSISTIDA (con su Id autogenerado por la
             // base de datos) hacia el DTO de SALIDA. Notar que PasswordHash y
@@ -294,9 +330,14 @@ public class UsuarioService : IUsuarioService
             }
 
             // Delegamos el DELETE al repositorio. La cascada configurada en
-            // AppDbContext (OnDelete(DeleteBehavior.Cascade) para Beneficiarios
-            // y ActivosDigitales) se encarga de que no queden registros
-            // huerfanos: eso es un detalle de la capa Data, invisible aca.
+            // AppDbContext (OnDelete(DeleteBehavior.Cascade) para
+            // ActivosOtorgados) se encarga de que no queden activos
+            // huerfanos: eso es un detalle de la capa Data, invisible aca. Si
+            // este Usuario todavia tiene HerenciasRecibidas (fue designado
+            // como beneficiario de algo), en cambio, la base de datos
+            // RECHAZA el borrado (Restrict, no Cascade): ese caso llega aca
+            // como una excepcion tecnica generica, traducida mas abajo a un
+            // ReglaNegocioException con mensaje seguro.
             await _usuarioRepository.EliminarAsync(id);
         }
         catch (RecursoNoEncontradoException)
@@ -345,6 +386,159 @@ public class UsuarioService : IUsuarioService
         catch (Exception ex)
         {
             throw new ReglaNegocioException("Ocurrio un error al autenticar el usuario.", ex);
+        }
+    }
+
+    // CambiarPasswordAsync: cambia la contraseña de un Usuario ya
+    // autenticado que conoce su contraseña actual.
+    public async Task CambiarPasswordAsync(int usuarioId, CambiarPasswordDTO cambiarPasswordDTO)
+    {
+        if (string.IsNullOrWhiteSpace(cambiarPasswordDTO.PasswordNueva) || cambiarPasswordDTO.PasswordNueva.Length < 6)
+        {
+            throw new ReglaNegocioException("La nueva contraseña debe tener al menos 6 caracteres.");
+        }
+
+        try
+        {
+            var usuario = await _usuarioRepository.ObtenerPorIdAsync(usuarioId);
+
+            if (usuario is null)
+            {
+                throw new RecursoNoEncontradoException($"No se encontro el usuario con Id {usuarioId}.");
+            }
+
+            // --- Verificacion de la contraseña ACTUAL ---
+            // Mismo algoritmo (y misma razon de ser) que el paso 2 del Login
+            // en AuthController: se recalcula el hash de la contraseña
+            // candidata con el salt YA persistido y se compara en tiempo
+            // constante contra el hash guardado. Si no coincide, no se
+            // permite continuar: nadie deberia poder cambiar la contraseña
+            // de una cuenta sin antes demostrar que conoce la ACTUAL.
+            var passwordActualValida = _seguridadService.VerificarPasswordHash(
+                cambiarPasswordDTO.PasswordActual,
+                usuario.PasswordHash,
+                usuario.PasswordSalt);
+
+            if (!passwordActualValida)
+            {
+                throw new ReglaNegocioException("La contraseña actual ingresada es incorrecta.");
+            }
+
+            _seguridadService.CrearPasswordHash(cambiarPasswordDTO.PasswordNueva, out var passwordHash, out var passwordSalt);
+
+            usuario.PasswordHash = passwordHash;
+            usuario.PasswordSalt = passwordSalt;
+            usuario.FechaModificacion = DateTime.UtcNow;
+            usuario.UsuarioModificacion = "sistema";
+
+            await _usuarioRepository.ActualizarAsync(usuario);
+        }
+        catch (RecursoNoEncontradoException)
+        {
+            throw;
+        }
+        catch (ReglaNegocioException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new ReglaNegocioException("Ocurrio un error al cambiar la contraseña.", ex);
+        }
+    }
+
+    // SolicitarResetPasswordAsync: primer paso del flujo de "olvide mi
+    // contraseña" (ver el detalle completo en IUsuarioService).
+    public async Task<string?> SolicitarResetPasswordAsync(string email)
+    {
+        try
+        {
+            var usuario = await _usuarioRepository.ObtenerPorEmailAsync(email.Trim());
+
+            // Deliberadamente NO se lanza RecursoNoEncontradoException aca:
+            // se devuelve null y es el CONTROLLER quien decide el mensaje
+            // (siempre el mismo, exista o no la cuenta), para no permitir
+            // que un atacante use este endpoint para enumerar que emails
+            // estan registrados en el sistema.
+            if (usuario is null)
+            {
+                return null;
+            }
+
+            // --- Generacion del token de reseteo ---
+            // RandomNumberGenerator.GetHexString (CSPRNG, criptograficamente
+            // seguro) genera una cadena de 64 caracteres hexadecimales: 32
+            // bytes (256 bits) de entropia, imposible de adivinar por fuerza
+            // bruta en un tiempo util. Se guarda en texto plano en la base
+            // de datos (a diferencia de la contraseña) porque su seguridad
+            // no depende de resistir un volcado de la base de datos, sino
+            // de ser IMPOSIBLE de adivinar y de vida CORTA: alguien con
+            // acceso de lectura a la base ya tiene acceso a todo lo demas.
+            var token = RandomNumberGenerator.GetHexString(64);
+
+            usuario.PasswordResetToken = token;
+
+            // Ventana de validez corta (1 hora): un link de reseteo viejo
+            // en una bandeja de entrada no deberia servir para siempre.
+            usuario.PasswordResetExpiracion = DateTime.UtcNow.AddHours(1);
+            usuario.FechaModificacion = DateTime.UtcNow;
+            usuario.UsuarioModificacion = "sistema";
+
+            await _usuarioRepository.ActualizarAsync(usuario);
+
+            return token;
+        }
+        catch (Exception ex)
+        {
+            throw new ReglaNegocioException("Ocurrio un error al solicitar el reseteo de contraseña.", ex);
+        }
+    }
+
+    // ResetearPasswordAsync: segundo y ultimo paso del flujo de "olvide mi
+    // contraseña".
+    public async Task ResetearPasswordAsync(ResetearPasswordDTO resetearPasswordDTO)
+    {
+        if (string.IsNullOrWhiteSpace(resetearPasswordDTO.PasswordNueva) || resetearPasswordDTO.PasswordNueva.Length < 6)
+        {
+            throw new ReglaNegocioException("La nueva contraseña debe tener al menos 6 caracteres.");
+        }
+
+        try
+        {
+            var usuario = await _usuarioRepository.ObtenerPorPasswordResetTokenAsync(resetearPasswordDTO.Token);
+
+            // Mensaje generico a proposito ("token invalido o expirado"),
+            // sin distinguir "el token no existe" de "existe pero ya
+            // vencio": exactamente el mismo criterio de no dar pistas
+            // adicionales que ya se aplica en el Login.
+            if (usuario is null || usuario.PasswordResetExpiracion is null || usuario.PasswordResetExpiracion < DateTime.UtcNow)
+            {
+                throw new ReglaNegocioException("El token de reseteo es invalido o ya expiro.");
+            }
+
+            _seguridadService.CrearPasswordHash(resetearPasswordDTO.PasswordNueva, out var passwordHash, out var passwordSalt);
+
+            usuario.PasswordHash = passwordHash;
+            usuario.PasswordSalt = passwordSalt;
+
+            // --- El token es de UN SOLO USO ---
+            // Se limpia apenas se usa exitosamente: si alguien mas
+            // interceptara el mismo link mas tarde, ya no podria reutilizarlo
+            // para volver a resetear la contraseña.
+            usuario.PasswordResetToken = null;
+            usuario.PasswordResetExpiracion = null;
+            usuario.FechaModificacion = DateTime.UtcNow;
+            usuario.UsuarioModificacion = "sistema";
+
+            await _usuarioRepository.ActualizarAsync(usuario);
+        }
+        catch (ReglaNegocioException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new ReglaNegocioException("Ocurrio un error al resetear la contraseña.", ex);
         }
     }
 

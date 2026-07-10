@@ -2,7 +2,7 @@ namespace Herencia.Data.Repositories;
 
 // IRepositorioBase<T> es el CONTRATO generico que define las operaciones CRUD
 // (Crear, Leer, Actualizar, Borrar) que TODA entidad de nuestro dominio va a
-// necesitar tarde o temprano (Usuario, Beneficiario, ActivoDigital, etc).
+// necesitar tarde o temprano (Usuario, ActivoDigital, AsignacionHerencia, etc).
 //
 // Por que una interfaz generica y no una interfaz por entidad?
 // Porque el patron Repositorio busca ELIMINAR DUPLICACION: en vez de escribir
@@ -61,8 +61,8 @@ public interface IRepositorioBase<T> where T : class
     // momento, necesitar una operacion que combine VARIOS pasos de escritura
     // (ej: varias llamadas a AgregarAsync) que deben tener exito TODAS juntas
     // o NINGUNA: por ejemplo, repartir un ActivoDigital entre multiples
-    // Beneficiarios (varias filas de AsignacionHerencia) en una sola
-    // operacion atomica.
+    // Usuarios beneficiarios (varias filas de AsignacionHerencia) en una
+    // sola operacion atomica.
     //
     // - Si "operacion" termina SIN lanzar ninguna excepcion, la transaccion
     //   se CONFIRMA (Commit): todos los cambios intentados dentro de

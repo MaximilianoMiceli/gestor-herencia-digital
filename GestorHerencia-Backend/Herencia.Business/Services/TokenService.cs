@@ -147,12 +147,13 @@ public class TokenService : ITokenService
                 // estandar "exp"): si un token fuera valido para siempre, y
                 // llegara a ser robado (ej: interceptado en una red insegura),
                 // el atacante tendria acceso indefinido a la cuenta de la
-                // victima. Expirando el token en pocas horas, se limita
-                // drasticamente la "ventana de ataque" util de un token
-                // robado, obligando al cliente a autenticarse de nuevo (o a
-                // usar un mecanismo de refresh token, fuera del alcance de
-                // esta etapa) pasado ese tiempo.
-                Expires = DateTime.UtcNow.AddHours(2),
+                // victima. 30 minutos acota la "ventana de ataque" util de un
+                // token robado a algo mucho mas chico que las 2 horas
+                // anteriores, a costa de que el cliente deba loguearse de
+                // nuevo con mas frecuencia (esta Api todavia no implementa
+                // refresh tokens, que permitirian renovar la sesion sin pedir
+                // credenciales de nuevo; queda fuera del alcance de esta etapa).
+                Expires = DateTime.UtcNow.AddMinutes(30),
 
                 // SigningCredentials: la firma que protege la integridad del
                 // token (ver la explicacion de la SIGNATURE al inicio de la

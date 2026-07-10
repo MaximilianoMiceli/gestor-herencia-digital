@@ -109,18 +109,16 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // que tambien es Scoped por defecto con AddDbContext).
 builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
 builder.Services.AddScoped<IActivoDigitalRepository, ActivoDigitalRepository>();
-builder.Services.AddScoped<IBeneficiarioRepository, BeneficiarioRepository>();
 builder.Services.AddScoped<IAsignacionHerenciaRepository, AsignacionHerenciaRepository>();
 
 // --- Registro de la capa Business: Servicios ---
 // Igual criterio: se registran las implementaciones concretas contra sus
-// interfaces (IUsuarioService, IActivoDigitalService, IBeneficiarioService).
+// interfaces (IUsuarioService, IActivoDigitalService, IAsignacionHerenciaService).
 // Los controllers de la capa Api SOLO van a pedir estas interfaces por
 // constructor; el contenedor de DI es el unico responsable de saber que
 // implementacion concreta les corresponde inyectar.
 builder.Services.AddScoped<IUsuarioService, UsuarioService>();
 builder.Services.AddScoped<IActivoDigitalService, ActivoDigitalService>();
-builder.Services.AddScoped<IBeneficiarioService, BeneficiarioService>();
 builder.Services.AddScoped<IAsignacionHerenciaService, AsignacionHerenciaService>();
 
 // --- Registro de la capa Business: Servicios de seguridad ---
