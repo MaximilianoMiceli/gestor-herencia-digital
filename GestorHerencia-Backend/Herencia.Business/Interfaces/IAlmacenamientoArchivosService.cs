@@ -17,5 +17,14 @@ public interface IAlmacenamientoArchivosService
     // Guarda "contenido" de forma permanente y devuelve la RUTA/CLAVE con la
     // que quedo guardado (nunca el nombre original: ver
     // AlmacenamientoLocalService para el motivo).
-    Task<string> GuardarArchivoAsync(Stream contenido, string nombreArchivoOriginal);
+    //
+    // "subcarpeta" (opcional) permite a cada llamador (CertificadoDefuncionService,
+    // ActivoDigitalService, y cualquier otro que se agregue a futuro) separar
+    // sus propios archivos en una carpeta distinta dentro del mismo almacen
+    // fisico, sin necesitar una implementacion ni una interfaz nueva por cada
+    // tipo de archivo. Un string vacio (valor por defecto) preserva el
+    // comportamiento HISTORICO: guardar directo en la carpeta base
+    // configurada (asi es como ya quedaron guardados los certificados de
+    // defuncion existentes antes de que esta opcion existiera).
+    Task<string> GuardarArchivoAsync(Stream contenido, string nombreArchivoOriginal, string subcarpeta = "");
 }

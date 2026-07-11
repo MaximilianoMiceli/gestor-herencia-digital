@@ -1,24 +1,24 @@
 /**
  * @file seguridad.tsx
  * @description Pantalla de la pestaña de Seguridad del Tab Navigator.
- * 
- * Expone las opciones y configuraciones de seguridad del usuario.
- * Actualmente implementa la función crítica de "Cerrar sesión" (Log Out) para limpiar
- * tokens JWT expirados o corruptos en SecureStore, permitiendo a los usuarios volver
- * a ingresar en caso de purga de base de datos.
+ *
+ * Antes era un placeholder: un texto genérico y el botón de logout, sin ningún otro
+ * contenido real. Ahora es el punto de entrada a "Editar perfil" (datos, contraseña,
+ * 2FA) y, si el usuario autenticado tiene rol Administrador, también al panel de
+ * revisión de certificados de defunción.
  */
 
 import React from 'react';
 import { StyleSheet, View, TouchableOpacity, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ThemedText } from '../../components/themed-text';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
-import { LogOut } from 'lucide-react-native';
+import { LogOut, User, ShieldCheck, ChevronRight } from 'lucide-react-native';
 
 export default function SeguridadScreen() {
-  // Consumimos el método signOut para limpiar SecureStore.
-  const { signOut } = useAuth();
+  const router = useRouter();
+  const { signOut, userRole } = useAuth();
 
   return (
     <View style={styles.container}>
@@ -31,15 +31,37 @@ export default function SeguridadScreen() {
       >
         {/* SafeAreaView previene solapamiento con la barra de estado superior (notches) */}
         <SafeAreaView edges={['top']} style={styles.headerSafeArea}>
-          <ThemedText style={styles.headerSubtitle}>Gestor de Herencia Digital</ThemedText>
-          <ThemedText style={styles.headerTitle}>Seguridad</ThemedText>
+          <Text style={styles.headerSubtitle}>Gestor de Herencia Digital</Text>
+          <Text style={styles.headerTitle}>Seguridad</Text>
         </SafeAreaView>
       </LinearGradient>
 
       {/* Contenido principal */}
       <View style={styles.content}>
-        <ThemedText style={styles.placeholderText}>Opciones de Seguridad de la cuenta</ThemedText>
-        
+        <View style={styles.menuCard}>
+          <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/editar-perfil')}>
+            <View style={styles.menuIconWrapper}>
+              <User size={20} color="#23856C" />
+            </View>
+            <Text style={styles.menuText}>Editar perfil y contraseña</Text>
+            <ChevronRight size={20} color="#8A9E95" />
+          </TouchableOpacity>
+
+          {/* Solo visible para el rol Administrador: revisión de certificados de defunción */}
+          {userRole === 'Administrador' && (
+            <TouchableOpacity
+              style={[styles.menuRow, styles.menuRowLast]}
+              onPress={() => router.push('/admin/certificados')}
+            >
+              <View style={styles.menuIconWrapper}>
+                <ShieldCheck size={20} color="#23856C" />
+              </View>
+              <Text style={styles.menuText}>Panel de administrador</Text>
+              <ChevronRight size={20} color="#8A9E95" />
+            </TouchableOpacity>
+          )}
+        </View>
+
         {/* Botón de Cerrar Sesión: borra el token y redirige a welcome */}
         <TouchableOpacity style={styles.logoutButton} onPress={signOut}>
           <LogOut color="#A83232" size={20} style={{ marginRight: 8 }} />
@@ -78,14 +100,40 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
     padding: 20,
     gap: 20,
   },
-  placeholderText: {
-    fontFamily: 'MPLUS2-Regular',
-    fontSize: 16,
+  menuCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#C1E3A4',
+    overflow: 'hidden',
+  },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEFDE2',
+  },
+  menuRowLast: {
+    borderBottomWidth: 0,
+  },
+  menuIconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#EEFDE2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuText: {
+    flex: 1,
+    fontFamily: 'MPLUS2-Bold',
+    fontSize: 15,
     color: '#1a2e2e',
   },
   logoutButton: {
@@ -98,7 +146,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 24,
     backgroundColor: '#FFFFFF',
-    marginTop: 20,
     shadowColor: '#A83232',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,

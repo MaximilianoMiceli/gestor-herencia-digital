@@ -1,12 +1,18 @@
 /**
  * @file verificacion-vida.tsx
  * @description Pantalla de configuración del sistema de Verificación de Vida (Frames 11, 37 y 39).
- * 
- * Permite al usuario activar/desactivar el monitoreo de vida, definir la frecuencia de chequeo,
- * el método de verificación (Notificaciones Push, Email, SMS) y configurar un contacto de confianza.
- * Guarda las configuraciones localmente en SecureStore asociadas al ID de usuario único.
- * Utiliza selectores colapsables en línea idénticos a los del formulario de Nuevo Activo para
- * preservar la consistencia visual y de interacción en la app.
+ *
+ * Antes esta pantalla guardaba toda la configuración en SecureStore LOCAL, sin llamar
+ * nunca al backend: el switch, la frecuencia y el contacto no tenían ningún efecto real,
+ * porque es el backend (vía VerificacionVidaBackgroundService, un job que corre cada 24h)
+ * quien decide cuándo escalar recordatorios y liberar la herencia. Ahora esta pantalla:
+ *   - Al montarse, hace GET /api/verificacion-vida/configuracion para traer el estado real.
+ *   - Al guardar, hace PUT /api/verificacion-vida/configuracion.
+ *   - Tiene un botón de "Confirmar que sigo con vida" que llama a POST .../check-in.
+ *
+ * El "contacto de confianza" del backend es un Id de Usuario (ContactoConfianzaId), NO un
+ * email de texto libre: por eso se eligió de una lista de beneficiarios ya ACEPTADOS
+ * (con cuenta propia) en vez de tipearlo a mano.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -15,7 +21,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
   Switch,
   ActivityIndicator,
   Alert,
@@ -25,137 +30,118 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
-import { AssetsService } from '../services/assets.service';
+import { AssetsService, BeneficiarioResumen } from '../services/assets.service';
+import {
+  VerificacionVidaService,
+  MetodoNotificacion,
+} from '../services/verificacion-vida.service';
+
+/** Las únicas 3 frecuencias que el backend acepta (validado también del lado del servidor). */
+const OPCIONES_FRECUENCIA: { label: string; value: number }[] = [
+  { label: 'Cada 3 meses', value: 3 },
+  { label: 'Cada 6 meses', value: 6 },
+  { label: 'Cada 12 meses', value: 12 },
+];
+
+/** 1 = Push, 2 = Email, 3 = Sms (MetodoNotificacion del backend). */
+const OPCIONES_METODO: { label: string; value: MetodoNotificacion }[] = [
+  { label: 'Notificación push', value: 1 },
+  { label: 'Email', value: 2 },
+  { label: 'SMS', value: 3 },
+];
 
 export default function VerificacionVidaScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { token, userEmail } = useAuth();
+  const { token } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [checkingIn, setCheckingIn] = useState(false);
 
-  // Estados de configuración
+  // Estados de configuración (ya en las UNIDADES que el backend espera: frecuencia en
+  // meses, método como código numérico, contacto como Id de usuario).
   const [isActive, setIsActive] = useState(false);
-  const [frecuencia, setFrecuencia] = useState('Cada 3 meses');
-  const [metodo, setMetodo] = useState('Notificación push');
-  const [contacto, setContacto] = useState('');
+  const [frecuenciaMeses, setFrecuenciaMeses] = useState(3);
+  const [metodo, setMetodo] = useState<MetodoNotificacion>(1);
+  const [contactoConfianzaId, setContactoConfianzaId] = useState<number | null>(null);
+  const [ultimoCheckIn, setUltimoCheckIn] = useState<string | null>(null);
+
+  // Beneficiarios elegibles como contacto de confianza: el backend exige que ya tengan
+  // cuenta propia (usuarioBeneficiarioId != null) Y que hayan aceptado (estado === 2)
+  // al menos una herencia de este titular.
+  const [contactosElegibles, setContactosElegibles] = useState<BeneficiarioResumen[]>([]);
 
   // Control de visibilidad de los dropdowns (estilo inline condicional)
   const [showFrecuenciaDropdown, setShowFrecuenciaDropdown] = useState(false);
   const [showMetodoDropdown, setShowMetodoDropdown] = useState(false);
+  const [showContactoDropdown, setShowContactoDropdown] = useState(false);
 
-  const opcionesFrecuencia = ['Cada 3 meses', 'Cada 6 meses', 'Cada 12 meses'];
-  const opcionesMetodo = ['Notificación push', 'Email', 'SMS'];
-
-  // Cargar configuración previa al montar la pantalla
+  // Cargar configuración real del backend + la lista de contactos elegibles al montar.
   useEffect(() => {
     if (!token) {
       router.replace('/(auth)/welcome');
       return;
     }
 
-    const cargarConfiguracion = async () => {
-      if (!userEmail) {
-        setLoading(false);
-        return;
-      }
+    const cargarDatos = async () => {
       try {
-        const sanitizedEmail = userEmail.replace(/[^a-zA-Z0-9.-]/g, '_');
-        const key = `life-verification-config-${sanitizedEmail}`;
-        const savedData = await SecureStore.getItemAsync(key);
-        if (savedData) {
-          const config = JSON.parse(savedData);
-          setIsActive(config.isActive ?? false);
-          setFrecuencia(config.frecuencia ?? 'Cada 3 meses');
-          setMetodo(config.metodo ?? 'Notificación push');
-          setContacto(config.contacto ?? '');
-        }
-      } catch (err) {
-        console.log('Error loading life verification config:', err);
+        const [config, beneficiarios] = await Promise.all([
+          VerificacionVidaService.obtenerConfiguracion(),
+          AssetsService.getMisBeneficiarios(),
+        ]);
+
+        setIsActive(config.activo);
+        setFrecuenciaMeses(config.frecuenciaMeses);
+        setMetodo(config.metodo);
+        setContactoConfianzaId(config.contactoConfianzaId);
+        setUltimoCheckIn(config.ultimoCheckIn);
+
+        setContactosElegibles(
+          beneficiarios.filter((b) => b.usuarioBeneficiarioId !== null && b.estado === 2)
+        );
+      } catch (err: any) {
+        console.log('Error cargando verificación de vida:', err.message);
+        Alert.alert('Error', 'No se pudo cargar la configuración de verificación de vida.');
       } finally {
         setLoading(false);
       }
     };
 
-    cargarConfiguracion();
-  }, [token, userEmail]);
+    cargarDatos();
+  }, [token]);
 
   /**
-   * Valida si el contacto de confianza ingresado es un beneficiario verificado (estado Aceptado/2)
+   * Activar el switch exige, del lado del cliente, tener ya elegido un contacto (la
+   * misma regla que el backend aplica al guardar): evita un viaje de red innecesario
+   * que el servidor rechazaría igual con un 400.
    */
-  const handleToggleSwitch = async (value: boolean) => {
-    if (!value) {
-      setIsActive(false);
-      return;
-    }
-
-    // El contacto de confianza no puede estar vacío si se intenta activar el monitoreo
-    if (!contacto.trim()) {
+  const handleToggleSwitch = (value: boolean) => {
+    if (value && !contactoConfianzaId) {
       Alert.alert(
-        'Contacto Requerido',
-        'Por favor, ingresa el email del contacto de confianza antes de activar la verificación.'
+        'Contacto requerido',
+        'Elegí un contacto de confianza (un beneficiario que ya haya aceptado tu invitación) antes de activar el monitoreo.'
       );
       return;
     }
-
-    try {
-      const bList = await AssetsService.getMisBeneficiarios(token!);
-      const query = contacto.trim().toLowerCase();
-
-      // El backend no tiene "nombre" de beneficiario: la única coincidencia posible es por email
-      const contactBeneficiary = bList.find((b) => b.email.toLowerCase() === query);
-
-      if (!contactBeneficiary) {
-        Alert.alert(
-          'Contacto no registrado',
-          'El contacto de confianza debe ser uno de tus beneficiarios registrados en el sistema.'
-        );
-        return;
-      }
-
-      // El estado del beneficiario en la base de datos debe ser Aceptado (2) -> "Verificado" en la UI
-      if (contactBeneficiary.estado !== 2) {
-        Alert.alert(
-          'Contacto no verificado',
-          'El contacto seleccionado debe haber confirmado su email y aceptado la invitación (estado "Verificado") para poder ser tu contacto de confianza activo.'
-        );
-        return;
-      }
-
-      // Si pasa todas las reglas de negocio, se permite activar
-      setIsActive(true);
-    } catch (err) {
-      console.log('Error al validar contacto:', err);
-      Alert.alert('Error de validación', 'Ocurrió un error al verificar los permisos del contacto.');
-    }
+    setIsActive(value);
   };
 
-  /**
-   * Guarda la configuración de verificación de vida de forma persistente y local.
-   */
   const handleGuardarConfiguracion = async () => {
-    if (!token || !userEmail) return;
-
-    if (isActive && !contacto.trim()) {
-      Alert.alert('Contacto Requerido', 'Debes configurar un nombre o email de contacto de confianza.');
+    if (isActive && !contactoConfianzaId) {
+      Alert.alert('Contacto requerido', 'Debés elegir un contacto de confianza para activar el monitoreo.');
       return;
     }
 
     setSaving(true);
     try {
-      const sanitizedEmail = userEmail.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const key = `life-verification-config-${sanitizedEmail}`;
-      const configData = {
-        isActive,
-        frecuencia,
+      await VerificacionVidaService.guardarConfiguracion({
+        activo: isActive,
+        frecuenciaMeses,
         metodo,
-        contacto: contacto.trim(),
-      };
-
-      await SecureStore.setItemAsync(key, JSON.stringify(configData));
+        contactoConfianzaId,
+      });
 
       Alert.alert(
         'Configuración guardada',
@@ -163,12 +149,34 @@ export default function VerificacionVidaScreen() {
         [{ text: 'OK', onPress: () => router.replace('/') }]
       );
     } catch (err: any) {
-      console.log('Error saving life verification config:', err);
-      Alert.alert('Error', 'Ocurrió un error al guardar la configuración.');
+      Alert.alert('Error', err.message || 'Ocurrió un error al guardar la configuración.');
     } finally {
       setSaving(false);
     }
   };
+
+  /**
+   * Confirma actividad ante el backend ("todavía estoy vivo"): resetea el reloj de
+   * vencimiento del lado del servidor. Es la acción real equivalente a lo que, en un
+   * caso de uso real, dispararía una notificación push que el usuario toca para
+   * confirmar que sigue activo.
+   */
+  const handleCheckIn = async () => {
+    setCheckingIn(true);
+    try {
+      const config = await VerificacionVidaService.registrarCheckIn();
+      setUltimoCheckIn(config.ultimoCheckIn);
+      Alert.alert('¡Listo!', 'Se registró tu actividad. El reloj de verificación se reinició.');
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'No se pudo registrar el check-in.');
+    } finally {
+      setCheckingIn(false);
+    }
+  };
+
+  const contactoSeleccionado = contactosElegibles.find(
+    (c) => c.usuarioBeneficiarioId === contactoConfianzaId
+  );
 
   if (loading) {
     return (
@@ -207,6 +215,11 @@ export default function VerificacionVidaScreen() {
               <Text style={[styles.statusValue, isActive ? styles.statusActive : styles.statusInactive]}>
                 {isActive ? 'Activo' : 'Inactivo'}
               </Text>
+              {ultimoCheckIn && (
+                <Text style={styles.lastCheckInText}>
+                  Último check-in: {new Date(ultimoCheckIn).toLocaleDateString('es-AR')}
+                </Text>
+              )}
             </View>
             <Switch
               value={isActive}
@@ -217,24 +230,30 @@ export default function VerificacionVidaScreen() {
             />
           </View>
 
+          {/* BOTÓN DE CHECK-IN: confirma actividad real contra el backend */}
+          <TouchableOpacity style={styles.checkInButton} onPress={handleCheckIn} disabled={checkingIn}>
+            {checkingIn ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.checkInButtonText}>Confirmar que sigo con vida</Text>
+            )}
+          </TouchableOpacity>
+
           {/* CAMPO: FRECUENCIA DE CHEQUEO (DROPDOWN CON HIGHLIGHT) */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Frecuencia de chequeo</Text>
             <TouchableOpacity
-              style={[
-                styles.dropdownButton,
-                showFrecuenciaDropdown && styles.dropdownButtonActive,
-              ]}
+              style={[styles.dropdownButton, showFrecuenciaDropdown && styles.dropdownButtonActive]}
               activeOpacity={0.8}
               onPress={() => {
                 setShowFrecuenciaDropdown(!showFrecuenciaDropdown);
                 setShowMetodoDropdown(false);
+                setShowContactoDropdown(false);
               }}
             >
-              <Text style={[
-                styles.dropdownButtonText,
-                showFrecuenciaDropdown && styles.dropdownButtonTextActive,
-              ]}>{frecuencia}</Text>
+              <Text style={[styles.dropdownButtonText, showFrecuenciaDropdown && styles.dropdownButtonTextActive]}>
+                {OPCIONES_FRECUENCIA.find((f) => f.value === frecuenciaMeses)?.label}
+              </Text>
               {showFrecuenciaDropdown ? (
                 <ChevronUp size={20} color="#2E7D32" />
               ) : (
@@ -244,25 +263,25 @@ export default function VerificacionVidaScreen() {
 
             {showFrecuenciaDropdown && (
               <View style={styles.dropdownInlineList}>
-                {opcionesFrecuencia.map((f) => (
+                {OPCIONES_FRECUENCIA.map((f) => (
                   <TouchableOpacity
-                    key={f}
+                    key={f.value}
                     style={[
                       styles.dropdownInlineOption,
-                      frecuencia === f && styles.dropdownInlineOptionSelected,
+                      frecuenciaMeses === f.value && styles.dropdownInlineOptionSelected,
                     ]}
                     onPress={() => {
-                      setFrecuencia(f);
+                      setFrecuenciaMeses(f.value);
                       setShowFrecuenciaDropdown(false);
                     }}
                   >
                     <Text
                       style={[
                         styles.dropdownInlineOptionText,
-                        frecuencia === f && styles.dropdownInlineOptionTextSelected,
+                        frecuenciaMeses === f.value && styles.dropdownInlineOptionTextSelected,
                       ]}
                     >
-                      {f}
+                      {f.label}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -274,20 +293,17 @@ export default function VerificacionVidaScreen() {
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Metodo de verificacion</Text>
             <TouchableOpacity
-              style={[
-                styles.dropdownButton,
-                showMetodoDropdown && styles.dropdownButtonActive,
-              ]}
+              style={[styles.dropdownButton, showMetodoDropdown && styles.dropdownButtonActive]}
               activeOpacity={0.8}
               onPress={() => {
                 setShowMetodoDropdown(!showMetodoDropdown);
                 setShowFrecuenciaDropdown(false);
+                setShowContactoDropdown(false);
               }}
             >
-              <Text style={[
-                styles.dropdownButtonText,
-                showMetodoDropdown && styles.dropdownButtonTextActive,
-              ]}>{metodo}</Text>
+              <Text style={[styles.dropdownButtonText, showMetodoDropdown && styles.dropdownButtonTextActive]}>
+                {OPCIONES_METODO.find((m) => m.value === metodo)?.label}
+              </Text>
               {showMetodoDropdown ? (
                 <ChevronUp size={20} color="#2E7D32" />
               ) : (
@@ -297,25 +313,25 @@ export default function VerificacionVidaScreen() {
 
             {showMetodoDropdown && (
               <View style={styles.dropdownInlineList}>
-                {opcionesMetodo.map((m) => (
+                {OPCIONES_METODO.map((m) => (
                   <TouchableOpacity
-                    key={m}
+                    key={m.value}
                     style={[
                       styles.dropdownInlineOption,
-                      metodo === m && styles.dropdownInlineOptionSelected,
+                      metodo === m.value && styles.dropdownInlineOptionSelected,
                     ]}
                     onPress={() => {
-                      setMetodo(m);
+                      setMetodo(m.value);
                       setShowMetodoDropdown(false);
                     }}
                   >
                     <Text
                       style={[
                         styles.dropdownInlineOptionText,
-                        metodo === m && styles.dropdownInlineOptionTextSelected,
+                        metodo === m.value && styles.dropdownInlineOptionTextSelected,
                       ]}
                     >
-                      {m}
+                      {m.label}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -323,18 +339,69 @@ export default function VerificacionVidaScreen() {
             )}
           </View>
 
-          {/* CAMPO: CONTACTO DE CONFIANZA */}
+          {/* CAMPO: CONTACTO DE CONFIANZA (elegido de la lista real de beneficiarios
+              aceptados, no tipeado a mano: el backend espera un Id de Usuario) */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Contacto de confianza</Text>
-            <TextInput
-              style={styles.textInput}
-              value={contacto}
-              onChangeText={(text) => setContacto(text)}
-              placeholder="Email del contacto de confianza"
-              placeholderTextColor="#8A9E95"
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
+            <TouchableOpacity
+              style={[styles.dropdownButton, showContactoDropdown && styles.dropdownButtonActive]}
+              activeOpacity={0.8}
+              onPress={() => {
+                setShowContactoDropdown(!showContactoDropdown);
+                setShowFrecuenciaDropdown(false);
+                setShowMetodoDropdown(false);
+              }}
+            >
+              <Text
+                style={[
+                  styles.dropdownButtonText,
+                  showContactoDropdown && styles.dropdownButtonTextActive,
+                  !contactoSeleccionado && styles.placeholderText,
+                ]}
+              >
+                {contactoSeleccionado ? contactoSeleccionado.email : 'Seleccionar contacto'}
+              </Text>
+              {showContactoDropdown ? (
+                <ChevronUp size={20} color="#2E7D32" />
+              ) : (
+                <ChevronDown size={20} color="#1a2e2e" />
+              )}
+            </TouchableOpacity>
+
+            {showContactoDropdown && (
+              <View style={styles.dropdownInlineList}>
+                {contactosElegibles.length === 0 ? (
+                  <View style={styles.dropdownEmptyContainer}>
+                    <Text style={styles.dropdownEmptyText}>
+                      Todavía no tenés beneficiarios que hayan aceptado tu invitación.
+                    </Text>
+                  </View>
+                ) : (
+                  contactosElegibles.map((c) => (
+                    <TouchableOpacity
+                      key={c.usuarioBeneficiarioId}
+                      style={[
+                        styles.dropdownInlineOption,
+                        contactoConfianzaId === c.usuarioBeneficiarioId && styles.dropdownInlineOptionSelected,
+                      ]}
+                      onPress={() => {
+                        setContactoConfianzaId(c.usuarioBeneficiarioId);
+                        setShowContactoDropdown(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.dropdownInlineOptionText,
+                          contactoConfianzaId === c.usuarioBeneficiarioId && styles.dropdownInlineOptionTextSelected,
+                        ]}
+                      >
+                        {c.email}
+                      </Text>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </View>
+            )}
           </View>
 
           {/* MENSAJE DE ADVERTENCIA */}
@@ -439,6 +506,25 @@ const styles = StyleSheet.create({
   statusInactive: {
     color: '#8A9E95',
   },
+  lastCheckInText: {
+    fontFamily: 'MPLUS2-Regular',
+    fontSize: 11,
+    color: '#8A9E95',
+    marginTop: 2,
+  },
+  checkInButton: {
+    backgroundColor: '#02213D',
+    borderRadius: 12,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  checkInButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'MPLUS2-Bold',
+    fontSize: 15,
+  },
   inputGroup: {
     width: '100%',
     gap: 8,
@@ -448,20 +534,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#5E746A',
   },
-  textInput: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#C1E3A4', // Borde verde claro suave
-    height: 48,
-    paddingHorizontal: 16,
-    color: '#000000',
-    fontFamily: 'MPLUS2-Regular',
-    fontSize: 15,
-  },
-  textArea: {
-    height: 100,
-    paddingTop: 16,
+  placeholderText: {
+    color: '#8A9E95',
   },
   dropdownButton: {
     backgroundColor: '#FFFFFF',
@@ -511,6 +585,16 @@ const styles = StyleSheet.create({
   dropdownInlineOptionTextSelected: {
     fontFamily: 'MPLUS2-Bold',
     color: '#2E7D32', // Texto verde oscuro para la opción seleccionada
+  },
+  dropdownEmptyContainer: {
+    padding: 12,
+    alignItems: 'center',
+  },
+  dropdownEmptyText: {
+    fontFamily: 'MPLUS2-Regular',
+    fontSize: 13,
+    color: '#8A9E95',
+    textAlign: 'center',
   },
   infoCard: {
     backgroundColor: '#CDE5E9', // Fondo celeste/azul claro (Figma Frame 11)

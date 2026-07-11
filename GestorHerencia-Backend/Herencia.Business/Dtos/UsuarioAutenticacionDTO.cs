@@ -32,4 +32,10 @@ public class UsuarioAutenticacionDTO
     // (ver TokenService.CrearToken): el token debe reflejar el rol REAL del
     // usuario en la base de datos en ese instante, no un valor default.
     public RolUsuario Rol { get; set; }
+
+    // AuthController.Login lo necesita para decidir si, tras validar la
+    // contraseña, corresponde cortar el flujo y pedir el segundo factor
+    // (ver GenerarYEnviarCodigoDobleFactorAsync) en vez de emitir el JWT
+    // directamente.
+    public bool DobleFactorHabilitado { get; set; }
 }

@@ -50,4 +50,11 @@ public class AsignacionHerenciaDTO
     // (ActivosDigitalesController.CrearAsignaciones) pueda armar el link de
     // invitacion con ESTE valor, nunca con "Id".
     public string TokenInvitacion { get; set; } = string.Empty;
+
+    // Fecha en la que este bien quedó efectivamente liberado al beneficiario (la fija
+    // CertificadoDefuncionService.AprobarAsync al aprobar el certificado de defunción
+    // del otorgante), o null mientras el titular sigue con vida/activo. Se expone para
+    // que el cliente pueda distinguir "ya podés acceder a este activo" de "todavía no",
+    // sin necesitar otra consulta aparte contra verificación de vida.
+    public DateTime? FechaLiberacion { get; set; }
 }

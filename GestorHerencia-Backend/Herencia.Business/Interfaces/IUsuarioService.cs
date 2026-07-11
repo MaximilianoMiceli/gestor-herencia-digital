@@ -91,4 +91,33 @@ public interface IUsuarioService
     // Puede lanzar ReglaNegocioException si el token no existe, ya expiro, o
     // "PasswordNueva" no cumple el largo minimo.
     Task ResetearPasswordAsync(ResetearPasswordDTO resetearPasswordDTO);
+
+    // GenerarYEnviarCodigoDobleFactorAsync: primer paso del segundo factor de
+    // autenticacion. Se invoca desde AuthController.Login DESPUES de validar
+    // la contraseña, solo si el Usuario tiene DobleFactorHabilitado=true.
+    // Genera un codigo numerico de 6 digitos (CSPRNG), lo persiste con una
+    // ventana de vigencia corta, y lo envia (via INotificationService, por
+    // el canal Email) al propio Usuario. No devuelve el codigo: nadie fuera
+    // de este metodo (ni siquiera el controller) necesita conocerlo en texto
+    // plano, ya que quien deba confirmarlo lo va a leer directamente de su
+    // casilla de correo.
+    // Puede lanzar RecursoNoEncontradoException si el Id no existe.
+    Task GenerarYEnviarCodigoDobleFactorAsync(int usuarioId);
+
+    // VerificarCodigoDobleFactorAsync: segundo y ultimo paso del segundo
+    // factor. Compara el codigo ingresado contra el persistido en
+    // GenerarYEnviarCodigoDobleFactorAsync; si coincide y todavia no expiro,
+    // lo invalida (uso unico) y devuelve el UsuarioDTO para que
+    // AuthController pueda recien ahi emitir el JWT real.
+    // Puede lanzar ReglaNegocioException si el codigo es invalido o ya
+    // expiro, o RecursoNoEncontradoException si el Id no existe.
+    Task<UsuarioDTO> VerificarCodigoDobleFactorAsync(int usuarioId, string codigo);
+
+    // ActualizarDobleFactorAsync: activa o desactiva el 2FA por email para
+    // la propia cuenta (ownership verificado en UsuariosController, igual
+    // que CambiarPasswordAsync). Al desactivarlo, se limpia cualquier codigo
+    // pendiente para no dejar un codigo "vivo" de una sesion de login que
+    // quedo a mitad de camino.
+    // Puede lanzar RecursoNoEncontradoException si el Id no existe.
+    Task<UsuarioDTO> ActualizarDobleFactorAsync(int usuarioId, bool habilitado);
 }

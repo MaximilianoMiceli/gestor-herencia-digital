@@ -16,6 +16,23 @@ public class ActivoDigital : EntidadBaseAuditable
     // plataforma, numero de cuenta parcial, etc).
     public string Descripcion { get; set; } = string.Empty;
 
+    // --- Archivo adjunto opcional (ej: escaneo de un contrato, PDF con
+    // instrucciones notariales) ---
+    // RutaArchivo: la ruta/clave FISICA donde IAlmacenamientoArchivosService
+    // guardo el archivo (ver AlmacenamientoLocalService). Nunca se expone tal
+    // cual en un DTO de salida (mismo criterio que CertificadoDefuncion.
+    // RutaArchivo): es un detalle de infraestructura del servidor, no algo
+    // que el cliente necesite conocer. Nullable porque adjuntar un archivo es
+    // siempre OPCIONAL: la inmensa mayoria de los activos (cuentas bancarias,
+    // redes sociales) no tienen ningun archivo asociado, solo texto.
+    public string? RutaArchivo { get; set; }
+
+    // NombreArchivoOriginal: el nombre con el que el usuario subio el
+    // archivo (ej: "contrato_notarial.pdf"), preservado UNICAMENTE como
+    // metadato de exhibicion en el frontend. El nombre real en disco es
+    // siempre un Guid nuevo (ver AlmacenamientoLocalService), nunca este.
+    public string? NombreArchivoOriginal { get; set; }
+
     // --- Lado "N" de la relacion 1-N Usuario(Otorgante) -> ActivoDigital ---
     // FK hacia el Usuario propietario del activo, actuando en su rol de
     // OTORGANTE (ver el comentario detallado de doble rol en Usuario.cs). Se

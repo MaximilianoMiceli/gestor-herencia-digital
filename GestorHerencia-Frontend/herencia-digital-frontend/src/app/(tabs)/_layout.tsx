@@ -126,14 +126,6 @@ export default function AppTabs() {
           ),
         }}
       />
-
-      {/* Ocultar la pantalla explore por defecto */}
-      <Tabs.Screen
-        name="explore"
-        options={{
-          href: null,
-        }}
-      />
     </Tabs>
   );
 }

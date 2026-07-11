@@ -3,9 +3,10 @@
  * @description Servicio de comunicación HTTP encargado de la gestión de activos digitales
  * y asignaciones de herencia contra la API de ASP.NET Core.
  *
- * Implementa la lógica de consumo de endpoints protegidos mediante token JWT, integrando
- * la creación transaccional de un activo y su inmediata vinculación a un beneficiario invitado
- * por email.
+ * Todas las llamadas pasan por el cliente Axios centralizado (ver api.ts): el interceptor
+ * de request ya inyecta el header "Authorization: Bearer <token>" automáticamente, así
+ * que NINGÚN método de acá recibe un parámetro "token" (a diferencia de la versión
+ * anterior, que lo pedía y lo repetía a mano en cada `fetch`).
  *
  * IMPORTANTE: el backend no tiene ninguna entidad "Beneficiario" independiente. Invitar a
  * alguien y asignarle un activo son la MISMA operación (POST /activosdigitales/{id}/asignaciones
@@ -14,7 +15,7 @@
  * asignaciones reales, no un recurso que exista tal cual en el servidor.
  */
 
-import { API_BASE_URL } from '../constants/api';
+import { api } from './api';
 
 /**
  * DTO para la creación de un nuevo activo digital.
@@ -23,7 +24,7 @@ import { API_BASE_URL } from '../constants/api';
 export interface ActivoDigitalCreacionDTO {
   /** Nombre representativo del activo (ej: "Cuenta Banco Galicia", "Ethereum Wallet") */
   nombre: string;
-  /** Tipo de activo digital según el enumerador TipoActivoDigital del backend (0=Banco, 2=Cripto, 4=Archivo) */
+  /** Tipo de activo digital según el enumerador TipoActivoDigital del backend */
   tipo: number;
   /** Detalles e instrucciones específicas del activo, serializados en texto legible o JSON */
   descripcion: string;
@@ -85,9 +86,33 @@ export interface BeneficiarioResumen {
 }
 
 /**
- * Clase de servicio que encapsula las llamadas fetch relativas a activos digitales,
- * asignaciones de herencia y su agregación en beneficiarios.
+ * DTO de un activo digital devuelto por el backend (ver ActivoDigitalDTO.cs).
  */
+export interface ActivoDigitalDTO {
+  id: number;
+  nombre: string;
+  tipo: number;
+  descripcion: string;
+  usuarioId: number;
+  /** Nombre de exhibición del archivo adjunto, o null si no tiene ninguno */
+  nombreArchivoOriginal: string | null;
+}
+
+/** DTO que representa una herencia recibida (ver InvitacionesController.MiHerenciaDTO). */
+export interface MiHerenciaDTO {
+  asignacionId: number;
+  titularId: number;
+  titularNombre: string;
+  activoNombre: string;
+  activoTipo: number;
+  porcentaje: number;
+  condicionLiberacion: string;
+  /** true solo cuando se aprobó el certificado de defunción del titular (FechaLiberacion != null). */
+  disponible: boolean;
+  /** El backend lo serializa como el NOMBRE del enum EstadoBeneficiario: "Pendiente" | "Aceptado" | "Rechazado". */
+  estado: string;
+}
+
 export class AssetsService {
   /**
    * Registra un nuevo activo digital y, si se provee el email de un beneficiario, realiza
@@ -97,259 +122,133 @@ export class AssetsService {
    * Llama a:
    * 1. POST /api/activosdigitales (Crea el activo)
    * 2. POST /api/activosdigitales/{id}/asignaciones (Invita y asigna al beneficiario por email)
-   *
-   * @param token Token JWT del usuario autenticado actual.
-   * @param asset Datos de creación del activo.
-   * @param emailBeneficiario Email del beneficiario a invitar y asignar (opcional).
-   * @param prioridad Prioridad asignada (opcional, se guarda dentro de la condición de liberación).
-   * @returns Promesa con los datos del activo digital creado.
-   * @throws Error con el mensaje devuelto por la API en caso de fallar cualquiera de los dos pasos.
    */
   static async createAsset(
-    token: string,
     asset: ActivoDigitalCreacionDTO,
     emailBeneficiario?: string,
     prioridad?: string
-  ): Promise<any> {
-    // 1. Crear el activo digital principal
-    const assetResponse = await fetch(`${API_BASE_URL}/activosdigitales`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(asset),
-    });
+  ): Promise<ActivoDigitalDTO> {
+    // 1. Crear el activo digital principal.
+    const assetResponse = await api.post<ActivoDigitalDTO>('/activosdigitales', asset);
+    const createdAsset = assetResponse.data;
 
-    if (!assetResponse.ok) {
-      let errorMsg = 'Error al crear el activo';
-      try {
-        const errorData = await assetResponse.json();
-        errorMsg = errorData.mensaje || errorMsg;
-      } catch (e) {}
-      throw new Error(errorMsg);
-    }
-
-    const createdAsset = await assetResponse.json();
-
-    // 2. Si se invitó a un beneficiario por email, crear la asignación en la tabla intermedia
+    // 2. Si se invitó a un beneficiario por email, crear la asignación en la tabla intermedia.
     if (emailBeneficiario) {
-      // El backend recibe un array de asignaciones para permitir divisiones múltiples.
-      // Aquí, por simplicidad de la pantalla, asignamos el 100% a un único beneficiario.
       const asignacionBody: AsignacionHerenciaCreacionDTO[] = [
         {
           emailBeneficiario,
           porcentajeAsignado: 100,
-          // Guardamos la prioridad como metadato dentro del campo de condición de liberación
           condicionLiberacion: prioridad ? `Prioridad: ${prioridad}` : 'Asignado desde la app móvil',
         },
       ];
 
-      const asignacionResponse = await fetch(
-        `${API_BASE_URL}/activosdigitales/${createdAsset.id}/asignaciones`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(asignacionBody),
-        }
-      );
-
-      if (!asignacionResponse.ok) {
-        let errorMsg = 'Activo creado, pero falló la asignación al beneficiario';
-        try {
-          const errorData = await asignacionResponse.json();
-          errorMsg = errorData.mensaje || errorMsg;
-        } catch (e) {}
-        throw new Error(errorMsg);
-      }
+      await api.post(`/activosdigitales/${createdAsset.id}/asignaciones`, asignacionBody);
     }
 
     return createdAsset;
   }
 
-  /**
-   * Obtiene la lista de herencias asignadas al usuario actual (Frame 24).
-   * Llama a: GET /api/invitaciones/mis-herencias
-   */
-  static async getMisHerencias(token: string): Promise<MiHerenciaDTO[]> {
-    const response = await fetch(`${API_BASE_URL}/invitaciones/mis-herencias`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      let errorMsg = 'Error al obtener las herencias';
-      try {
-        const errorData = await response.json();
-        errorMsg = errorData.mensaje || errorData.message || errorMsg;
-      } catch (e) {}
-      throw new Error(errorMsg);
-    }
-
-    return response.json();
+  /** Llama a: GET /api/invitaciones/mis-herencias */
+  static async getMisHerencias(): Promise<MiHerenciaDTO[]> {
+    const response = await api.get<MiHerenciaDTO[]>('/invitaciones/mis-herencias');
+    return response.data;
   }
 
-  /**
-   * Obtiene la lista de asignaciones de herencia asociadas a un activo.
-   * Llama a: GET /api/activosdigitales/{assetId}/asignaciones
-   */
-  static async getAssignmentsForAsset(token: string, assetId: number): Promise<AsignacionDTO[]> {
-    const response = await fetch(`${API_BASE_URL}/activosdigitales/${assetId}/asignaciones`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      let errorMsg = 'Error al obtener asignaciones del activo';
-      try {
-        const errorData = await response.json();
-        errorMsg = errorData.mensaje || errorData.message || errorMsg;
-      } catch (e) {}
-      throw new Error(errorMsg);
-    }
-
-    return response.json();
+  /** Llama a: GET /api/activosdigitales/{assetId}/asignaciones */
+  static async getAssignmentsForAsset(assetId: number): Promise<AsignacionDTO[]> {
+    const response = await api.get<AsignacionDTO[]>(`/activosdigitales/${assetId}/asignaciones`);
+    return response.data;
   }
 
-  /**
-   * Obtiene todos los activos digitales creados por el usuario autenticado.
-   * Llama a: GET /api/activosdigitales
-   */
-  static async getAssets(token: string): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/activos?pagina=1&limite=100`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      let errorMsg = `Error al obtener los activos digitales (Status ${response.status})`;
-      try {
-        const errorText = await response.text();
-        errorMsg += `: ${errorText}`;
-      } catch (e) {}
-      throw new Error(errorMsg);
-    }
-
-    const data = await response.json();
-    return data.items || data.Items || data.elementos || data.Elementos || [];
+  /** Llama a: GET /api/activos (paginado; se pide una página grande para simplificar la UI) */
+  static async getAssets(): Promise<ActivoDigitalDTO[]> {
+    const response = await api.get<{ items?: ActivoDigitalDTO[]; elementos?: ActivoDigitalDTO[] }>(
+      '/activos',
+      { params: { pagina: 1, limite: 100 } }
+    );
+    return response.data.items ?? response.data.elementos ?? [];
   }
 
-  /**
-   * Actualiza un activo digital existente.
-   * Llama a: PUT /api/activosdigitales/{id}
-   */
+  /** Llama a: PUT /api/activosdigitales/{id} */
   static async updateAsset(
-    token: string,
     id: number,
     asset: { nombre: string; tipo: number; descripcion: string }
-  ): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/activosdigitales/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(asset),
-    });
-
-    if (!response.ok) {
-      let errorMsg = 'Error al actualizar el activo digital';
-      try {
-        const errorData = await response.json();
-        errorMsg = errorData.mensaje || errorData.message || errorMsg;
-      } catch (e) {}
-      throw new Error(errorMsg);
-    }
-
-    return response.json();
+  ): Promise<ActivoDigitalDTO> {
+    const response = await api.put<ActivoDigitalDTO>(`/activosdigitales/${id}`, asset);
+    return response.data;
   }
 
-  /**
-   * Elimina un activo digital por su ID (Frame 19).
-   * Llama a: DELETE /api/activosdigitales/{id}
-   */
-  static async deleteAsset(token: string, id: number): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/activosdigitales/${id}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      let errorMsg = 'Error al eliminar el activo digital';
-      try {
-        const errorData = await response.json();
-        errorMsg = errorData.mensaje || errorData.message || errorMsg;
-      } catch (e) {}
-      throw new Error(errorMsg);
-    }
+  /** Llama a: DELETE /api/activosdigitales/{id} */
+  static async deleteAsset(id: number): Promise<void> {
+    await api.delete(`/activosdigitales/${id}`);
   }
 
-  /**
-   * Elimina una asignación de herencia por su ID.
-   * Llama a: DELETE /api/asignaciones/{id}
-   */
-  static async deleteAssignment(token: string, id: number): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/asignaciones/${id}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      let errorMsg = 'Error al eliminar la asignación';
-      try {
-        const errorData = await response.json();
-        errorMsg = errorData.mensaje || errorData.message || errorMsg;
-      } catch (e) {}
-      throw new Error(errorMsg);
-    }
+  /** Llama a: DELETE /api/asignaciones/{id} */
+  static async deleteAssignment(id: number): Promise<void> {
+    await api.delete(`/asignaciones/${id}`);
   }
 
-  /**
-   * Crea asignaciones de herencia en lote para un activo.
-   * Llama a: POST /api/activosdigitales/{id}/asignaciones
-   */
+  /** Llama a: POST /api/activosdigitales/{id}/asignaciones */
   static async createAssignments(
-    token: string,
     assetId: number,
     assignments: AsignacionHerenciaCreacionDTO[]
-  ): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/activosdigitales/${assetId}/asignaciones`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(assignments),
-    });
+  ): Promise<AsignacionDTO[]> {
+    const response = await api.post<AsignacionDTO[]>(`/activosdigitales/${assetId}/asignaciones`, assignments);
+    return response.data;
+  }
 
-    if (!response.ok) {
-      let errorMsg = 'Error al asignar los beneficiarios';
-      try {
-        const errorData = await response.json();
-        errorMsg = errorData.mensaje || errorData.message || errorMsg;
-      } catch (e) {}
-      throw new Error(errorMsg);
-    }
+  /**
+   * PATCH /api/asignaciones/{id}/estado — el BENEFICIARIO acepta o rechaza una herencia
+   * pendiente. "nuevoEstado" usa los mismos valores numéricos que el enum EstadoBeneficiario
+   * del backend: 2 = Aceptado, 3 = Rechazado (1 = Pendiente no es una transición válida,
+   * el backend la rechaza con 400 si se intenta volver atrás).
+   */
+  static async actualizarEstadoAsignacion(id: number, nuevoEstado: 2 | 3): Promise<AsignacionDTO> {
+    const response = await api.patch<AsignacionDTO>(`/asignaciones/${id}/estado`, { nuevoEstado });
+    return response.data;
+  }
 
-    return response.json();
+  /**
+   * Adjunta (o reemplaza) el archivo de un activo digital ya creado.
+   * Llama a: POST /api/activosdigitales/{id}/archivo
+   *
+   * --- ¿Cómo funciona FormData con archivos en React Native? ---
+   * A diferencia del navegador (donde `FormData` se arma a partir de un `<input type="file">`
+   * y un `File`/`Blob` real), en React Native no existe un objeto `File` nativo: lo que
+   * `expo-document-picker` devuelve es un objeto plano `{ uri, name, mimeType, size }`, donde
+   * `uri` es una ruta local al archivo temporal (ej: "file:///data/.../documento.pdf" en
+   * Android, o un "content://..." en algunos casos). Para adjuntarlo a un FormData, React
+   * Native reconoce una convención especial: en vez de pasar un Blob, se le pasa un objeto
+   * `{ uri, name, type }` y el propio motor nativo (no JavaScript) se encarga de LEER el
+   * archivo del disco y transmitirlo como parte del cuerpo multipart en el momento de hacer
+   * la request real. Por eso "as any" es necesario acá: el tipo `FormDataValue` de la
+   * librería de tipos de React Native no contempla esta forma (fue pensada mirando la spec
+   * web), pero es el único formato que el runtime nativo de React Native sabe interpretar.
+   */
+  static async subirArchivoActivo(
+    id: number,
+    archivo: { uri: string; name: string; mimeType: string }
+  ): Promise<ActivoDigitalDTO> {
+    // FormData es la única forma de mandar un archivo binario + eventuales campos de texto
+    // en una request "multipart/form-data" (el formato que el backend espera en
+    // ActivosDigitalesController.SubirArchivo, vía [FromForm] IFormFile).
+    const formData = new FormData();
+
+    // El nombre del campo ("archivo") DEBE coincidir exactamente con el parámetro
+    // `[FromForm] IFormFile archivo` del controller: ASP.NET Core arma el binding a partir
+    // de ese nombre de campo, no del nombre del archivo en sí.
+    formData.append('archivo', {
+      uri: archivo.uri,
+      name: archivo.name,
+      type: archivo.mimeType,
+    } as any);
+
+    // No se pasa ningún header "Content-Type" manual acá: axios (y, por debajo, el XHR de
+    // React Native) detecta que el body es un FormData y arma automáticamente
+    // "multipart/form-data; boundary=----XXXX" con el boundary correcto. Fijarlo a mano
+    // rompería el request (faltaría el boundary real que separa cada parte del formulario).
+    const response = await api.post<ActivoDigitalDTO>(`/activosdigitales/${id}/archivo`, formData);
+    return response.data;
   }
 
   /**
@@ -361,12 +260,12 @@ export class AssetsService {
    * de mis activos. Por eso se arma recorriendo GET /api/activos y, para cada uno,
    * GET /api/activosdigitales/{id}/asignaciones.
    */
-  static async getMisBeneficiarios(token: string): Promise<BeneficiarioResumen[]> {
-    const activos = await this.getAssets(token);
+  static async getMisBeneficiarios(): Promise<BeneficiarioResumen[]> {
+    const activos = await this.getAssets();
 
     const listasPorActivo = await Promise.all(
       activos.map(async (activo): Promise<AsignacionConActivo[]> => {
-        const asignaciones = await this.getAssignmentsForAsset(token, activo.id);
+        const asignaciones = await this.getAssignmentsForAsset(activo.id);
         return asignaciones.map((asignacion) => ({
           ...asignacion,
           activoNombre: activo.nombre,
@@ -399,21 +298,7 @@ export class AssetsService {
    * Como el beneficiario no es una entidad propia del backend, quitarlo del todo equivale
    * a borrar cada AsignacionHerencia que lo vincula con alguno de mis activos.
    */
-  static async eliminarBeneficiario(token: string, asignacionIds: number[]): Promise<void> {
-    await Promise.all(asignacionIds.map((id) => this.deleteAssignment(token, id)));
+  static async eliminarBeneficiario(asignacionIds: number[]): Promise<void> {
+    await Promise.all(asignacionIds.map((id) => this.deleteAssignment(id)));
   }
-}
-
-/**
- * DTO que representa una herencia recibida.
- */
-export interface MiHerenciaDTO {
-  asignacionId: number;
-  titularNombre: string;
-  parentesco: string;
-  activoNombre: string;
-  activoTipo: number;
-  porcentaje: number;
-  condicionLiberacion: string;
-  disponible: boolean;
 }

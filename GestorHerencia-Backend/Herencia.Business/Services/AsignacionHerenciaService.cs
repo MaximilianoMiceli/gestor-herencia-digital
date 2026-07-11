@@ -480,7 +480,8 @@ public class AsignacionHerenciaService : IAsignacionHerenciaService
             CondicionLiberacion = asignacion.CondicionLiberacion,
             Estado = asignacion.Estado,
             UsuarioOtorganteId = usuarioOtorganteId,
-            TokenInvitacion = asignacion.TokenInvitacion
+            TokenInvitacion = asignacion.TokenInvitacion,
+            FechaLiberacion = asignacion.FechaLiberacion
         };
     }
 }

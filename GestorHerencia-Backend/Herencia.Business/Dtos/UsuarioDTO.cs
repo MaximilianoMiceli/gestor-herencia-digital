@@ -34,4 +34,10 @@ public class UsuarioDTO
     // sensible: el frontend lo necesita, por ejemplo, para decidir si
     // mostrar o no una seccion administrativa en la UI.
     public RolUsuario Rol { get; set; }
+
+    // Si el usuario activo el segundo factor de autenticacion por email.
+    // No es informacion sensible (a diferencia de CodigoDobleFactor, que
+    // jamas se expone en este DTO): el frontend lo necesita para dibujar el
+    // toggle de "2FA" en la pantalla de perfil/seguridad con su estado real.
+    public bool DobleFactorHabilitado { get; set; }
 }

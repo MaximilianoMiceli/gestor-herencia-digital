@@ -24,12 +24,22 @@ public class InvitacionDTO
 public class MiHerenciaDTO
 {
     public int AsignacionId { get; set; }
+
+    // Id del Usuario titular/otorgante: el cliente lo necesita para poder subir el
+    // certificado de defunción de este titular puntual (POST /api/certificados-defuncion
+    // exige "usuarioTitularId" en el body), no solo para mostrar su nombre en pantalla.
+    public int TitularId { get; set; }
     public string TitularNombre { get; set; } = string.Empty;
     public string ActivoNombre { get; set; } = string.Empty;
     public int ActivoTipo { get; set; }
     public decimal Porcentaje { get; set; }
     public string CondicionLiberacion { get; set; } = string.Empty;
     public string Estado { get; set; } = string.Empty;
+
+    // true si el otorgante ya falleció (certificado de defunción aprobado) y este bien
+    // quedó liberado: recién ahí el heredero puede considerarlo "disponible" de verdad,
+    // más allá de haber aceptado o no la invitación.
+    public bool Disponible { get; set; }
 }
 
 // Modelo de datos recibido para procesar la invitacion.
@@ -248,12 +258,14 @@ public class InvitacionesController : ControllerBase
                 dtos.Add(new MiHerenciaDTO
                 {
                     AsignacionId = herencia.Id,
+                    TitularId = herencia.UsuarioOtorganteId,
                     TitularNombre = titular.Nombre,
                     ActivoNombre = activo.Nombre,
                     ActivoTipo = (int)activo.Tipo,
                     Porcentaje = herencia.PorcentajeAsignado,
                     CondicionLiberacion = herencia.CondicionLiberacion,
-                    Estado = herencia.Estado.ToString()
+                    Estado = herencia.Estado.ToString(),
+                    Disponible = herencia.FechaLiberacion is not null
                 });
             }
 

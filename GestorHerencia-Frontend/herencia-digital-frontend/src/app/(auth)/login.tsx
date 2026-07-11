@@ -17,7 +17,7 @@ import AuthButton from '../../components/AuthButton';
 import AuthInput from '../../components/AuthInput';
 import { useAuth } from '../../context/AuthContext';
 import { AuthService } from '../../services/auth.service';
-import { API_BASE_URL } from '../../constants/api';
+import { InvitacionesService } from '../../services/invitaciones.service';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -39,28 +39,35 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      // 1. Enviamos credenciales al endpoint de login
+      // 1. Enviamos credenciales al endpoint de login.
       const response = await AuthService.login({ email, password });
-      
-      // Si el inicio de sesión fue disparado por una invitación, procesamos la aceptación primero
+
+      // Si el usuario tiene 2FA habilitado, el backend NO devuelve un token todavía
+      // (ver TokenRespuestaDTO): hay que navegar a la pantalla de "ingresar código" y
+      // completar el login recién cuando esa pantalla confirme el código correcto.
+      if (response.requiereDobleFactor && response.usuarioId) {
+        router.push({
+          pathname: '/(auth)/verificar-2fa',
+          params: { usuarioId: String(response.usuarioId), acceptInvitationId },
+        });
+        return;
+      }
+
+      // 2. Persistimos el JWT devuelto PRIMERO: esto guarda el token en SecureStore, que
+      // es de donde el interceptor de request de Axios (ver api.ts) lo lee para adjuntar
+      // el header "Authorization" en cualquier llamada posterior (como la de aceptar la
+      // invitación, un renglón más abajo). Hacerlo en este orden evita tener que armar el
+      // header a mano con el token "recién recibido".
+      await signIn(response.token);
+
+      // Si el inicio de sesión fue disparado por una invitación, procesamos la aceptación.
       if (acceptInvitationId) {
         try {
-          await fetch(`${API_BASE_URL}/invitaciones/${acceptInvitationId}/procesar`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${response.token}`,
-            },
-            body: JSON.stringify({ accion: 'aceptar' }),
-          });
+          await InvitacionesService.procesar(acceptInvitationId, 'aceptar');
         } catch (e) {
           console.error('Error al auto-aceptar la invitación:', e);
         }
       }
-
-      // 2. Persistimos el JWT devuelto. Esto dispara reactivamente la redirección a /(tabs)
-      // en InitialLayout gracias al hook useAuth()
-      await signIn(response.token);
     } catch (error: any) {
       Alert.alert('Error de autenticación', error.message);
     } finally {
@@ -94,8 +101,11 @@ export default function LoginScreen() {
           onChangeText={setPassword}
         />
         
-        {/* Acceso auxiliar para recuperar contraseña (vista simulada de maqueta) */}
-        <TouchableOpacity style={styles.forgotPassword}>
+        {/* Acceso al flujo real de recuperación de contraseña (POST /auth/olvide-password) */}
+        <TouchableOpacity
+          style={styles.forgotPassword}
+          onPress={() => router.push('/(auth)/olvide-password')}
+        >
           <Text style={styles.forgotText}>¿Olvidaste tu contraseña?</Text>
         </TouchableOpacity>
 

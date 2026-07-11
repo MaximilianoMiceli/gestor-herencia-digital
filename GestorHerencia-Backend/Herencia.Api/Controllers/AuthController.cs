@@ -165,6 +165,24 @@ public class AuthController : ControllerBase
                 return Unauthorized(new { mensaje = "Credenciales invalidas." });
             }
 
+            // --- Paso 2.5: segundo factor de autenticacion (2FA por email) ---
+            // Si el usuario activo el 2FA desde su perfil, la contraseña
+            // correcta NO alcanza todavia para emitir un JWT: se genera y
+            // envia un codigo de 6 digitos a su Email, y se corta el flujo
+            // aca devolviendo "RequiereDobleFactor=true" (sin Token). El
+            // cliente debe llamar a POST /api/auth/verificar-doble-factor
+            // con ese codigo para recien ahi completar el login.
+            if (usuarioAutenticacion.DobleFactorHabilitado)
+            {
+                await _usuarioService.GenerarYEnviarCodigoDobleFactorAsync(usuarioAutenticacion.Id);
+
+                return Ok(new TokenRespuestaDTO
+                {
+                    RequiereDobleFactor = true,
+                    UsuarioId = usuarioAutenticacion.Id
+                });
+            }
+
             // Paso 3: credenciales correctas -> emitir el Token JWT. Se arma
             // un objeto "Usuario" TRANSITORIO (nunca se persiste, nunca se
             // devuelve en la respuesta HTTP) solo para pasarle a
@@ -207,6 +225,69 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error inesperado durante el login.");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { mensaje = "Ocurrio un error interno al procesar la solicitud." });
+        }
+    }
+
+    // POST api/auth/verificar-doble-factor
+    //
+    // Segundo y ultimo paso del login cuando el usuario tiene 2FA habilitado.
+    // Publico (sin [Authorize]): en este punto todavia no existe ningun JWT
+    // valido, es EXACTAMENTE lo que este endpoint tiene que emitir recien al
+    // final. La identidad de quien llama la da el "UsuarioId" devuelto por
+    // el login inicial (paso 2.5 de arriba), y la PRUEBA de que es
+    // legitimamente esa persona es conocer el codigo que se envio a su
+    // Email, no un token que todavia no existe.
+    [HttpPost("verificar-doble-factor")]
+    public async Task<ActionResult<TokenRespuestaDTO>> VerificarDobleFactor(VerificarDobleFactorDTO verificarDobleFactorDTO)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        try
+        {
+            // UsuarioService valida el codigo (coincidencia + vigencia) y,
+            // si es correcto, lo invalida (uso unico) y devuelve el
+            // UsuarioDTO ya actualizado.
+            var usuarioDTO = await _usuarioService.VerificarCodigoDobleFactorAsync(
+                verificarDobleFactorDTO.UsuarioId, verificarDobleFactorDTO.Codigo);
+
+            // Mismo armado de Usuario "transitorio" que en Login: solo para
+            // pasarle a ITokenService.CrearToken los datos que necesita.
+            var usuarioParaToken = new Usuario
+            {
+                Id = usuarioDTO.Id,
+                Nombre = usuarioDTO.Nombre,
+                Email = usuarioDTO.Email,
+                Rol = usuarioDTO.Rol
+            };
+
+            var token = _tokenService.CrearToken(usuarioParaToken);
+
+            return Ok(new TokenRespuestaDTO { Token = token });
+        }
+        catch (RecursoNoEncontradoException)
+        {
+            return Unauthorized(new { mensaje = "El codigo de verificacion es invalido o ya expiro." });
+        }
+        catch (ReglaNegocioException ex)
+        {
+            // Codigo incorrecto o expirado: 400 Bad Request, responsabilidad
+            // del cliente (puede reintentar con el codigo correcto, o pedir
+            // uno nuevo volviendo a intentar el login).
+            return BadRequest(new { mensaje = ex.Message });
+        }
+        catch (AutenticacionException ex)
+        {
+            _logger.LogError(ex, "Error al generar el token de autenticacion tras verificar el doble factor.");
+            return StatusCode(StatusCodes.Status500InternalServerError, new { mensaje = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error inesperado al verificar el doble factor.");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 new { mensaje = "Ocurrio un error interno al procesar la solicitud." });
         }

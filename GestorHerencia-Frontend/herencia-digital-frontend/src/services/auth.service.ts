@@ -1,26 +1,23 @@
 /**
  * @file auth.service.ts
  * @description Servicio HTTP encargado de la autenticación de usuarios contra la API de .NET.
- * 
- * Expone las peticiones de registro de cuentas y de inicio de sesión, procesando las
- * respuestas de error estructuradas que el servidor retorna en formato JSON.
+ *
+ * Expone registro, login (con soporte de segundo factor por email) y el flujo de
+ * "olvidé mi contraseña". Todas las llamadas pasan por el cliente Axios centralizado
+ * (ver api.ts): ya no hay que armar manualmente el header ni parsear el error a mano,
+ * el interceptor de respuesta de api.ts ya deja cualquier error como un `Error` de JS
+ * estándar con `.message` legible.
  */
 
-import { API_BASE_URL } from '../constants/api';
+import { api } from './api';
 
-/**
- * DTO para el inicio de sesión.
- * Mapea con el DTO 'UsuarioLoginDTO' esperado en el endpoint 'POST /api/auth/login'.
- */
+/** DTO para el inicio de sesión. Mapea con 'LoginDTO' del backend. */
 export interface LoginDTO {
   email: string;
   password: string;
 }
 
-/**
- * DTO para el registro de una cuenta.
- * Mapea con el DTO 'UsuarioCreacionDTO' esperado en el endpoint 'POST /api/auth/registro'.
- */
+/** DTO para el registro de una cuenta. Mapea con 'RegistroDTO' del backend. */
 export interface RegistroDTO {
   nombre: string;
   email: string;
@@ -28,87 +25,96 @@ export interface RegistroDTO {
 }
 
 /**
- * Respuesta del servidor que transporta el JWT token generado al autenticar con éxito.
+ * Respuesta del servidor al intentar loguearse. Mapea con 'TokenRespuestaDTO' del
+ * backend (ver Herencia.Business/Dtos/TokenRespuestaDTO.cs).
+ *
+ * Puede llegar en DOS formas mutuamente excluyentes, según si el usuario tiene 2FA
+ * habilitado o no:
+ *   - Login SIN 2FA: `{ token: "eyJ...", requiereDobleFactor: false, usuarioId: null }`
+ *   - Login CON 2FA: `{ token: "", requiereDobleFactor: true, usuarioId: 5 }` (todavía
+ *     NO hay sesión: hay que llamar a `verificarDobleFactor` con el código recibido
+ *     por email para recién ahí obtener un token real).
  */
 export interface TokenRespuestaDTO {
   token: string;
+  requiereDobleFactor: boolean;
+  usuarioId: number | null;
 }
 
-/**
- * Representación del usuario creado devuelto tras el registro.
- */
+/** Representación del usuario creado, devuelta tras el registro. */
 export interface UsuarioDTO {
   id: number;
   nombre: string;
   email: string;
   rol: string;
+  dobleFactorHabilitado: boolean;
 }
 
-/**
- * Clase de servicio que encapsula las peticiones relativas a la autenticación de usuarios.
- */
 export class AuthService {
   /**
    * Envía las credenciales del usuario al servidor para verificar e iniciar sesión.
    * Llama a: POST /api/auth/login
-   * 
-   * @param data Credenciales de inicio de sesión (email y contraseña).
-   * @returns Promesa con el DTO de respuesta que contiene el JWT token emitido.
-   * @throws Error indicando la causa específica devuelta por la API (ej: contraseña inválida, usuario no encontrado).
+   *
+   * Si la respuesta trae `requiereDobleFactor: true`, el LLAMADOR (la pantalla de
+   * login) es quien decide navegar a la pantalla de "ingresar código" en vez de
+   * considerar la sesión iniciada: este servicio solo transporta el dato, no toma
+   * decisiones de navegación.
    */
   static async login(data: LoginDTO): Promise<TokenRespuestaDTO> {
-    const response = await fetch(`${API_BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
+    // Axios devuelve un objeto "AxiosResponse": los datos del body deserializados ya
+    // vienen en la propiedad ".data" (a diferencia de `fetch`, que exige un
+    // `await response.json()` manual). Si el servidor responde 4xx/5xx, Axios NO
+    // llega a esta línea: lanza una excepción que ya queda atrapada y traducida por
+    // el interceptor de respuesta de api.ts (ver ese archivo).
+    const response = await api.post<TokenRespuestaDTO>('/auth/login', data);
+    return response.data;
+  }
+
+  /**
+   * Segundo y último paso del login cuando el usuario tiene 2FA habilitado.
+   * Llama a: POST /api/auth/verificar-doble-factor
+   */
+  static async verificarDobleFactor(usuarioId: number, codigo: string): Promise<TokenRespuestaDTO> {
+    const response = await api.post<TokenRespuestaDTO>('/auth/verificar-doble-factor', {
+      usuarioId,
+      codigo,
     });
-
-    if (!response.ok) {
-      let errorMsg = 'Error al iniciar sesión';
-      try {
-        // El controlador AuthController del backend responde con un objeto { mensaje = "..." }
-        // ante excepciones de lógica de negocio o validaciones incorrectas.
-        const errorData = await response.json();
-        errorMsg = errorData.mensaje || errorMsg;
-      } catch (e) {
-        // Ignorar error de parsing si el cuerpo no es JSON (ej: si hay un crash 500 crudo)
-      }
-      throw new Error(errorMsg);
-    }
-
-    return response.json();
+    return response.data;
   }
 
   /**
    * Registra un nuevo usuario en la base de datos del sistema.
    * Llama a: POST /api/auth/registro
-   * 
-   * @param data Datos de creación de la cuenta (nombre, email y contraseña en texto plano).
-   * @returns Promesa con los datos del usuario registrado.
-   * @throws Error indicando la causa específica devuelta por la API (ej: email duplicado, formato inválido).
    */
   static async register(data: RegistroDTO): Promise<UsuarioDTO> {
-    const response = await fetch(`${API_BASE_URL}/auth/registro`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
+    const response = await api.post<UsuarioDTO>('/auth/registro', data);
+    return response.data;
+  }
+
+  /**
+   * Primer paso de "olvidé mi contraseña": pide al backend que genere (y "envíe",
+   * simulado por consola del lado del servidor) un link de reseteo.
+   * Llama a: POST /api/auth/olvide-password
+   *
+   * El backend SIEMPRE responde 200 con el mismo mensaje genérico, exista o no la
+   * cuenta (para no permitir enumerar emails registrados): no hay nada que
+   * "distinguir" acá, solo se propaga el mensaje de éxito tal cual.
+   */
+  static async olvidePassword(email: string): Promise<{ mensaje: string }> {
+    const response = await api.post<{ mensaje: string }>('/auth/olvide-password', { email });
+    return response.data;
+  }
+
+  /**
+   * Segundo y último paso de "olvidé mi contraseña": consume el token recibido
+   * (simulado, por consola del backend) para fijar una contraseña nueva.
+   * Llama a: POST /api/auth/resetear-password
+   */
+  static async resetearPassword(token: string, passwordNueva: string): Promise<{ mensaje: string }> {
+    const response = await api.post<{ mensaje: string }>('/auth/resetear-password', {
+      token,
+      passwordNueva,
     });
-
-    if (!response.ok) {
-      let errorMsg = 'Error al registrar la cuenta';
-      try {
-        const errorData = await response.json();
-        errorMsg = errorData.mensaje || errorMsg;
-      } catch (e) {
-        // Ignorar error de parsing si el cuerpo no es JSON
-      }
-      throw new Error(errorMsg);
-    }
-
-    return response.json();
+    return response.data;
   }
 }

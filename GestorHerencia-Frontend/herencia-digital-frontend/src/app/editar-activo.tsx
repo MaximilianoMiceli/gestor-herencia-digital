@@ -21,13 +21,16 @@ import {
   ScrollView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { ArrowLeft, ChevronDown, ChevronUp, Paperclip } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as DocumentPicker from 'expo-document-picker';
 import { useAuth } from '../context/AuthContext';
 import { AssetsService, AsignacionDTO } from '../services/assets.service';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const TIPOS_MIME_PERMITIDOS = ['application/pdf', 'image/jpeg', 'image/png'];
+type ArchivoSeleccionado = { uri: string; name: string; mimeType: string };
 
 export default function EditarActivoScreen() {
   const router = useRouter();
@@ -50,6 +53,12 @@ export default function EditarActivoScreen() {
   const [beneficiarioEmail, setBeneficiarioEmail] = useState('');
   const [emailError, setEmailError] = useState(false);
 
+  // Nombre del archivo YA adjunto al activo (llega del backend), y el archivo NUEVO
+  // que el usuario eventualmente elige para reemplazarlo (todavía no subido).
+  const [nombreArchivoActual, setNombreArchivoActual] = useState<string | null>(null);
+  const [archivoSeleccionado, setArchivoSeleccionado] = useState<ArchivoSeleccionado | null>(null);
+  const [loadingArchivo, setLoadingArchivo] = useState(false);
+
   const [asignacionesExistentes, setAsignacionesExistentes] = useState<AsignacionDTO[]>([]);
 
   // Control de dropdowns personalizados inline
@@ -64,7 +73,7 @@ export default function EditarActivoScreen() {
     const cargarDatos = async () => {
       try {
         // 1. Obtener los activos para rellenar los datos (usamos la lista paginada filtrando por ID)
-        const assets = await AssetsService.getAssets(token);
+        const assets = await AssetsService.getAssets();
         const activo = assets.find(a => a.id === activoId);
 
         if (!activo) {
@@ -76,9 +85,10 @@ export default function EditarActivoScreen() {
         setNombre(activo.nombre);
         setTipoVal(activo.tipo);
         setDescripcion(activo.descripcion || '');
+        setNombreArchivoActual(activo.nombreArchivoOriginal);
 
         // 2. Obtener asignaciones existentes para este activo
-        const asigs = await AssetsService.getAssignmentsForAsset(token, activoId);
+        const asigs = await AssetsService.getAssignmentsForAsset(activoId);
         setAsignacionesExistentes(asigs);
 
         if (asigs.length > 0) {
@@ -103,6 +113,37 @@ export default function EditarActivoScreen() {
 
     cargarDatos();
   }, [token, id]);
+
+  /**
+   * Abre el selector de archivos nativo para reemplazar el archivo adjunto del
+   * activo (mismo flujo que "Nuevo activo"). El archivo elegido recién se sube al
+   * confirmar "Guardar cambios" (ver handleGuardarCambios).
+   */
+  const handleAttachFile = async () => {
+    setLoadingArchivo(true);
+    try {
+      const resultado = await DocumentPicker.getDocumentAsync({
+        type: TIPOS_MIME_PERMITIDOS,
+        copyToCacheDirectory: true,
+      });
+
+      if (resultado.canceled || resultado.assets.length === 0) {
+        return;
+      }
+
+      const archivo = resultado.assets[0];
+      setArchivoSeleccionado({
+        uri: archivo.uri,
+        name: archivo.name,
+        mimeType: archivo.mimeType ?? 'application/octet-stream',
+      });
+    } catch (err) {
+      console.error('Error al seleccionar el archivo:', err);
+      Alert.alert('Error', 'No se pudo abrir el selector de archivos.');
+    } finally {
+      setLoadingArchivo(false);
+    }
+  };
 
   const mapearTipoString = (tipo: number): string => {
     switch (tipo) {
@@ -150,26 +191,31 @@ export default function EditarActivoScreen() {
     setSaving(true);
     try {
       // 1. Actualizar el activo principal (PUT)
-      await AssetsService.updateAsset(token, activoId, {
+      await AssetsService.updateAsset(activoId, {
         nombre: nombre.trim(),
         tipo: tipoVal,
         descripcion: descripcion.trim(),
       });
 
       // 2. Eliminar las asignaciones de herencia viejas del activo
-      const deletePromises = asignacionesExistentes.map(asig => 
-        AssetsService.deleteAssignment(token, asig.id)
+      const deletePromises = asignacionesExistentes.map(asig =>
+        AssetsService.deleteAssignment(asig.id)
       );
       await Promise.all(deletePromises);
 
       // 3. Crear la nueva asignación para el beneficiario indicado
-      await AssetsService.createAssignments(token, activoId, [
+      await AssetsService.createAssignments(activoId, [
         {
           emailBeneficiario: beneficiarioEmail.trim().toLowerCase(),
           porcentajeAsignado: 100,
           condicionLiberacion: `Prioridad: ${prioridad}`,
         }
       ]);
+
+      // 4. Si se eligió un archivo nuevo, reemplaza el adjunto existente (si había uno).
+      if (archivoSeleccionado) {
+        await AssetsService.subirArchivoActivo(activoId, archivoSeleccionado);
+      }
 
       Alert.alert('Activo Actualizado', 'Los cambios se han guardado con éxito.', [
         { text: 'OK', onPress: () => router.replace('/(tabs)/activos') }
@@ -191,7 +237,7 @@ export default function EditarActivoScreen() {
 
     setDeleting(true);
     try {
-      await AssetsService.deleteAsset(token, activoId);
+      await AssetsService.deleteAsset(activoId);
       setShowDeleteModal(false);
       
       // Redireccionar al listado inyectando deleted=true para ver el banner (Frame 33 style)
@@ -276,6 +322,34 @@ export default function EditarActivoScreen() {
               numberOfLines={4}
             />
           </View>
+
+          {/* CAMPO: ARCHIVO ADJUNTO (solo si el activo es de tipo "Archivo") */}
+          {tipoVal === 4 && (
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Archivo adjunto</Text>
+              <View style={styles.fileBoxBorder}>
+                <Paperclip color="#777" size={28} style={{ marginBottom: 6 }} />
+                <Text style={styles.fileText}>
+                  {archivoSeleccionado
+                    ? archivoSeleccionado.name
+                    : nombreArchivoActual ?? 'Sin archivo adjunto todavía'}
+                </Text>
+                <TouchableOpacity
+                  style={styles.attachButton}
+                  onPress={handleAttachFile}
+                  disabled={loadingArchivo}
+                >
+                  {loadingArchivo ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.attachButtonText}>
+                      {nombreArchivoActual || archivoSeleccionado ? 'Cambiar archivo' : 'Adjuntar archivo'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {/* CAMPO: NIVEL DE PRIORIDAD (DROPDOWN INLINE) */}
           <View style={styles.inputGroup}>
@@ -513,6 +587,34 @@ const styles = StyleSheet.create({
     fontFamily: 'MPLUS2-Regular',
     fontSize: 15,
     color: '#5E746A',
+  },
+  fileBoxBorder: {
+    borderWidth: 1.5,
+    borderColor: '#C1E3A4',
+    borderStyle: 'dashed',
+    borderRadius: 8,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FAFAFA',
+  },
+  fileText: {
+    fontFamily: 'MPLUS2-Regular',
+    fontSize: 13,
+    color: '#777',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  attachButton: {
+    backgroundColor: '#D97706',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 6,
+  },
+  attachButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'MPLUS2-Bold',
+    fontSize: 14,
   },
   dropdownButton: {
     backgroundColor: '#FFFFFF',

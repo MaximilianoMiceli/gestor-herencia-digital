@@ -7,14 +7,9 @@
  * decodificado directamente desde las claims del JWT de forma segura offline.
  */
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import * as SecureStore from 'expo-secure-store';
-
-/**
- * Nombre del identificador clave bajo el cual se guardará y leerá el JWT en el llavero
- * seguro nativo del sistema operativo (SecureStore).
- */
-const TOKEN_KEY = 'herencia_jwt_token';
+import { TOKEN_KEY, setManejadorNoAutorizado } from '../services/api';
 
 /**
  * Decodifica Base64 en Javascript de forma segura e independiente de entornos (funciona en iOS, Android y Web).
@@ -67,6 +62,12 @@ interface AuthContextData {
   userName: string | null;
   /** Correo del usuario autenticado, extraído del JWT de forma segura, o null */
   userEmail: string | null;
+  /** Id numérico del usuario autenticado (Claim NameIdentifier), o null. Necesario para
+   *  llamar a los endpoints "PUT /api/usuarios/{id}/..." de la pantalla de perfil. */
+  userId: number | null;
+  /** Rol del usuario autenticado ("Administrador" o "Usuario"), extraído del Claim de Rol.
+   *  Se usa para decidir si mostrar el panel de administración de certificados. */
+  userRole: string | null;
   /** Bandera reactiva que indica si la app está cargando y leyendo el token desde SecureStore */
   isLoading: boolean;
   /** Método para almacenar el token en SecureStore e iniciar la sesión */
@@ -94,6 +95,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userId, setUserId] = useState<number | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Inicializar estado de autenticación al arrancar la app.
@@ -132,17 +135,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUserName(firstName);
 
         // Extraemos el email del usuario logueado
-        const email = payload.email || 
-                      payload['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'] || 
+        const email = payload.email ||
+                      payload['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'] ||
                       null;
         setUserEmail(email);
+
+        // Extraemos el Id numérico del usuario (ClaimTypes.NameIdentifier en el backend
+        // se traduce, por el mapeo de claims cortos de .NET, a "nameid").
+        const rawId = payload.nameid ||
+                      payload['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] ||
+                      null;
+        setUserId(rawId ? Number(rawId) : null);
+
+        // Extraemos el Rol del usuario (ClaimTypes.Role se traduce a "role").
+        const role = payload.role ||
+                     payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] ||
+                     null;
+        setUserRole(role);
       } else {
         setUserName(null);
         setUserEmail(null);
+        setUserId(null);
+        setUserRole(null);
       }
     } else {
       setUserName(null);
       setUserEmail(null);
+      setUserId(null);
+      setUserRole(null);
     }
   }, [token]);
 
@@ -164,18 +184,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   /**
    * Borra de forma asíncrona el token del llavero nativo del teléfono,
    * estableciendo el token a null para devolver al usuario a la pantalla de bienvenida.
+   *
+   * Se envuelve en `useCallback` (sin dependencias: no lee ningún valor externo que
+   * cambie entre renders) para poder pasar una referencia ESTABLE de esta función al
+   * cliente Axios (ver el useEffect de abajo): si `signOut` cambiara de identidad en
+   * cada render, el efecto de registro/desregistro se dispararía sin necesidad.
    */
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     try {
       await SecureStore.deleteItemAsync(TOKEN_KEY);
       setToken(null);
     } catch (error) {
       console.error('Error deleting token', error);
     }
-  };
+  }, []);
+
+  // --- Conexión con el interceptor de Axios (ver services/api.ts) ---
+  // api.ts es una capa de infraestructura pura (sin React, sin hooks): no puede
+  // "usar" este AuthContext directamente. En cambio, expone un registro de callback
+  // (`setManejadorNoAutorizado`) para que, apenas el servidor responda un 401 en
+  // CUALQUIER request, se ejecute `signOut()` acá, en el único lugar que realmente
+  // posee el estado de sesión de React. Al desmontarse el Provider (en la práctica,
+  // nunca ocurre mientras la app está viva, pero es la forma correcta de escribir un
+  // efecto con "limpieza"), se desregistra pasando `null` para no dejar una referencia
+  // colgada a un componente ya desmontado.
+  useEffect(() => {
+    setManejadorNoAutorizado(signOut);
+    return () => setManejadorNoAutorizado(null);
+  }, [signOut]);
 
   return (
-    <AuthContext.Provider value={{ token, userName, userEmail, isLoading, signIn, signOut }}>
+    <AuthContext.Provider value={{ token, userName, userEmail, userId, userRole, isLoading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

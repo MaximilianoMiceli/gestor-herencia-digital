@@ -42,20 +42,29 @@ public class UsuarioService : IUsuarioService
     // de la invitacion por Email que arma AsignacionHerenciaService.CrearAsignacionesAsync.
     private readonly IAsignacionHerenciaRepository _asignacionHerenciaRepository;
 
+    // INotificationService se necesita UNICAMENTE para el segundo factor de
+    // autenticacion (GenerarYEnviarCodigoDobleFactorAsync): es quien
+    // efectivamente "envia" (simulado, por consola) el codigo de 6 digitos
+    // al Email del propio Usuario. Mismo criterio que ya usa
+    // CertificadoDefuncionService para sus propias notificaciones.
+    private readonly INotificationService _notificationService;
+
     // El contenedor de Inyeccion de Dependencias configurado en Program.cs
     // (etapa Api) sera el encargado de "resolver" automaticamente una
     // instancia de IUsuarioRepository (tipicamente UsuarioRepository), de
-    // ISeguridadService (tipicamente SeguridadService) y de
-    // IAsignacionHerenciaRepository, y pasarlas aca por este constructor
-    // cuando se necesite un UsuarioService.
+    // ISeguridadService (tipicamente SeguridadService), de
+    // IAsignacionHerenciaRepository y de INotificationService, y pasarlas
+    // aca por este constructor cuando se necesite un UsuarioService.
     public UsuarioService(
         IUsuarioRepository usuarioRepository,
         ISeguridadService seguridadService,
-        IAsignacionHerenciaRepository asignacionHerenciaRepository)
+        IAsignacionHerenciaRepository asignacionHerenciaRepository,
+        INotificationService notificationService)
     {
         _usuarioRepository = usuarioRepository;
         _seguridadService = seguridadService;
         _asignacionHerenciaRepository = asignacionHerenciaRepository;
+        _notificationService = notificationService;
     }
 
     // CrearUsuarioAsync: da de alta un nuevo Usuario a partir de un DTO de
@@ -376,7 +385,8 @@ public class UsuarioService : IUsuarioService
                 Email = usuario.Email,
                 PasswordHash = usuario.PasswordHash,
                 PasswordSalt = usuario.PasswordSalt,
-                Rol = usuario.Rol
+                Rol = usuario.Rol,
+                DobleFactorHabilitado = usuario.DobleFactorHabilitado
             };
         }
         catch (RecursoNoEncontradoException)
@@ -542,6 +552,153 @@ public class UsuarioService : IUsuarioService
         }
     }
 
+    // GenerarYEnviarCodigoDobleFactorAsync: ver el detalle completo del
+    // "por que" en IUsuarioService.
+    public async Task GenerarYEnviarCodigoDobleFactorAsync(int usuarioId)
+    {
+        try
+        {
+            var usuario = await _usuarioRepository.ObtenerPorIdAsync(usuarioId);
+
+            if (usuario is null)
+            {
+                throw new RecursoNoEncontradoException($"No se encontro el usuario con Id {usuarioId}.");
+            }
+
+            // --- Generacion del codigo: 6 digitos numericos ---
+            // RandomNumberGenerator.GetInt32 (CSPRNG, criptograficamente
+            // seguro, a diferencia de System.Random) genera un entero
+            // aleatorio en el rango [100000, 999999]: siempre 6 digitos, sin
+            // ceros a la izquierda que compliquen la comparacion como string.
+            // A diferencia del PasswordResetToken (256 bits, imposible de
+            // adivinar), un codigo de 6 digitos tiene un espacio MUCHO mas
+            // chico (900.000 combinaciones); esto es una limitacion conocida
+            // y aceptada de cualquier esquema de "codigo corto por email/SMS"
+            // (el mismo patron que usan bancos y redes sociales reales), que
+            // se compensa con la ventana de vigencia corta de abajo (10
+            // minutos) y con que es de UN SOLO USO.
+            var codigo = System.Security.Cryptography.RandomNumberGenerator.GetInt32(100_000, 1_000_000).ToString();
+
+            usuario.CodigoDobleFactor = codigo;
+            usuario.CodigoDobleFactorExpiracion = DateTime.UtcNow.AddMinutes(10);
+            usuario.FechaModificacion = DateTime.UtcNow;
+            usuario.UsuarioModificacion = "sistema";
+
+            await _usuarioRepository.ActualizarAsync(usuario);
+
+            // Se envia SIEMPRE por Email (no por el "MetodoNotificacion" que
+            // el usuario eligio para Verificacion de Vida, que es un
+            // concepto de negocio totalmente distinto): el segundo factor de
+            // login solo tiene sentido si viaja a una casilla de correo que
+            // el usuario pueda revisar en el momento.
+            await _notificationService.EnviarNotificacionAsync(
+                usuario,
+                MetodoNotificacion.Email,
+                "Tu codigo de verificacion en dos pasos",
+                $"Tu codigo para iniciar sesion es: {codigo}\n\nEste codigo vence en 10 minutos y solo se puede usar una vez.");
+        }
+        catch (RecursoNoEncontradoException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new ReglaNegocioException("Ocurrio un error al generar el codigo de verificacion en dos pasos.", ex);
+        }
+    }
+
+    // VerificarCodigoDobleFactorAsync: ver el detalle completo del "por que"
+    // en IUsuarioService.
+    public async Task<UsuarioDTO> VerificarCodigoDobleFactorAsync(int usuarioId, string codigo)
+    {
+        try
+        {
+            var usuario = await _usuarioRepository.ObtenerPorIdAsync(usuarioId);
+
+            if (usuario is null)
+            {
+                throw new RecursoNoEncontradoException($"No se encontro el usuario con Id {usuarioId}.");
+            }
+
+            // Mensaje generico a proposito ("codigo invalido o expirado"),
+            // igual criterio que ResetearPasswordAsync: no distinguir "no
+            // hay ningun codigo pendiente" de "el codigo no coincide" de "ya
+            // vencio", para no darle a un atacante pistas adicionales sobre
+            // cual de los tres casos esta pasando.
+            if (usuario.CodigoDobleFactor is null
+                || usuario.CodigoDobleFactorExpiracion is null
+                || usuario.CodigoDobleFactorExpiracion < DateTime.UtcNow
+                || usuario.CodigoDobleFactor != codigo.Trim())
+            {
+                throw new ReglaNegocioException("El codigo de verificacion es invalido o ya expiro.");
+            }
+
+            // --- El codigo es de UN SOLO USO ---
+            // Se limpia apenas se usa exitosamente, igual criterio que
+            // PasswordResetToken: si alguien mas lo interceptara mas tarde
+            // (ej: revisando la bandeja de entrada despues), ya no podria
+            // reutilizarlo para completar un login.
+            usuario.CodigoDobleFactor = null;
+            usuario.CodigoDobleFactorExpiracion = null;
+            usuario.FechaModificacion = DateTime.UtcNow;
+            usuario.UsuarioModificacion = "sistema";
+
+            await _usuarioRepository.ActualizarAsync(usuario);
+
+            return MapearADTO(usuario);
+        }
+        catch (RecursoNoEncontradoException)
+        {
+            throw;
+        }
+        catch (ReglaNegocioException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new ReglaNegocioException("Ocurrio un error al verificar el codigo de doble factor.", ex);
+        }
+    }
+
+    // ActualizarDobleFactorAsync: ver el detalle completo del "por que" en
+    // IUsuarioService.
+    public async Task<UsuarioDTO> ActualizarDobleFactorAsync(int usuarioId, bool habilitado)
+    {
+        try
+        {
+            var usuario = await _usuarioRepository.ObtenerPorIdAsync(usuarioId);
+
+            if (usuario is null)
+            {
+                throw new RecursoNoEncontradoException($"No se encontro el usuario con Id {usuarioId}.");
+            }
+
+            usuario.DobleFactorHabilitado = habilitado;
+
+            // Al desactivar el 2FA (o al reactivarlo desde cero), se limpia
+            // cualquier codigo que hubiera quedado pendiente de un login
+            // anterior sin completar: evita que un codigo "viejo" siga
+            // siendo valido despues de que el usuario cambio esta config.
+            usuario.CodigoDobleFactor = null;
+            usuario.CodigoDobleFactorExpiracion = null;
+            usuario.FechaModificacion = DateTime.UtcNow;
+            usuario.UsuarioModificacion = "sistema";
+
+            await _usuarioRepository.ActualizarAsync(usuario);
+
+            return MapearADTO(usuario);
+        }
+        catch (RecursoNoEncontradoException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new ReglaNegocioException("Ocurrio un error al actualizar la configuracion de doble factor.", ex);
+        }
+    }
+
     // --- Metodos privados auxiliares (detalles de implementacion internos) ---
     //
     // Notar que el calculo criptografico del hash/salt YA NO vive aca: fue
@@ -563,7 +720,8 @@ public class UsuarioService : IUsuarioService
             Nombre = usuario.Nombre,
             Email = usuario.Email,
             FechaCreacion = usuario.FechaCreacion,
-            Rol = usuario.Rol
+            Rol = usuario.Rol,
+            DobleFactorHabilitado = usuario.DobleFactorHabilitado
         };
     }
 }

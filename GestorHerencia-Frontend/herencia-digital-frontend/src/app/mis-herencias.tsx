@@ -1,13 +1,17 @@
 /**
  * @file mis-herencias.tsx
  * @description Pantalla que lista las herencias asignadas al usuario actual (Frame 24).
- * 
- * Consulta al backend las asignaciones donde el correo del usuario logueado figura como beneficiario,
- * mostrando las tarjetas con el nombre del titular emisor, parentesco, cantidad de activos heredados
- * y el estado de disponibilidad ("No disponible" si la verificación de vida sigue en curso).
+ *
+ * Antes solo mostraba un conteo agrupado por titular con un badge "Disponible/No
+ * disponible", sin exponer el ESTADO real de cada asignación (Pendiente/Aceptado/
+ * Rechazado) ni forma de actuar sobre él. El backend ya expone
+ * PATCH /api/asignaciones/{id}/estado para que el BENEFICIARIO acepte o rechace una
+ * herencia pendiente; esta pantalla ahora lo consume: cada activo pendiente muestra
+ * botones "Aceptar"/"Rechazar" en vez de quedar mudo hasta que alguien reclame el link
+ * de invitación original (que además es efímero: solo se imprime una vez por consola).
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -18,12 +22,19 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { ArrowLeft, Info, HelpCircle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { AssetsService, MiHerenciaDTO } from '../services/assets.service';
+
+/** Agrupación por titular, armada en el cliente, para mostrar una card por cada emisor. */
+interface HerenciaAgrupada {
+  titular: string;
+  disponible: boolean;
+  items: MiHerenciaDTO[];
+}
 
 export default function MisHerenciasScreen() {
   const router = useRouter();
@@ -32,66 +43,88 @@ export default function MisHerenciasScreen() {
 
   const [loading, setLoading] = useState(true);
   const [herencias, setHerencias] = useState<MiHerenciaDTO[]>([]);
+  // Id de la asignación que tiene una acción (Aceptar/Rechazar) en curso, para
+  // deshabilitar SOLO esos botones puntuales y no toda la pantalla mientras responde.
+  const [procesandoId, setProcesandoId] = useState<number | null>(null);
 
-  useEffect(() => {
+  const fetchHerencias = useCallback(async () => {
     if (!token) {
       router.replace('/(auth)/welcome');
       return;
     }
-
-    const fetchHerencias = async () => {
-      try {
-        const data = await AssetsService.getMisHerencias(token);
-        setHerencias(data);
-      } catch (err: any) {
-        // Redirigir al inicio si la sesión expiró o el token es inválido
-        if (
-          err.message.includes('401') ||
-          err.message.includes('autorización') ||
-          err.message.includes('token')
-        ) {
-          router.replace('/(auth)/welcome');
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchHerencias();
+    try {
+      const data = await AssetsService.getMisHerencias();
+      setHerencias(data);
+    } catch (err: any) {
+      console.log('Error al cargar mis herencias:', err.message);
+    } finally {
+      setLoading(false);
+    }
   }, [token]);
 
+  // Recarga cada vez que la pantalla entra en foco (por ejemplo, al volver de aceptar
+  // una invitación desde el link público en otra pantalla).
+  useFocusEffect(
+    useCallback(() => {
+      fetchHerencias();
+    }, [fetchHerencias])
+  );
+
   /**
-   * Agrupa las asignaciones por titular emisor para consolidar la tarjeta del Frame 24.
-   * 
-   * ¿Por qué agrupamos en el cliente?: El backend devuelve un listado plano de asignaciones 
-   * individuales de activos. Para cumplir de forma fiel con la interfaz premium del Frame 24 
-   * de Figma, necesitamos agrupar los activos recibidos bajo una única tarjeta por cada titular 
-   * emisor. Al iterar las herencias, indexamos por 'titularNombre' acumulando la cantidad de 
-   * activos asociados (excluyendo el caso especial de 'Ninguno', que representa herencias vacías 
-   * de herederos recién invitados sin activos asignados).
+   * Agrupa las asignaciones por titular emisor para consolidar la tarjeta del Frame 24,
+   * conservando cada ítem individual (con su propio estado) para poder actuar sobre él.
    */
-  const obtenerHerenciasAgrupadas = () => {
-    const agrupado: { [key: string]: { titular: string; parentesco: string; count: number; disponible: boolean } } = {};
-    
+  const obtenerHerenciasAgrupadas = (): HerenciaAgrupada[] => {
+    const agrupado: { [key: string]: HerenciaAgrupada } = {};
+
     herencias.forEach((item) => {
       const key = item.titularNombre;
       if (!agrupado[key]) {
-        agrupado[key] = {
-          titular: item.titularNombre,
-          parentesco: item.parentesco || 'Familiar',
-          count: 0,
-          disponible: item.disponible,
-        };
+        agrupado[key] = { titular: item.titularNombre, disponible: item.disponible, items: [] };
       }
-      if (item.activoNombre !== 'Ninguno') {
-        agrupado[key].count++;
-      }
+      agrupado[key].items.push(item);
     });
 
     return Object.values(agrupado);
   };
 
   const herenciasAgrupadas = obtenerHerenciasAgrupadas();
+
+  /**
+   * Acepta o rechaza una asignación puntual. "nuevoEstado" usa los mismos valores que
+   * el enum EstadoBeneficiario del backend: 2 = Aceptado, 3 = Rechazado.
+   */
+  const handleResponder = async (asignacionId: number, nuevoEstado: 2 | 3) => {
+    setProcesandoId(asignacionId);
+    try {
+      await AssetsService.actualizarEstadoAsignacion(asignacionId, nuevoEstado);
+      // Actualiza el estado localmente en vez de esperar un refetch completo: la
+      // transición ya se confirmó en el servidor (si hubiera fallado, el catch de abajo
+      // ni siquiera llegaría a este punto).
+      setHerencias((prev) =>
+        prev.map((h) =>
+          h.asignacionId === asignacionId
+            ? { ...h, estado: nuevoEstado === 2 ? 'Aceptado' : 'Rechazado' }
+            : h
+        )
+      );
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'No se pudo actualizar la herencia.');
+    } finally {
+      setProcesandoId(null);
+    }
+  };
+
+  const confirmarRechazo = (asignacionId: number, activoNombre: string) => {
+    Alert.alert(
+      'Rechazar herencia',
+      `¿Estás seguro de que querés rechazar "${activoNombre}"? Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Rechazar', style: 'destructive', onPress: () => handleResponder(asignacionId, 3) },
+      ]
+    );
+  };
 
   if (loading) {
     return (
@@ -135,32 +168,75 @@ export default function MisHerenciasScreen() {
             contentContainerStyle={styles.listContent}
             renderItem={({ item }) => (
               <View style={styles.cardContainer}>
-                <View style={styles.inheritanceCard}>
-                  <View style={styles.cardLeft}>
-                    <Text style={styles.ownerName}>{item.titular}</Text>
-                    <Text style={styles.ownerMeta}>
-                      {item.parentesco} - {item.count} {item.count === 1 ? 'activo asignado' : 'activos asignados'}
+                <View style={styles.ownerHeaderRow}>
+                  <Text style={styles.ownerName}>{item.titular}</Text>
+                  <View style={[styles.badge, item.disponible ? styles.badgeGreen : styles.badgeOrange]}>
+                    <Text style={[styles.badgeText, item.disponible ? styles.textGreen : styles.textOrange]}>
+                      {item.disponible ? 'Disponible' : 'No disponible'}
                     </Text>
                   </View>
-                  <View style={styles.badgeContainer}>
-                    <View style={[styles.badge, item.disponible ? styles.badgeGreen : styles.badgeOrange]}>
-                      <Text style={[styles.badgeText, item.disponible ? styles.textGreen : styles.textOrange]}>
-                        {item.disponible ? 'Disponible' : 'No disponible'}
+                </View>
+
+                {item.items.map((asig) => (
+                  <View key={asig.asignacionId} style={styles.itemCard}>
+                    <View style={styles.itemInfoRow}>
+                      <Text style={styles.itemName}>{asig.activoNombre}</Text>
+                      <Text
+                        style={[
+                          styles.itemEstado,
+                          asig.estado === 'Aceptado' && styles.estadoAceptado,
+                          asig.estado === 'Rechazado' && styles.estadoRechazado,
+                          asig.estado === 'Pendiente' && styles.estadoPendiente,
+                        ]}
+                      >
+                        {asig.estado}
                       </Text>
                     </View>
+
+                    {asig.estado === 'Pendiente' && (
+                      <View style={styles.actionsRow}>
+                        {procesandoId === asig.asignacionId ? (
+                          <ActivityIndicator size="small" color="#23856C" />
+                        ) : (
+                          <>
+                            <TouchableOpacity
+                              style={styles.acceptSmallButton}
+                              onPress={() => handleResponder(asig.asignacionId, 2)}
+                            >
+                              <Text style={styles.acceptSmallButtonText}>Aceptar</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.rejectSmallButton}
+                              onPress={() => confirmarRechazo(asig.asignacionId, asig.activoNombre)}
+                            >
+                              <Text style={styles.rejectSmallButtonText}>Rechazar</Text>
+                            </TouchableOpacity>
+                          </>
+                        )}
+                      </View>
+                    )}
                   </View>
-                </View>
+                ))}
 
                 <View style={styles.infoBox}>
                   <Info size={20} color="#0E4A4C" style={styles.infoIcon} />
                   <Text style={styles.infoText}>
-                    Los activos estarán disponibles cuando {item.titular.split(' ')[0]} no responda a la verificación de vida.
+                    Los activos aceptados estarán disponibles cuando {item.titular.split(' ')[0]} no responda a la verificación de vida.
                   </Text>
                 </View>
               </View>
             )}
           />
         )}
+
+        {/* Acceso al flujo de certificado de defunción: solo tiene sentido si ya
+            aceptaste al menos una herencia (regla que valida subir-certificado.tsx). */}
+        <TouchableOpacity
+          style={styles.uploadCertButton}
+          onPress={() => router.push('/subir-certificado')}
+        >
+          <Text style={styles.uploadCertButtonText}>Subir certificado de defunción</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -210,19 +286,28 @@ const styles = StyleSheet.create({
   listContent: {
     gap: 20,
   },
-  cardContainer: {
-    gap: 12,
+  uploadCertButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#02213D',
+    borderRadius: 12,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
   },
-  inheritanceCard: {
+  uploadCertButtonText: {
+    color: '#02213D',
+    fontFamily: 'MPLUS2-Bold',
+    fontSize: 15,
+  },
+  cardContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#C1E3A4',
-    paddingVertical: 20,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    padding: 20,
+    gap: 12,
     ...Platform.select({
       ios: {
         shadowColor: '#1a2e2e',
@@ -235,30 +320,21 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  cardLeft: {
-    flex: 1,
+  ownerHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   ownerName: {
     fontFamily: 'MPLUS2-Bold',
     fontSize: 16,
     color: '#1a2e2e',
-    marginBottom: 4,
-  },
-  ownerMeta: {
-    fontFamily: 'MPLUS2-Regular',
-    fontSize: 13,
-    color: '#8A9E95',
-  },
-  badgeContainer: {
-    marginLeft: 12,
   },
   badge: {
     borderWidth: 1.5,
     borderRadius: 12,
     paddingVertical: 4,
     paddingHorizontal: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   badgeOrange: {
     borderColor: '#E2A53C',
@@ -277,6 +353,68 @@ const styles = StyleSheet.create({
   },
   textGreen: {
     color: '#2E7D32',
+  },
+  itemCard: {
+    backgroundColor: '#F7FBF3',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#EEFDE2',
+    padding: 12,
+    gap: 8,
+  },
+  itemInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  itemName: {
+    fontFamily: 'MPLUS2-Bold',
+    fontSize: 14,
+    color: '#1a2e2e',
+    flex: 1,
+  },
+  itemEstado: {
+    fontFamily: 'MPLUS2-Bold',
+    fontSize: 12,
+  },
+  estadoPendiente: {
+    color: '#E2A53C',
+  },
+  estadoAceptado: {
+    color: '#2E7D32',
+  },
+  estadoRechazado: {
+    color: '#D32F2F',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  acceptSmallButton: {
+    flex: 1,
+    backgroundColor: '#2E7D32',
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  acceptSmallButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'MPLUS2-Bold',
+    fontSize: 13,
+  },
+  rejectSmallButton: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#D32F2F',
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  rejectSmallButtonText: {
+    color: '#D32F2F',
+    fontFamily: 'MPLUS2-Bold',
+    fontSize: 13,
   },
   infoBox: {
     backgroundColor: '#C5E2D0', // Fondo celeste/verde agua claro del mockup

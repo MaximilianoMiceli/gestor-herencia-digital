@@ -24,16 +24,8 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Mail } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
-import { API_BASE_URL } from '../constants/api';
+import { InvitacionesService, InvitacionDTO } from '../services/invitaciones.service';
 import GradientText from '../components/GradientText';
-
-interface InvitacionData {
-  id: number;
-  emisorNombre: string;
-  beneficiarioNombre: string;
-  beneficiarioEmail: string;
-  parentesco: string;
-}
 
 export default function InvitacionScreen() {
   const router = useRouter();
@@ -41,7 +33,7 @@ export default function InvitacionScreen() {
   const { token } = useAuth();
 
   const [loading, setLoading] = useState(true);
-  const [invitacion, setInvitacion] = useState<InvitacionData | null>(null);
+  const [invitacion, setInvitacion] = useState<InvitacionDTO | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [processing, setProcessing] = useState(false);
 
@@ -55,14 +47,10 @@ export default function InvitacionScreen() {
 
     const fetchInvitacion = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/invitaciones/${id}`);
-        if (!response.ok) {
-          throw new Error('La invitación no existe, ha sido vencida o fue revocada.');
-        }
-        const data = await response.json();
+        const data = await InvitacionesService.obtener(id);
         setInvitacion(data);
       } catch (err: any) {
-        Alert.alert('Error al cargar', err.message);
+        Alert.alert('Error al cargar', err.message || 'La invitación no existe, ha sido vencida o fue revocada.');
         router.replace('/(auth)/welcome');
       } finally {
         setLoading(false);
@@ -78,22 +66,10 @@ export default function InvitacionScreen() {
    * Si el usuario es anónimo, despliega el modal de confirmación de cuenta (Frame 22).
    */
   const handleAceptar = async () => {
-    if (token) {
+    if (token && id) {
       setProcessing(true);
       try {
-        const response = await fetch(`${API_BASE_URL}/invitaciones/${id}/procesar`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({ accion: 'aceptar' }),
-        });
-
-        if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.mensaje || 'Falló el procesamiento de la invitación.');
-        }
+        await InvitacionesService.procesar(id, 'aceptar');
 
         Alert.alert('Éxito', '¡Invitación aceptada con éxito!', [
           { text: 'Ir al Inicio', onPress: () => router.replace('/') },
@@ -123,20 +99,10 @@ export default function InvitacionScreen() {
           text: 'Rechazar',
           style: 'destructive',
           onPress: async () => {
+            if (!id) return;
             setProcessing(true);
             try {
-              const response = await fetch(`${API_BASE_URL}/invitaciones/${id}/procesar`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ accion: 'rechazar' }),
-              });
-
-              if (!response.ok) {
-                const errData = await response.json();
-                throw new Error(errData.mensaje || 'Error al procesar el rechazo.');
-              }
+              await InvitacionesService.procesar(id, 'rechazar');
 
               Alert.alert('Invitación rechazada', 'Se ha eliminado la invitación con éxito.', [
                 { text: 'OK', onPress: () => router.replace('/(auth)/welcome') },
@@ -185,7 +151,6 @@ export default function InvitacionScreen() {
         <View style={styles.divider} />
 
         <Text style={styles.ownerName}>{invitacion?.emisorNombre}</Text>
-        <Text style={styles.relationshipText}>Relacion: {invitacion?.parentesco}</Text>
       </View>
 
       {/* BOTONERA INFERIOR */}
@@ -345,12 +310,6 @@ const styles = StyleSheet.create({
     color: '#1a2e2e',
     textAlign: 'center',
     marginBottom: 4,
-  },
-  relationshipText: {
-    fontFamily: 'MPLUS2-Regular',
-    fontSize: 14,
-    color: '#8A9E95',
-    textAlign: 'center',
   },
   buttonContainer: {
     width: '100%',

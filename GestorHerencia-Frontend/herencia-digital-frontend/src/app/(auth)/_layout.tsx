@@ -7,6 +7,9 @@ export default function AuthLayout() {
       <Stack.Screen name="welcome" />
       <Stack.Screen name="login" />
       <Stack.Screen name="register" />
+      <Stack.Screen name="olvide-password" />
+      <Stack.Screen name="resetear-password" />
+      <Stack.Screen name="verificar-2fa" />
     </Stack>
   );
 }

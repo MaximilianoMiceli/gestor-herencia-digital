@@ -80,6 +80,28 @@ public class Usuario : EntidadBaseAuditable
     // deberia poder resetear la contraseña con un link de hace meses.
     public DateTime? PasswordResetExpiracion { get; set; }
 
+    // --- Autenticacion de dos pasos (2FA) por email ---
+    // DobleFactorHabilitado: si el usuario activo este segundo factor desde
+    // su perfil (ver UsuarioService.ActualizarDobleFactorAsync). Por defecto
+    // false: la inmensa mayoria de los usuarios no lo activa, y activarlo es
+    // una decision explicita del propio usuario, nunca automatica.
+    public bool DobleFactorHabilitado { get; set; } = false;
+
+    // CodigoDobleFactor: codigo numerico de 6 digitos, de UN SOLO USO,
+    // generado en UsuarioService.GenerarYEnviarCodigoDobleFactorAsync cada
+    // vez que este usuario hace login con DobleFactorHabilitado=true. Se
+    // guarda en texto plano (no hasheado) siguiendo el MISMO criterio que
+    // PasswordResetToken de arriba: su seguridad depende de ser de vida
+    // CORTA y de un solo uso, no de resistir un volcado de la base de datos.
+    // Es nullable porque, la mayor parte del tiempo, no hay ningun login en
+    // curso esperando este segundo factor.
+    public string? CodigoDobleFactor { get; set; }
+
+    // Fecha de expiracion del CodigoDobleFactor de arriba. Una ventana corta
+    // (10 minutos, ver UsuarioService) impide que un codigo viejo, filtrado
+    // mucho despues del intento de login original, siga siendo utilizable.
+    public DateTime? CodigoDobleFactorExpiracion { get; set; }
+
     // --- ROL 1: OTORGANTE ---
     // Los ActivoDigital que ESTE usuario registro como propios y que,
     // eventualmente, va a repartir entre sus beneficiarios. Es el lado "1" de

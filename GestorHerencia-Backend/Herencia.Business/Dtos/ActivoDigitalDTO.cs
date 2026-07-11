@@ -20,4 +20,9 @@ public class ActivoDigitalDTO
     public string Descripcion { get; set; } = string.Empty;
 
     public int UsuarioId { get; set; }
+
+    // Nombre de exhibicion del archivo adjunto (ver ActivoDigital.NombreArchivoOriginal),
+    // o null si este activo no tiene ningun archivo asociado. Deliberadamente
+    // NUNCA se expone "RutaArchivo": es un detalle interno del servidor.
+    public string? NombreArchivoOriginal { get; set; }
 }

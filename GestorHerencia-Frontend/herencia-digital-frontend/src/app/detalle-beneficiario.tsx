@@ -46,7 +46,7 @@ export default function DetalleBeneficiarioScreen() {
 
     const loadDatos = async () => {
       try {
-        const todos = await AssetsService.getMisBeneficiarios(token);
+        const todos = await AssetsService.getMisBeneficiarios();
         const encontrado = todos.find((b) => b.email === email);
 
         if (!encontrado) {
@@ -106,7 +106,6 @@ export default function DetalleBeneficiarioScreen() {
     setDeleting(true);
     try {
       await AssetsService.eliminarBeneficiario(
-        token,
         beneficiario.asignaciones.map((a) => a.id)
       );
       setShowConfirmModal(false);

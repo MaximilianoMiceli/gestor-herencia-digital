@@ -59,7 +59,7 @@ export default function ActivosScreen() {
     if (!token) return;
     try {
       // Llamar al endpoint filtrando localmente o mediante query string
-      const fullList = await AssetsService.getAssets(token);
+      const fullList = await AssetsService.getAssets();
       
       // Aplicar filtros locales sobre los activos obtenidos
       let filtered = fullList;

@@ -57,4 +57,17 @@ public interface IActivoDigitalService
     // ReglaNegocioException si ocurre un error tecnico al consultarlos.
     Task<ResultadoPaginadoDTO<ActivoDigitalDTO>> ObtenerActivosPorUsuarioPaginadoAsync(
         int usuarioId, int pagina, int limite, TipoActivoDigital? tipo, string? nombre);
+
+    // SubirArchivoAsync: adjunta (o reemplaza) el archivo asociado a un
+    // ActivoDigital existente (ej: el escaneo de un contrato, un PDF con
+    // instrucciones notariales). Recibe un Stream + metadatos en vez de
+    // "IFormFile" por el mismo motivo que ICertificadoDefuncionService: esta
+    // libreria de Business no referencia el framework web (ver el comentario
+    // de IAlmacenamientoArchivosService).
+    // Puede lanzar:
+    //  - RecursoNoEncontradoException: si el Id no existe.
+    //  - ReglaNegocioException: si el tipo de archivo no esta permitido, si
+    //    supera el tamaño maximo, o si ocurre un error tecnico al guardarlo.
+    Task<ActivoDigitalDTO> SubirArchivoAsync(
+        int id, Stream contenido, string nombreArchivoOriginal, string contentType, long tamanioBytes);
 }

@@ -40,7 +40,7 @@ export default function BeneficiariosScreen() {
   const fetchBeneficiarios = async () => {
     if (!token) return;
     try {
-      const data = await AssetsService.getMisBeneficiarios(token);
+      const data = await AssetsService.getMisBeneficiarios();
       setBeneficiarios(data);
     } catch (err: any) {
       console.log('Error loading beneficiaries:', err.message);

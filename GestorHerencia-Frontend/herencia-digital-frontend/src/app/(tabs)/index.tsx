@@ -9,15 +9,16 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
 import Dashboard from '../../components/dashboard';
 import { useAuth } from '../../context/AuthContext';
 import { AssetsService } from '../../services/assets.service';
+import { VerificacionVidaService } from '../../services/verificacion-vida.service';
+import { UsuariosService } from '../../services/usuarios.service';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { userName, token, userEmail, signOut } = useAuth();
-  
+  const { userName, userId, token, signOut } = useAuth();
+
   // Leemos el query parameter "success" inyectado al redireccionar tras crear un activo
   const { success } = useLocalSearchParams<{ success?: string }>();
   const [showSuccess, setShowSuccess] = useState(false);
@@ -26,29 +27,29 @@ export default function HomeScreen() {
   const [assetsCount, setAssetsCount] = useState(0);
   const [beneficiariosCount, setBeneficiariosCount] = useState(0);
   const [isLifeVerificationActive, setIsLifeVerificationActive] = useState(false);
+  const [is2FAActive, setIs2FAActive] = useState(false);
 
   // Función para obtener los conteos desde los servicios
   const fetchCounts = async () => {
     if (!token) return;
     try {
-      const assets = await AssetsService.getAssets(token);
+      const assets = await AssetsService.getAssets();
       setAssetsCount(assets.length);
 
-      const beneficiaries = await AssetsService.getMisBeneficiarios(token);
+      const beneficiaries = await AssetsService.getMisBeneficiarios();
       setBeneficiariosCount(beneficiaries.length);
 
-      // Cargar la configuración de Verificación de Vida para el estado dinámico
-      if (userEmail) {
-        // Sanitizamos la clave reemplazando caracteres no permitidos en SecureStore (como '@')
-        const sanitizedEmail = userEmail.replace(/[^a-zA-Z0-9.-]/g, '_');
-        const key = `life-verification-config-${sanitizedEmail}`;
-        const savedData = await SecureStore.getItemAsync(key);
-        if (savedData) {
-          const config = JSON.parse(savedData);
-          setIsLifeVerificationActive(config.isActive ?? false);
-        } else {
-          setIsLifeVerificationActive(false);
-        }
+      // Cargar la configuración REAL de Verificación de Vida desde el backend (antes se
+      // leía de SecureStore local, que nunca reflejaba el estado que el servidor
+      // realmente usa para decidir cuándo liberar la herencia).
+      const configuracion = await VerificacionVidaService.obtenerConfiguracion();
+      setIsLifeVerificationActive(configuracion.activo);
+
+      // Estado REAL del 2FA (antes esta fila del Dashboard era puramente decorativa,
+      // siempre en "Inactivo", sin ningún backend detrás).
+      if (userId) {
+        const usuario = await UsuariosService.obtenerPorId(userId);
+        setIs2FAActive(usuario.dobleFactorHabilitado);
       }
     } catch (err: any) {
       console.log('Error fetching dashboard counts:', err);
@@ -63,7 +64,7 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchCounts();
-    }, [token, userEmail])
+    }, [token, userId])
   );
 
   useEffect(() => {
@@ -111,6 +112,7 @@ export default function HomeScreen() {
       assetsCount={assetsCount}
       beneficiariosCount={beneficiariosCount}
       isLifeVerificationActive={isLifeVerificationActive}
+      is2FAActive={is2FAActive}
       onAddAsset={handleAddAsset}
       onNavigateToTab={handleNavigateToTab}
       showSuccessNotification={showSuccess}

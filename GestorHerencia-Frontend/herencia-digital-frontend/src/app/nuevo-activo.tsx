@@ -26,12 +26,15 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as DocumentPicker from 'expo-document-picker';
 import {
   ArrowLeft,
   AlertTriangle,
   Bitcoin,
   Landmark,
   Paperclip,
+  Share2,
+  Mail,
   ChevronDown,
   ChevronUp,
 } from 'lucide-react-native';
@@ -40,6 +43,12 @@ import { AssetsService } from '../services/assets.service';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Tipos de archivo que el backend acepta para adjuntos (ver ActivoDigitalService.TiposPermitidos). */
+const TIPOS_MIME_PERMITIDOS = ['application/pdf', 'image/jpeg', 'image/png'];
+
+/** Forma en la que expo-document-picker entrega el archivo elegido por el usuario. */
+type ArchivoSeleccionado = { uri: string; name: string; mimeType: string };
+
 type AssetType = {
   id: number;
   label: string;
@@ -47,9 +56,16 @@ type AssetType = {
   icon: any;
 };
 
+// Los 5 valores del enum TipoActivoDigital del backend (Herencia.Data.Models):
+// 0=CuentaBancaria, 1=RedSocial, 2=BilleteraCripto, 3=CorreoElectronico, 4=Otro.
+// Antes solo se ofrecían 3 de los 5: Red Social y Correo Electrónico existían en el
+// enum y en el mapeo de lectura (activos.tsx, editar-activo.tsx) pero no eran
+// seleccionables acá, la única pantalla que realmente los crea.
 const ASSET_TYPES: AssetType[] = [
   { id: 2, label: 'Cripto', description: 'Wallets, Bitcoin, Ethereum..', icon: Bitcoin },
   { id: 0, label: 'Cuenta bancaria', description: 'CBU, alias, numero de cu..', icon: Landmark },
+  { id: 1, label: 'Red social', description: 'Instagram, Facebook, X..', icon: Share2 },
+  { id: 3, label: 'Correo electrónico', description: 'Gmail, Outlook, etc..', icon: Mail },
   { id: 4, label: 'Archivo', description: 'PDFs, imagenes, docume..', icon: Paperclip },
 ];
 
@@ -80,8 +96,18 @@ export default function NuevoActivoScreen() {
   const [tipoCuenta, setTipoCuenta] = useState('Caja de ahorro');
   const [tipoCuentaExpanded, setTipoCuentaExpanded] = useState(false);
 
-  // Archivo:
-  const [archivoAdjunto, setArchivoAdjunto] = useState<string | null>(null);
+  // Red social:
+  const [plataformaRed, setPlataformaRed] = useState('');
+  const [usuarioRed, setUsuarioRed] = useState('');
+
+  // Correo electrónico:
+  const [proveedorCorreo, setProveedorCorreo] = useState('');
+  const [direccionCorreo, setDireccionCorreo] = useState('');
+
+  // Archivo: se guarda el objeto completo que devuelve expo-document-picker (no solo
+  // el nombre), porque es lo que necesita FormData para poder leer el archivo real del
+  // disco al subirlo (ver AssetsService.subirArchivoActivo).
+  const [archivoSeleccionado, setArchivoSeleccionado] = useState<ArchivoSeleccionado | null>(null);
   const [loadingArchivo, setLoadingArchivo] = useState(false);
 
   // AUXILIARES
@@ -94,12 +120,47 @@ export default function NuevoActivoScreen() {
   const [showValidationError, setShowValidationError] = useState(false);
   const [emailError, setEmailError] = useState(false);
 
-  const handleAttachFile = () => {
+  /**
+   * Abre el selector de archivos NATIVO del sistema operativo (el mismo picker de
+   * "Archivos"/"Files" de iOS o Android que usa cualquier otra app) para elegir un
+   * PDF, JPG o PNG real. Reemplaza el mock anterior (un `setTimeout` que simulaba la
+   * espera y fijaba siempre el mismo nombre de archivo falso "contrato_digital.pdf",
+   * sin leer ni subir ningún archivo de verdad).
+   */
+  const handleAttachFile = async () => {
     setLoadingArchivo(true);
-    setTimeout(() => {
-      setArchivoAdjunto('contrato_digital.pdf');
+    try {
+      // `getDocumentAsync` es una Promise que se resuelve recién cuando el usuario
+      // elige un archivo O cancela el diálogo (nunca "falla" por cancelar: hay que
+      // chequear `result.canceled`, no envolver la cancelación en un catch).
+      const resultado = await DocumentPicker.getDocumentAsync({
+        // Restringe el picker nativo a los mismos tipos que el backend acepta
+        // (ver ActivoDigitalService.TiposPermitidos): evita que el usuario elija un
+        // archivo que el servidor va a rechazar igual, un paso después.
+        type: TIPOS_MIME_PERMITIDOS,
+        copyToCacheDirectory: true,
+      });
+
+      if (resultado.canceled || resultado.assets.length === 0) {
+        return;
+      }
+
+      const archivo = resultado.assets[0];
+
+      setArchivoSeleccionado({
+        uri: archivo.uri,
+        name: archivo.name,
+        // `mimeType` puede venir undefined en algunas plataformas/archivos: se usa un
+        // valor genérico de respaldo para que el backend igual reciba un Content-Type,
+        // aunque probablemente sea rechazado si no es uno de los 3 tipos permitidos.
+        mimeType: archivo.mimeType ?? 'application/octet-stream',
+      });
+    } catch (err) {
+      console.error('Error al seleccionar el archivo:', err);
+      Alert.alert('Error', 'No se pudo abrir el selector de archivos.');
+    } finally {
       setLoadingArchivo(false);
-    }, 1000);
+    }
   };
 
   const handleSave = async () => {
@@ -123,7 +184,15 @@ export default function NuevoActivoScreen() {
       setShowValidationError(true);
       return;
     }
-    if (tipo.label === 'Archivo' && !archivoAdjunto) {
+    if (tipo.label === 'Red social' && (!plataformaRed || !usuarioRed)) {
+      setShowValidationError(true);
+      return;
+    }
+    if (tipo.label === 'Correo electrónico' && (!proveedorCorreo || !direccionCorreo)) {
+      setShowValidationError(true);
+      return;
+    }
+    if (tipo.label === 'Archivo' && !archivoSeleccionado) {
       setShowValidationError(true);
       return;
     }
@@ -139,12 +208,15 @@ export default function NuevoActivoScreen() {
         descripcionFinal = `[CRIPTO] Blockchain: ${blockchain} | Wallet: ${wallet} | Clave Privada: ${clavePrivada}\n\nInstrucciones:\n${instrucciones}`;
       } else if (tipo.label === 'Cuenta bancaria') {
         descripcionFinal = `[BANCO] Banco: ${banco} | Cuenta: ${numeroCuenta} | CBU/Alias: ${cbuAlias} | Tipo: ${tipoCuenta}\n\nInstrucciones:\n${instrucciones}`;
+      } else if (tipo.label === 'Red social') {
+        descripcionFinal = `[RED SOCIAL] Plataforma: ${plataformaRed} | Usuario: ${usuarioRed}\n\nInstrucciones:\n${instrucciones}`;
+      } else if (tipo.label === 'Correo electrónico') {
+        descripcionFinal = `[CORREO] Proveedor: ${proveedorCorreo} | Dirección: ${direccionCorreo}\n\nInstrucciones:\n${instrucciones}`;
       } else if (tipo.label === 'Archivo') {
-        descripcionFinal = `[ARCHIVO] Adjunto: ${archivoAdjunto}\n\nInstrucciones:\n${instrucciones}`;
+        descripcionFinal = `[ARCHIVO] Adjunto: ${archivoSeleccionado?.name}\n\nInstrucciones:\n${instrucciones}`;
       }
 
-      await AssetsService.createAsset(
-        token,
+      const activoCreado = await AssetsService.createAsset(
         {
           nombre,
           tipo: tipo.id,
@@ -153,6 +225,13 @@ export default function NuevoActivoScreen() {
         beneficiarioEmail.trim().toLowerCase(),
         prioridad
       );
+
+      // Si el tipo es "Archivo" y se seleccionó uno real, se sube RECIÉN DESPUÉS de
+      // crear el activo: el endpoint de subida (POST .../{id}/archivo) necesita el Id
+      // que la base de datos le asigna al activo, que no existe hasta este punto.
+      if (tipo.label === 'Archivo' && archivoSeleccionado) {
+        await AssetsService.subirArchivoActivo(activoCreado.id, archivoSeleccionado);
+      }
 
       Alert.alert(
         'Activo guardado',
@@ -389,11 +468,58 @@ export default function NuevoActivoScreen() {
                     </View>
                   )}
 
+                  {tipo.label === 'Red social' && (
+                    <View>
+                      <Text style={styles.infoFieldLabel}>Plataforma</Text>
+                      <TextInput
+                        style={styles.infoInput}
+                        placeholder="Instagram, Facebook, X.."
+                        placeholderTextColor="#999"
+                        value={plataformaRed}
+                        onChangeText={setPlataformaRed}
+                      />
+
+                      <Text style={styles.infoFieldLabel}>Usuario o link de perfil</Text>
+                      <TextInput
+                        style={styles.infoInput}
+                        placeholder="@usuario o URL del perfil"
+                        placeholderTextColor="#999"
+                        autoCapitalize="none"
+                        value={usuarioRed}
+                        onChangeText={setUsuarioRed}
+                      />
+                    </View>
+                  )}
+
+                  {tipo.label === 'Correo electrónico' && (
+                    <View>
+                      <Text style={styles.infoFieldLabel}>Proveedor</Text>
+                      <TextInput
+                        style={styles.infoInput}
+                        placeholder="Gmail, Outlook, Yahoo.."
+                        placeholderTextColor="#999"
+                        value={proveedorCorreo}
+                        onChangeText={setProveedorCorreo}
+                      />
+
+                      <Text style={styles.infoFieldLabel}>Dirección de correo</Text>
+                      <TextInput
+                        style={styles.infoInput}
+                        placeholder="nombre@ejemplo.com"
+                        placeholderTextColor="#999"
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        value={direccionCorreo}
+                        onChangeText={setDireccionCorreo}
+                      />
+                    </View>
+                  )}
+
                   {tipo.label === 'Archivo' && (
                     <View style={styles.fileBoxBorder}>
                       <Paperclip color="#777" size={32} style={styles.fileIcon} />
                       <Text style={styles.fileText}>
-                        {archivoAdjunto ? archivoAdjunto : 'Tocá para adjuntar un archivo'}
+                        {archivoSeleccionado ? archivoSeleccionado.name : 'Tocá para adjuntar un archivo (PDF, JPG o PNG)'}
                       </Text>
                       <TouchableOpacity
                         style={styles.attachButton}
@@ -404,7 +530,7 @@ export default function NuevoActivoScreen() {
                           <ActivityIndicator color="#FFFFFF" />
                         ) : (
                           <Text style={styles.attachButtonText}>
-                            {archivoAdjunto ? 'Cambiar archivo' : 'Adjuntar archivo'}
+                            {archivoSeleccionado ? 'Cambiar archivo' : 'Adjuntar archivo'}
                           </Text>
                         )}
                       </TouchableOpacity>

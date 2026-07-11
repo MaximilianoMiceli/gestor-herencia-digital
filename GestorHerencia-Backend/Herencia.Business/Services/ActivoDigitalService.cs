@@ -3,6 +3,7 @@ using Herencia.Business.Exceptions;
 using Herencia.Business.Interfaces;
 using Herencia.Data.Models;
 using Herencia.Data.Repositories;
+using Microsoft.Extensions.Configuration;
 
 namespace Herencia.Business.Services;
 
@@ -27,17 +28,39 @@ public class ActivoDigitalService : IActivoDigitalService
     // repositorio (nunca de AppDbContext ni de las clases concretas).
     private readonly IUsuarioRepository _usuarioRepository;
 
-    // Ambas dependencias llegan por Inyeccion de Dependencias via constructor.
-    // El contenedor de DI (configurado en Program.cs en la capa Api) resuelve
-    // automaticamente que implementacion concreta corresponde a cada interfaz
-    // (ActivoDigitalRepository e UsuarioRepository, respectivamente) y las
-    // inyecta aca.
+    // IAlmacenamientoArchivosService + IConfiguration se necesitan
+    // UNICAMENTE para SubirArchivoAsync (adjuntar un archivo a un activo ya
+    // existente): mismo patron ya usado por CertificadoDefuncionService para
+    // guardar certificados de defuncion en disco y leer el tamaño maximo
+    // permitido desde appsettings.json.
+    private readonly IAlmacenamientoArchivosService _almacenamientoService;
+    private readonly IConfiguration _configuration;
+
+    // Tipos de archivo aceptados como adjunto de un ActivoDigital: mismo
+    // criterio y misma lista que CertificadoDefuncionService (se valida el
+    // ContentType reportado por el cliente, no la extension del nombre, que
+    // es trivial de falsificar).
+    private static readonly string[] TiposPermitidos =
+    [
+        "application/pdf",
+        "image/jpeg",
+        "image/png"
+    ];
+
+    // Todas las dependencias llegan por Inyeccion de Dependencias via
+    // constructor. El contenedor de DI (configurado en Program.cs en la capa
+    // Api) resuelve automaticamente que implementacion concreta corresponde
+    // a cada interfaz y las inyecta aca.
     public ActivoDigitalService(
         IActivoDigitalRepository activoDigitalRepository,
-        IUsuarioRepository usuarioRepository)
+        IUsuarioRepository usuarioRepository,
+        IAlmacenamientoArchivosService almacenamientoService,
+        IConfiguration configuration)
     {
         _activoDigitalRepository = activoDigitalRepository;
         _usuarioRepository = usuarioRepository;
+        _almacenamientoService = almacenamientoService;
+        _configuration = configuration;
     }
 
     // CrearActivoDigitalAsync: da de alta un nuevo ActivoDigital, pero solo si
@@ -325,6 +348,72 @@ public class ActivoDigitalService : IActivoDigitalService
         }
     }
 
+    // SubirArchivoAsync: adjunta (o reemplaza) el archivo de un ActivoDigital
+    // ya existente. Ver el detalle completo del "por que" en
+    // IActivoDigitalService.
+    public async Task<ActivoDigitalDTO> SubirArchivoAsync(
+        int id, Stream contenido, string nombreArchivoOriginal, string contentType, long tamanioBytes)
+    {
+        // --- Paso 1: validaciones de formato, antes de tocar disco o base de datos ---
+        if (!TiposPermitidos.Contains(contentType))
+        {
+            throw new ReglaNegocioException("Solo se aceptan archivos PDF, JPG o PNG.");
+        }
+
+        // Mismo criterio de lectura de configuracion que CertificadoDefuncionService:
+        // indexador plano de IConfiguration (no GetValue<T>, que exige un
+        // paquete que este proyecto no referencia), con un default de 10 MB
+        // si la clave no esta configurada.
+        var tamanioMaximoBytes = long.TryParse(
+            _configuration["VerificacionVida:TamanioMaximoCertificadoBytes"], out var valorConfigurado)
+            ? valorConfigurado
+            : 10 * 1024 * 1024;
+
+        if (tamanioBytes > tamanioMaximoBytes)
+        {
+            throw new ReglaNegocioException(
+                $"El archivo supera el tamaño maximo permitido ({tamanioMaximoBytes / (1024 * 1024)} MB).");
+        }
+
+        try
+        {
+            var activoDigital = await _activoDigitalRepository.ObtenerPorIdAsync(id);
+
+            if (activoDigital is null)
+            {
+                throw new RecursoNoEncontradoException($"No se encontro el activo digital con Id {id}.");
+            }
+
+            // "activos_digitales" separa estos archivos, dentro del mismo
+            // almacen fisico, de los certificados de defuncion (que se
+            // siguen guardando sin subcarpeta, para no romper las rutas ya
+            // persistidas de certificados existentes).
+            var rutaGuardada = await _almacenamientoService.GuardarArchivoAsync(
+                contenido, nombreArchivoOriginal, subcarpeta: "activos_digitales");
+
+            activoDigital.RutaArchivo = rutaGuardada;
+            activoDigital.NombreArchivoOriginal = nombreArchivoOriginal;
+            activoDigital.FechaModificacion = DateTime.UtcNow;
+            activoDigital.UsuarioModificacion = "sistema";
+
+            await _activoDigitalRepository.ActualizarAsync(activoDigital);
+
+            return MapearADTO(activoDigital);
+        }
+        catch (RecursoNoEncontradoException)
+        {
+            throw;
+        }
+        catch (ReglaNegocioException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new ReglaNegocioException("Ocurrio un error al subir el archivo del activo digital.", ex);
+        }
+    }
+
     // MapearADTO centraliza la conversion Entidad -> DTO de salida, evitando
     // repetir este mapeo en cada metodo publico del servicio.
     private static ActivoDigitalDTO MapearADTO(ActivoDigital activoDigital)
@@ -335,7 +424,8 @@ public class ActivoDigitalService : IActivoDigitalService
             Nombre = activoDigital.Nombre,
             Tipo = activoDigital.Tipo,
             Descripcion = activoDigital.Descripcion,
-            UsuarioId = activoDigital.UsuarioId
+            UsuarioId = activoDigital.UsuarioId,
+            NombreArchivoOriginal = activoDigital.NombreArchivoOriginal
         };
     }
 }

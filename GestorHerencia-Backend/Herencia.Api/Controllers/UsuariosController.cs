@@ -410,6 +410,49 @@ public class UsuariosController : ControllerBase
         }
     }
 
+    // PUT api/usuarios/{id}/doble-factor
+    //
+    // Verbo PUT: reemplaza por completo el UNICO valor que este recurso
+    // representa (si el 2FA esta activo o no para esta cuenta), igual
+    // criterio que CambiarPassword. Ownership identico al resto del
+    // controller: solo el propio usuario puede activar/desactivar SU 2FA.
+    [HttpPut("{id:int}/doble-factor")]
+    public async Task<ActionResult<UsuarioDTO>> ActualizarDobleFactor(int id, ActualizarDobleFactorDTO actualizarDobleFactorDTO)
+    {
+        try
+        {
+            var usuarioAutenticadoId = ObtenerUsuarioIdAutenticado();
+
+            if (usuarioAutenticadoId is null)
+            {
+                return Unauthorized(new { mensaje = "El token no contiene un identificador de usuario valido." });
+            }
+
+            if (id != usuarioAutenticadoId)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    new { mensaje = "No tenes permiso para modificar la configuracion de este usuario." });
+            }
+
+            var usuarioActualizado = await _usuarioService.ActualizarDobleFactorAsync(id, actualizarDobleFactorDTO.Habilitado);
+
+            // 200 OK: se devuelve el UsuarioDTO con el nuevo valor de
+            // "DobleFactorHabilitado" ya reflejado, para que el cliente
+            // pueda confirmar el cambio sin una consulta GET aparte.
+            return Ok(usuarioActualizado);
+        }
+        catch (RecursoNoEncontradoException ex)
+        {
+            return NotFound(new { mensaje = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error inesperado al actualizar la configuracion de doble factor del usuario con Id {Id}.", id);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { mensaje = "Ocurrio un error interno al procesar la solicitud." });
+        }
+    }
+
     // DELETE api/usuarios/{id}
     //
     // Verbo DELETE: se usa para ELIMINAR el recurso identificado por el Id de

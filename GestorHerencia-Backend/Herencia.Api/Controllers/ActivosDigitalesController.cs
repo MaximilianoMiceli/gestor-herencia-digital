@@ -577,4 +577,63 @@ public class ActivosDigitalesController : ControllerBase
                 new { mensaje = "Ocurrio un error interno al procesar la solicitud." });
         }
     }
+
+    // POST api/activosdigitales/{id}/archivo
+    //
+    // Recibe un formulario multipart (no JSON) con un unico campo "archivo":
+    // el documento a adjuntar (PDF/JPG/PNG) a un ActivoDigital que YA existe.
+    // Reemplaza cualquier archivo adjunto previo (el nombre en disco siempre
+    // es nuevo, ver AlmacenamientoLocalService, asi que el archivo anterior
+    // queda huerfano en disco en vez de sobreescribirse: aceptable para el
+    // alcance de este proyecto, igual que ya ocurre si CertificadoDefuncionService
+    // alguna vez permitiera resubir).
+    [HttpPost("{id:int}/archivo")]
+    public async Task<ActionResult<ActivoDigitalDTO>> SubirArchivo(int id, [FromForm] IFormFile archivo)
+    {
+        if (archivo is null || archivo.Length == 0)
+        {
+            return BadRequest(new { mensaje = "Debe adjuntar un archivo." });
+        }
+
+        try
+        {
+            var usuarioAutenticadoId = ObtenerUsuarioIdAutenticado();
+
+            if (usuarioAutenticadoId is null)
+            {
+                return Unauthorized(new { mensaje = "El token no contiene un identificador de usuario valido." });
+            }
+
+            // Misma verificacion de OWNERSHIP que Actualizar/Eliminar: solo
+            // el titular del ActivoDigital puede adjuntarle un archivo.
+            var activoExistente = await _activoDigitalService.ObtenerActivoDigitalPorIdAsync(id);
+
+            if (activoExistente.UsuarioId != usuarioAutenticadoId)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    new { mensaje = "No tenes permiso para adjuntar un archivo a este activo digital." });
+            }
+
+            await using var contenido = archivo.OpenReadStream();
+
+            var activoActualizado = await _activoDigitalService.SubirArchivoAsync(
+                id, contenido, archivo.FileName, archivo.ContentType, archivo.Length);
+
+            return Ok(activoActualizado);
+        }
+        catch (RecursoNoEncontradoException ex)
+        {
+            return NotFound(new { mensaje = ex.Message });
+        }
+        catch (ReglaNegocioException ex)
+        {
+            return BadRequest(new { mensaje = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error inesperado al subir el archivo del activo digital con Id {Id}.", id);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { mensaje = "Ocurrio un error interno al procesar la solicitud." });
+        }
+    }
 }
