@@ -37,4 +37,11 @@ public interface ICertificadoDefuncionService
     // del monitoreo de verificacion de vida: otro heredero puede volver a
     // subir un certificado despues. Mismas excepciones que AprobarAsync.
     Task<CertificadoDefuncionDTO> RechazarAsync(int certificadoId, int adminUsuarioId, string motivo);
+
+    // Devuelve la ruta en disco y el nombre original del archivo de un
+    // certificado, para que un Administrador pueda visualizarlo/descargarlo
+    // mientras lo revisa (antes solo se le mostraban los metadatos: titular,
+    // quien lo subio, fecha). Lanza RecursoNoEncontradoException si el Id no
+    // existe.
+    Task<(string RutaArchivo, string NombreArchivoOriginal)> ObtenerArchivoAsync(int certificadoId);
 }

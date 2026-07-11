@@ -11,6 +11,11 @@
 *.db-shm
 *.db-wal
 
+# Archivos subidos por los usuarios (certificados de defuncion, adjuntos de activos)
+Herencia.Api/uploads/
+uploads/
+certificados_defuncion/
+
 # User-specific files
 *.rsuser
 *.suo

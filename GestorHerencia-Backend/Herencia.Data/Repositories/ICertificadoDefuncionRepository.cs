@@ -23,4 +23,12 @@ public interface ICertificadoDefuncionRepository : IRepositorioBase<CertificadoD
     // cargados (Include): lo necesitan Aprobar/Rechazar para poder devolver
     // el DTO completo (con los nombres resueltos) sin una consulta extra.
     Task<CertificadoDefuncion?> ObtenerConUsuariosAsync(int id);
+
+    // true si YA existe un certificado APROBADO para este titular (su
+    // fallecimiento ya fue confirmado antes). Lo usa
+    // CertificadoDefuncionService.SubirCertificadoAsync para rechazar nuevas
+    // subidas sobre un titular cuya herencia ya se liberó: sin este chequeo,
+    // cualquier heredero aceptado podía seguir mandando certificados
+    // indefinidamente para la misma persona, incluso después de aprobado uno.
+    Task<bool> ExisteCertificadoAprobadoAsync(int usuarioTitularId);
 }

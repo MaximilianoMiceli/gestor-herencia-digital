@@ -7,17 +7,22 @@ namespace Herencia.Business.Services;
 // IAlmacenamientoArchivosService por ahora: guarda los archivos en una
 // carpeta del disco local del servidor. Sigue el MISMO criterio que ya usa
 // Program.cs para resolver la ruta del archivo SQLite: si la carpeta
-// configurada ("VerificacionVida:CarpetaCertificados") es RELATIVA, se
-// resuelve contra AppContext.BaseDirectory (la carpeta donde estan los
-// binarios en ejecucion), para que sea estable sin importar desde donde se
-// invoque el proceso.
+// configurada ("Almacenamiento:CarpetaRaiz") es RELATIVA, se resuelve contra
+// AppContext.BaseDirectory (la carpeta donde estan los binarios en
+// ejecucion), para que sea estable sin importar desde donde se invoque el
+// proceso.
+//
+// "_carpetaDestino" es solo la RAIZ compartida: cada tipo de archivo vive en
+// su propia subcarpeta (ver "subcarpeta" mas abajo), para que un certificado
+// de defuncion y el adjunto de un activo digital nunca terminen mezclados en
+// el mismo directorio.
 public class AlmacenamientoLocalService : IAlmacenamientoArchivosService
 {
     private readonly string _carpetaDestino;
 
     public AlmacenamientoLocalService(IConfiguration configuration)
     {
-        var carpetaConfigurada = configuration["VerificacionVida:CarpetaCertificados"] ?? "certificados_defuncion";
+        var carpetaConfigurada = configuration["Almacenamiento:CarpetaRaiz"] ?? "uploads";
 
         _carpetaDestino = Path.IsPathRooted(carpetaConfigurada)
             ? carpetaConfigurada
@@ -26,12 +31,12 @@ public class AlmacenamientoLocalService : IAlmacenamientoArchivosService
 
     public async Task<string> GuardarArchivoAsync(Stream contenido, string nombreArchivoOriginal, string subcarpeta = "")
     {
-        // Si el llamador pidio una subcarpeta (ej: ActivoDigitalService
-        // pasando "activos_digitales"), se anida DENTRO de la carpeta base
-        // ya configurada, en vez de mezclar todos los tipos de archivo
-        // sueltos en un mismo directorio. Un string vacio (el default, y lo
-        // unico que pasa CertificadoDefuncionService) preserva el
-        // comportamiento HISTORICO: guardar directo en "_carpetaDestino".
+        // Cada llamador pasa su propia subcarpeta (CertificadoDefuncionService
+        // pasa "certificados_defuncion", ActivoDigitalService pasa
+        // "activos_digitales"): ambas cuelgan como HERMANAS dentro de la
+        // misma carpeta raiz configurada, nunca una anidada dentro de la
+        // otra. Un string vacio (sin llamadores actuales) guardaria directo
+        // en la raiz.
         var carpetaDestinoFinal = string.IsNullOrWhiteSpace(subcarpeta)
             ? _carpetaDestino
             : Path.Combine(_carpetaDestino, subcarpeta);

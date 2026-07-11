@@ -70,4 +70,12 @@ public interface IActivoDigitalService
     //    supera el tamaño maximo, o si ocurre un error tecnico al guardarlo.
     Task<ActivoDigitalDTO> SubirArchivoAsync(
         int id, Stream contenido, string nombreArchivoOriginal, string contentType, long tamanioBytes);
+
+    // Devuelve la ruta en disco y el nombre original del archivo adjunto de un
+    // ActivoDigital, para que el titular (o, ya liberado el bien, su heredero
+    // aceptado) pueda descargarlo. La verificacion de QUIEN tiene permiso para
+    // pedirlo vive en el controller (ActivosDigitalesController), no aca: este
+    // metodo solo resuelve "donde esta guardado el archivo de este activo".
+    // Puede lanzar RecursoNoEncontradoException si el Id no existe.
+    Task<(string RutaArchivo, string NombreArchivoOriginal)> ObtenerArchivoAsync(int id);
 }

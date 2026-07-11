@@ -152,6 +152,58 @@ public class CertificadosDefuncionController : ControllerBase
         }
     }
 
+    // GET api/certificados-defuncion/{id}/archivo
+    //
+    // Sirve el binario del certificado (PDF/JPG/PNG) para que un
+    // Administrador pueda verlo mientras decide si aprobar o rechazar: antes
+    // el panel solo mostraba metadatos (titular, quien lo subio, fecha), sin
+    // forma de abrir el documento en si.
+    [Authorize(Roles = nameof(RolUsuario.Administrador))]
+    [HttpGet("{id:int}/archivo")]
+    public async Task<IActionResult> ObtenerArchivo(int id)
+    {
+        try
+        {
+            var (rutaArchivo, nombreOriginal) = await _certificadoDefuncionService.ObtenerArchivoAsync(id);
+
+            if (!System.IO.File.Exists(rutaArchivo))
+            {
+                return NotFound(new { mensaje = "El archivo del certificado ya no esta disponible en el servidor." });
+            }
+
+            var contentType = ObtenerContentType(nombreOriginal);
+            var contenido = System.IO.File.OpenRead(rutaArchivo);
+            return File(contenido, contentType, nombreOriginal);
+        }
+        catch (RecursoNoEncontradoException ex)
+        {
+            return NotFound(new { mensaje = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error inesperado al obtener el archivo del certificado de defuncion con Id {Id}.", id);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { mensaje = "Ocurrio un error interno al procesar la solicitud." });
+        }
+    }
+
+    // Determina el Content-Type a partir de la EXTENSION del nombre original
+    // guardado (nunca de la del archivo en disco, que es un Guid sin
+    // extension confiable de por si para este chequeo): alcanza porque
+    // SubirCertificadoAsync ya restringio de antemano los tipos posibles a
+    // PDF/JPG/PNG.
+    private static string ObtenerContentType(string nombreArchivoOriginal)
+    {
+        var extension = Path.GetExtension(nombreArchivoOriginal).ToLowerInvariant();
+        return extension switch
+        {
+            ".pdf" => "application/pdf",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            _ => "application/octet-stream"
+        };
+    }
+
     // PATCH api/certificados-defuncion/{id}/rechazar
     [Authorize(Roles = nameof(RolUsuario.Administrador))]
     [HttpPatch("{id:int}/rechazar")]

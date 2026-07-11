@@ -384,10 +384,9 @@ public class ActivoDigitalService : IActivoDigitalService
                 throw new RecursoNoEncontradoException($"No se encontro el activo digital con Id {id}.");
             }
 
-            // "activos_digitales" separa estos archivos, dentro del mismo
-            // almacen fisico, de los certificados de defuncion (que se
-            // siguen guardando sin subcarpeta, para no romper las rutas ya
-            // persistidas de certificados existentes).
+            // "activos_digitales" separa estos archivos, como carpeta HERMANA
+            // de "certificados_defuncion" dentro del mismo almacen fisico
+            // (ver AlmacenamientoLocalService): nunca comparten directorio.
             var rutaGuardada = await _almacenamientoService.GuardarArchivoAsync(
                 contenido, nombreArchivoOriginal, subcarpeta: "activos_digitales");
 
@@ -412,6 +411,18 @@ public class ActivoDigitalService : IActivoDigitalService
         {
             throw new ReglaNegocioException("Ocurrio un error al subir el archivo del activo digital.", ex);
         }
+    }
+
+    public async Task<(string RutaArchivo, string NombreArchivoOriginal)> ObtenerArchivoAsync(int id)
+    {
+        var activoDigital = await _activoDigitalRepository.ObtenerPorIdAsync(id);
+
+        if (activoDigital is null)
+        {
+            throw new RecursoNoEncontradoException($"No se encontro el activo digital con Id {id}.");
+        }
+
+        return (activoDigital.RutaArchivo ?? string.Empty, activoDigital.NombreArchivoOriginal ?? string.Empty);
     }
 
     // MapearADTO centraliza la conversion Entidad -> DTO de salida, evitando

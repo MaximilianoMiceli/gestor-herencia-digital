@@ -38,4 +38,10 @@ public class CertificadoDefuncionRepository : RepositorioBase<CertificadoDefunci
             .Include(c => c.SubidoPor)
             .FirstOrDefaultAsync(c => c.Id == id);
     }
+
+    public async Task<bool> ExisteCertificadoAprobadoAsync(int usuarioTitularId)
+    {
+        return await _contexto.CertificadosDefuncion
+            .AnyAsync(c => c.UsuarioTitularId == usuarioTitularId && c.Estado == EstadoCertificadoDefuncion.Aprobado);
+    }
 }

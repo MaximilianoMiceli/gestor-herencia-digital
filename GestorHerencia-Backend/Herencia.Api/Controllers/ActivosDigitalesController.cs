@@ -636,4 +636,88 @@ public class ActivosDigitalesController : ControllerBase
                 new { mensaje = "Ocurrio un error interno al procesar la solicitud." });
         }
     }
+
+    // GET api/activosdigitales/{id}/archivo
+    //
+    // Descarga el archivo adjunto de un ActivoDigital. A diferencia del resto
+    // de este controller (donde OWNERSHIP significa siempre "sos el
+    // titular"), aca hay DOS formas legitimas de tener acceso:
+    //  1. Sos el TITULAR del activo (mismo chequeo que en ObtenerPorId).
+    //  2. Sos un HEREDERO cuya asignacion sobre ESTE activo puntual ya esta
+    //     Aceptada Y LIBERADA (FechaLiberacion != null): recien ahi, una vez
+    //     confirmado el fallecimiento del titular, corresponde entregarle el
+    //     archivo real. Un heredero que solo aceptó la invitación pero cuyo
+    //     otorgante sigue con vida NO puede descargarlo (misma regla que ya
+    //     aplica InvitacionesController.ObtenerMisHerencias sobre Descripcion).
+    [HttpGet("{id:int}/archivo")]
+    public async Task<IActionResult> ObtenerArchivo(int id)
+    {
+        try
+        {
+            var usuarioAutenticadoId = ObtenerUsuarioIdAutenticado();
+
+            if (usuarioAutenticadoId is null)
+            {
+                return Unauthorized(new { mensaje = "El token no contiene un identificador de usuario valido." });
+            }
+
+            var activoDigital = await _activoDigitalService.ObtenerActivoDigitalPorIdAsync(id);
+            var esTitular = activoDigital.UsuarioId == usuarioAutenticadoId;
+            var tieneAccesoComoHeredero = false;
+
+            if (!esTitular)
+            {
+                var misHerencias = await _asignacionHerenciaService.ObtenerAsignacionesPorUsuarioBeneficiarioAsync(usuarioAutenticadoId.Value);
+
+                tieneAccesoComoHeredero = misHerencias.Any(a =>
+                    a.ActivoDigitalId == id &&
+                    a.Estado == EstadoBeneficiario.Aceptado &&
+                    a.FechaLiberacion is not null);
+            }
+
+            if (!esTitular && !tieneAccesoComoHeredero)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    new { mensaje = "No tenes permiso para acceder al archivo de este activo digital." });
+            }
+
+            var (rutaArchivo, nombreOriginal) = await _activoDigitalService.ObtenerArchivoAsync(id);
+
+            if (string.IsNullOrEmpty(rutaArchivo) || !System.IO.File.Exists(rutaArchivo))
+            {
+                return NotFound(new { mensaje = "Este activo no tiene ningun archivo adjunto disponible." });
+            }
+
+            var contentType = ObtenerContentType(nombreOriginal);
+            var contenido = System.IO.File.OpenRead(rutaArchivo);
+            return File(contenido, contentType, nombreOriginal);
+        }
+        catch (RecursoNoEncontradoException ex)
+        {
+            return NotFound(new { mensaje = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error inesperado al obtener el archivo del activo digital con Id {Id}.", id);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { mensaje = "Ocurrio un error interno al procesar la solicitud." });
+        }
+    }
+
+    // Misma logica que CertificadosDefuncionController.ObtenerContentType: se
+    // infiere el Content-Type a partir de la EXTENSION del nombre original
+    // guardado (nunca la del archivo en disco, que es un Guid sin extension
+    // confiable), ya que SubirArchivo/SubirArchivoAsync ya restringieron de
+    // antemano los tipos posibles a PDF/JPG/PNG.
+    private static string ObtenerContentType(string nombreArchivoOriginal)
+    {
+        var extension = Path.GetExtension(nombreArchivoOriginal).ToLowerInvariant();
+        return extension switch
+        {
+            ".pdf" => "application/pdf",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            _ => "application/octet-stream"
+        };
+    }
 }

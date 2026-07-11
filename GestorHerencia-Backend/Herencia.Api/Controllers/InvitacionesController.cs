@@ -25,6 +25,10 @@ public class MiHerenciaDTO
 {
     public int AsignacionId { get; set; }
 
+    // Id del ActivoDigital en sí: el cliente lo necesita para poder pedir su archivo
+    // adjunto (GET /api/activosdigitales/{id}/archivo) una vez que "Disponible" es true.
+    public int ActivoDigitalId { get; set; }
+
     // Id del Usuario titular/otorgante: el cliente lo necesita para poder subir el
     // certificado de defunción de este titular puntual (POST /api/certificados-defuncion
     // exige "usuarioTitularId" en el body), no solo para mostrar su nombre en pantalla.
@@ -40,6 +44,16 @@ public class MiHerenciaDTO
     // quedó liberado: recién ahí el heredero puede considerarlo "disponible" de verdad,
     // más allá de haber aceptado o no la invitación.
     public bool Disponible { get; set; }
+
+    // --- Por qué estos dos campos solo se completan cuando Disponible == true ---
+    // Descripcion puede contener datos sensibles reales del activo (clave privada de una
+    // wallet, CBU, credenciales de una cuenta): mostrárselos a un heredero que YA aceptó
+    // la invitación pero cuyo otorgante sigue con vida sería una fuga de información,
+    // exactamente lo que el mecanismo de "liberación" recién al confirmar el
+    // fallecimiento busca evitar. Por eso ObtenerMisHerencias (más abajo) los deja
+    // vacíos/null hasta que Disponible sea true.
+    public string? Descripcion { get; set; }
+    public string? NombreArchivoOriginal { get; set; }
 }
 
 // Modelo de datos recibido para procesar la invitacion.
@@ -254,10 +268,12 @@ public class InvitacionesController : ControllerBase
             {
                 var titular = await _usuarioService.ObtenerUsuarioPorIdAsync(herencia.UsuarioOtorganteId);
                 var activo = await _activoDigitalService.ObtenerActivoDigitalPorIdAsync(herencia.ActivoDigitalId);
+                var disponible = herencia.FechaLiberacion is not null;
 
                 dtos.Add(new MiHerenciaDTO
                 {
                     AsignacionId = herencia.Id,
+                    ActivoDigitalId = herencia.ActivoDigitalId,
                     TitularId = herencia.UsuarioOtorganteId,
                     TitularNombre = titular.Nombre,
                     ActivoNombre = activo.Nombre,
@@ -265,7 +281,12 @@ public class InvitacionesController : ControllerBase
                     Porcentaje = herencia.PorcentajeAsignado,
                     CondicionLiberacion = herencia.CondicionLiberacion,
                     Estado = herencia.Estado.ToString(),
-                    Disponible = herencia.FechaLiberacion is not null
+                    Disponible = disponible,
+                    // Recién visibles cuando el bien está liberado (ver el comentario en
+                    // MiHerenciaDTO): antes de eso, un heredero que ya aceptó no tiene
+                    // forma de ver esta información igual, aunque la pida.
+                    Descripcion = disponible ? activo.Descripcion : null,
+                    NombreArchivoOriginal = disponible ? activo.NombreArchivoOriginal : null
                 });
             }
 

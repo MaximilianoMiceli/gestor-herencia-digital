@@ -86,6 +86,16 @@ public class CertificadoDefuncionService : ICertificadoDefuncionService
                 throw new RecursoNoEncontradoException($"No se encontro el usuario con Id {usuarioTitularId}.");
             }
 
+            // --- El fallecimiento de este titular ya fue confirmado antes: no se acepta otro ---
+            // Sin este chequeo, cualquier heredero aceptado podia seguir subiendo
+            // certificados indefinidamente para la misma persona, incluso despues
+            // de que un Administrador ya hubiera aprobado uno y liberado los bienes.
+            if (await _certificadoDefuncionRepository.ExisteCertificadoAprobadoAsync(usuarioTitularId))
+            {
+                throw new ReglaNegocioException(
+                    "El fallecimiento de este titular ya fue confirmado anteriormente; no se puede subir otro certificado.");
+            }
+
             // --- Regla de negocio central: solo un heredero ACEPTADO puede subir esto ---
             // Cubre las DOS vias posibles de llegar aca (subida proactiva, o
             // subida pedida tras el escalamiento de VerificacionVidaService):
@@ -101,7 +111,8 @@ public class CertificadoDefuncionService : ICertificadoDefuncionService
                     "Solo un heredero que ya acepto la invitacion puede subir el certificado de defuncion de este titular.");
             }
 
-            var rutaGuardada = await _almacenamientoService.GuardarArchivoAsync(contenidoArchivo, nombreArchivoOriginal);
+            var rutaGuardada = await _almacenamientoService.GuardarArchivoAsync(
+                contenidoArchivo, nombreArchivoOriginal, subcarpeta: "certificados_defuncion");
 
             var certificado = new CertificadoDefuncion
             {
@@ -312,6 +323,18 @@ public class CertificadoDefuncionService : ICertificadoDefuncionService
         {
             throw new ReglaNegocioException("Ocurrio un error al rechazar el certificado de defuncion.", ex);
         }
+    }
+
+    public async Task<(string RutaArchivo, string NombreArchivoOriginal)> ObtenerArchivoAsync(int certificadoId)
+    {
+        var certificado = await _certificadoDefuncionRepository.ObtenerConUsuariosAsync(certificadoId);
+
+        if (certificado is null)
+        {
+            throw new RecursoNoEncontradoException($"No se encontro el certificado de defuncion con Id {certificadoId}.");
+        }
+
+        return (certificado.RutaArchivo, certificado.NombreArchivoOriginal);
     }
 
     private static CertificadoDefuncionDTO MapearADTO(CertificadoDefuncion certificado)
