@@ -28,6 +28,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { UsuariosService } from '../services/usuarios.service';
+import { parsearFechaDDMMAAAA, formatearFechaDDMMAAAA, calcularEdad } from '../utils/fecha';
+
+const DNI_REGEX = /^\d{7,8}$/;
 
 export default function EditarPerfilScreen() {
   const router = useRouter();
@@ -46,6 +49,8 @@ export default function EditarPerfilScreen() {
   // Sección 1: datos de perfil
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
+  const [dni, setDni] = useState('');
+  const [fechaNacimientoTexto, setFechaNacimientoTexto] = useState('');
   const [savingPerfil, setSavingPerfil] = useState(false);
 
   // Sección 2: cambio de contraseña
@@ -69,6 +74,8 @@ export default function EditarPerfilScreen() {
         const usuario = await UsuariosService.obtenerPorId(userId);
         setNombre(usuario.nombre);
         setEmail(usuario.email);
+        setDni(usuario.dni);
+        setFechaNacimientoTexto(formatearFechaDDMMAAAA(new Date(usuario.fechaNacimiento)));
         setDobleFactorHabilitado(usuario.dobleFactorHabilitado);
       } catch (err: any) {
         Alert.alert('Error', err.message || 'No se pudo cargar el perfil.');
@@ -82,14 +89,38 @@ export default function EditarPerfilScreen() {
 
   const handleGuardarPerfil = async () => {
     if (!userId) return;
-    if (!nombre.trim() || !email.trim()) {
-      Alert.alert('Campos requeridos', 'Nombre y email no pueden estar vacíos.');
+    if (!nombre.trim() || !email.trim() || !dni.trim() || !fechaNacimientoTexto.trim()) {
+      Alert.alert('Campos requeridos', 'Nombre, email, DNI y fecha de nacimiento no pueden estar vacíos.');
       return;
     }
 
+    // Mismas reglas que register.tsx y que UsuarioService.ActualizarUsuarioAsync en el
+    // backend: se valida acá también para dar feedback inmediato sin esperar la red.
+    if (!DNI_REGEX.test(dni.trim())) {
+      Alert.alert('Error', 'El DNI debe tener 7 u 8 dígitos numéricos.');
+      return;
+    }
+
+    const fechaNacimiento = parsearFechaDDMMAAAA(fechaNacimientoTexto);
+    if (!fechaNacimiento) {
+      Alert.alert('Error', 'Ingresá una fecha de nacimiento válida (DD/MM/AAAA).');
+      return;
+    }
+    if (calcularEdad(fechaNacimiento) < 18) {
+      Alert.alert('Error', 'Debés ser mayor de edad (18 años).');
+      return;
+    }
+
+    // Se arma el ISO "AAAA-MM-DD" a mano (no con toISOString(), que convierte a UTC
+    // primero y puede correr la fecha un día: ver el comentario detallado en
+    // register.tsx, donde se resolvió el mismo problema).
+    const anio = fechaNacimiento.getFullYear();
+    const mes = String(fechaNacimiento.getMonth() + 1).padStart(2, '0');
+    const dia = String(fechaNacimiento.getDate()).padStart(2, '0');
+
     setSavingPerfil(true);
     try {
-      await UsuariosService.actualizarPerfil(userId, nombre.trim(), email.trim());
+      await UsuariosService.actualizarPerfil(userId, nombre.trim(), email.trim(), dni.trim(), `${anio}-${mes}-${dia}`);
       Alert.alert('Perfil actualizado', 'Tus datos se guardaron con éxito.');
     } catch (err: any) {
       Alert.alert('Error', err.message || 'No se pudo actualizar el perfil.');
@@ -183,6 +214,27 @@ export default function EditarPerfilScreen() {
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
+              />
+            </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>DNI</Text>
+              <TextInput
+                style={styles.textInput}
+                value={dni}
+                onChangeText={setDni}
+                keyboardType="number-pad"
+                maxLength={8}
+              />
+            </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Fecha de nacimiento</Text>
+              <TextInput
+                style={styles.textInput}
+                value={fechaNacimientoTexto}
+                onChangeText={setFechaNacimientoTexto}
+                placeholder="DD/MM/AAAA"
+                placeholderTextColor="#8A9E95"
+                maxLength={10}
               />
             </View>
             <TouchableOpacity style={styles.saveButton} onPress={handleGuardarPerfil} disabled={savingPerfil}>

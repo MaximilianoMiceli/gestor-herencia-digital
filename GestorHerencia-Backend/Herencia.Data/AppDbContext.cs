@@ -62,6 +62,24 @@ public class AppDbContext : DbContext
             entity.HasIndex(u => u.Email)
                   .IsUnique();
 
+            // Dni obligatorio, con un largo maximo generoso (documentos de otros
+            // paises pueden tener mas digitos que un DNI argentino de 7/8) pero
+            // acotado igual para no dejar una columna de texto ilimitado. Se
+            // crea, ademas, un indice UNICO: la misma logica que ya se aplica a
+            // Email (nadie puede registrarse dos veces con el mismo documento).
+            entity.Property(u => u.Dni)
+                  .IsRequired()
+                  .HasMaxLength(15);
+
+            entity.HasIndex(u => u.Dni)
+                  .IsUnique();
+
+            // FechaNacimiento obligatoria: todo Usuario tiene que declarar su
+            // fecha de nacimiento en el alta (ver la validacion de mayoria de
+            // edad en UsuarioService.CrearUsuarioAsync).
+            entity.Property(u => u.FechaNacimiento)
+                  .IsRequired();
+
             // PasswordHash y PasswordSalt son obligatorios: un Usuario no puede
             // existir sin sus credenciales de seguridad calculadas.
             entity.Property(u => u.PasswordHash)
@@ -377,6 +395,8 @@ public class AppDbContext : DbContext
                 Id = 1,
                 Nombre = "Maximiliano Miceli",
                 Email = "maximiceli@hotmail.com.ar",
+                Dni = "30111222",
+                FechaNacimiento = new DateTime(1988, 3, 14, 0, 0, 0, DateTimeKind.Utc),
                 PasswordHash = passwordHashSeed,
                 PasswordSalt = passwordSaltSeed,
                 Rol = RolUsuario.Administrador,
@@ -388,6 +408,8 @@ public class AppDbContext : DbContext
                 Id = 2,
                 Nombre = "Ana Torres",
                 Email = "ana.torres@example.com",
+                Dni = "28555666",
+                FechaNacimiento = new DateTime(1982, 7, 22, 0, 0, 0, DateTimeKind.Utc),
                 PasswordHash = passwordHashSeed,
                 PasswordSalt = passwordSaltSeed,
                 Rol = RolUsuario.Usuario,
@@ -399,6 +421,8 @@ public class AppDbContext : DbContext
                 Id = 3,
                 Nombre = "Carlos Sosa",
                 Email = "carlos.sosa@example.com",
+                Dni = "33999888",
+                FechaNacimiento = new DateTime(1995, 11, 5, 0, 0, 0, DateTimeKind.Utc),
                 PasswordHash = passwordHashSeed,
                 PasswordSalt = passwordSaltSeed,
                 Rol = RolUsuario.Usuario,

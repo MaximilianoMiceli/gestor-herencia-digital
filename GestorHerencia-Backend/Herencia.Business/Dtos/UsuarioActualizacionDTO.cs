@@ -27,4 +27,14 @@ public class UsuarioActualizacionDTO
 
     [Required(ErrorMessage = "El email es obligatorio.")]
     public string Email { get; set; } = string.Empty;
+
+    // Se permite corregir el DNI y la fecha de nacimiento desde el mismo
+    // formulario de "editar perfil" (ej: un error de tipeo al registrarse),
+    // con las mismas reglas de validacion que en el alta (ver
+    // UsuarioService.ActualizarUsuarioAsync).
+    [Required(ErrorMessage = "El DNI es obligatorio.")]
+    public string Dni { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "La fecha de nacimiento es obligatoria.")]
+    public DateTime FechaNacimiento { get; set; }
 }

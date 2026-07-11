@@ -16,15 +16,20 @@ import GradientText from '../../components/GradientText';
 import AuthButton from '../../components/AuthButton';
 import AuthInput from '../../components/AuthInput';
 import { AuthService } from '../../services/auth.service';
+import { parsearFechaDDMMAAAA, calcularEdad } from '../../utils/fecha';
+
+const DNI_REGEX = /^\d{7,8}$/;
 
 export default function RegisterScreen() {
   const router = useRouter();
   const { email: initialEmail, acceptInvitationId } = useLocalSearchParams<{ email?: string; acceptInvitationId?: string }>();
-  
+
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState(initialEmail || '');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [dni, setDni] = useState('');
+  const [fechaNacimientoTexto, setFechaNacimientoTexto] = useState('');
   const [loading, setLoading] = useState(false);
 
   /**
@@ -32,22 +37,61 @@ export default function RegisterScreen() {
    */
   const handleRegister = async () => {
     // 1. Validar campos vacíos
-    if (!nombre || !email || !password || !confirmPassword) {
+    if (!nombre || !email || !password || !confirmPassword || !dni || !fechaNacimientoTexto) {
       Alert.alert('Error', 'Todos los campos son obligatorios.');
       return;
     }
-    
+
     // 2. Validar coincidencia de contraseña y reconfirmación
     if (password !== confirmPassword) {
       Alert.alert('Error', 'Las contraseñas no coinciden.');
       return;
     }
 
+    // 3. Validar formato de DNI (7 u 8 dígitos): mismo criterio que
+    // UsuarioService.CrearUsuarioAsync del backend, para avisar acá sin
+    // necesidad de esperar el viaje de red.
+    if (!DNI_REGEX.test(dni.trim())) {
+      Alert.alert('Error', 'El DNI debe tener 7 u 8 dígitos numéricos.');
+      return;
+    }
+
+    // 4. Validar fecha de nacimiento: formato de calendario real y mayoría de
+    // edad (misma regla que ValidarFechaNacimiento en el backend).
+    const fechaNacimiento = parsearFechaDDMMAAAA(fechaNacimientoTexto);
+    if (!fechaNacimiento) {
+      Alert.alert('Error', 'Ingresá una fecha de nacimiento válida (DD/MM/AAAA).');
+      return;
+    }
+    if (calcularEdad(fechaNacimiento) < 18) {
+      Alert.alert('Error', 'Debés ser mayor de edad (18 años) para registrarte.');
+      return;
+    }
+
     setLoading(true);
     try {
-      // 3. Petición POST al endpoint de registro
-      await AuthService.register({ nombre, email, password });
-      
+      // 5. Petición POST al endpoint de registro. La fecha viaja como
+      // "AAAA-MM-DD" (ISO 8601), el formato que el model binder de ASP.NET
+      // Core espera para deserializar un DateTime desde JSON.
+      //
+      // OJO: se arma el string A MANO a partir de los componentes locales
+      // (año/mes/día), NUNCA con `fechaNacimiento.toISOString()`. Ese método
+      // convierte a UTC primero: alguien nacido, por ejemplo, el 01/01/1990
+      // en Argentina (UTC-3) tiene medianoche local == 1989-12-31 21:00 UTC,
+      // así que `toISOString().slice(0, 10)` devolvería "1989-12-31" — un día
+      // ANTES de la fecha real que el usuario escribió en el formulario.
+      const anio = fechaNacimiento.getFullYear();
+      const mes = String(fechaNacimiento.getMonth() + 1).padStart(2, '0');
+      const dia = String(fechaNacimiento.getDate()).padStart(2, '0');
+
+      await AuthService.register({
+        nombre,
+        email,
+        password,
+        dni: dni.trim(),
+        fechaNacimiento: `${anio}-${mes}-${dia}`,
+      });
+
       // 4. Feedback visual y redirección para iniciar sesión
       Alert.alert('Éxito', 'Cuenta creada correctamente. Por favor, inicia sesión.', [
         { 
@@ -90,14 +134,27 @@ export default function RegisterScreen() {
               value={nombre}
               onChangeText={setNombre}
             />
-            <AuthInput 
-              placeholder="Email" 
+            <AuthInput
+              placeholder="Email"
               keyboardType="email-address"
               value={email}
               onChangeText={setEmail}
             />
-            <AuthInput 
-              placeholder="Contraseña" 
+            <AuthInput
+              placeholder="DNI"
+              keyboardType="number-pad"
+              maxLength={8}
+              value={dni}
+              onChangeText={setDni}
+            />
+            <AuthInput
+              placeholder="Fecha de nacimiento (DD/MM/AAAA)"
+              maxLength={10}
+              value={fechaNacimientoTexto}
+              onChangeText={setFechaNacimientoTexto}
+            />
+            <AuthInput
+              placeholder="Contraseña"
               secureTextEntry
               value={password}
               onChangeText={setPassword}

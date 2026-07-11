@@ -45,4 +45,17 @@ public class UsuarioCreacionDTO
     // deberia loguearse ni devolverse en una respuesta de la Api.
     [Required(ErrorMessage = "La contraseña es obligatoria.")]
     public string Password { get; set; } = string.Empty;
+
+    // DNI del futuro titular. [Required] cubre el caso "vacio"; el FORMATO
+    // (solo digitos, largo 7-8) se valida en el servicio, igual criterio que
+    // el Email de arriba.
+    [Required(ErrorMessage = "El DNI es obligatorio.")]
+    public string Dni { get; set; } = string.Empty;
+
+    // Fecha de nacimiento. Ademas de ser un dato de identidad, el servicio la
+    // usa para exigir que el titular sea mayor de edad (ver
+    // UsuarioService.CrearUsuarioAsync): un sistema que decide sobre la
+    // liberacion de bienes hacia terceros no puede operar con menores.
+    [Required(ErrorMessage = "La fecha de nacimiento es obligatoria.")]
+    public DateTime FechaNacimiento { get; set; }
 }

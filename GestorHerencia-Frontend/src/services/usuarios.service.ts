@@ -14,6 +14,10 @@ export interface UsuarioDTO {
   id: number;
   nombre: string;
   email: string;
+  /** Documento Nacional de Identidad: 7 u 8 dígitos. */
+  dni: string;
+  /** Fecha de nacimiento en formato ISO ("AAAA-MM-DDTHH:mm:ss"). */
+  fechaNacimiento: string;
   fechaCreacion: string;
   /** 0 = Usuario, 1 = Administrador (RolUsuario del backend) */
   rol: number;
@@ -27,9 +31,15 @@ export class UsuariosService {
     return response.data;
   }
 
-  /** Llama a: PUT /api/usuarios/{id} (actualiza Nombre/Email) */
-  static async actualizarPerfil(id: number, nombre: string, email: string): Promise<UsuarioDTO> {
-    const response = await api.put<UsuarioDTO>(`/usuarios/${id}`, { nombre, email });
+  /** Llama a: PUT /api/usuarios/{id} (actualiza Nombre/Email/Dni/FechaNacimiento) */
+  static async actualizarPerfil(
+    id: number,
+    nombre: string,
+    email: string,
+    dni: string,
+    fechaNacimiento: string
+  ): Promise<UsuarioDTO> {
+    const response = await api.put<UsuarioDTO>(`/usuarios/${id}`, { nombre, email, dni, fechaNacimiento });
     return response.data;
   }
 

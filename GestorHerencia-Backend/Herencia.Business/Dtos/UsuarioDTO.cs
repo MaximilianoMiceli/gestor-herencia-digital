@@ -25,6 +25,14 @@ public class UsuarioDTO
 
     public string Email { get; set; } = string.Empty;
 
+    // DNI y fecha de nacimiento: se exponen en el DTO de salida (a diferencia
+    // de PasswordHash/PasswordSalt) porque el propio dueño de la cuenta
+    // necesita poder VERLOS en su pantalla de perfil para editarlos si hace
+    // falta corregir un error de tipeo (ver editar-perfil.tsx en el frontend).
+    public string Dni { get; set; } = string.Empty;
+
+    public DateTime FechaNacimiento { get; set; }
+
     // Fecha de creacion del registro (dato de auditoria), util para mostrarla en
     // una futura UI (ej: "Usuario registrado el 07/07/2026").
     public DateTime FechaCreacion { get; set; }

@@ -109,6 +109,23 @@ public class UsuarioService : IUsuarioService
             throw new ReglaNegocioException("La contrasena debe tener al menos 6 caracteres.");
         }
 
+        // --- Validacion de DNI: solo digitos, 7 u 8 caracteres ---
+        // Cubre el formato de un DNI argentino (el mercado principal de este
+        // proyecto). No se valida "existencia real" del documento (eso
+        // requeriria integrar con un organismo oficial, fuera del alcance de
+        // este sistema): solo se rechaza lo que estructuralmente no puede ser
+        // un DNI valido (letras, simbolos, largos absurdos).
+        if (string.IsNullOrWhiteSpace(usuarioCreacionDTO.Dni) ||
+            !Regex.IsMatch(usuarioCreacionDTO.Dni, @"^\d{7,8}$"))
+        {
+            throw new ReglaNegocioException("El DNI debe tener 7 u 8 digitos numericos.");
+        }
+
+        // --- Validacion de fecha de nacimiento: fecha real Y mayoria de edad ---
+        // ValidarMayoriaDeEdad (metodo privado, mas abajo) centraliza el
+        // calculo de edad para reutilizarlo tambien desde ActualizarUsuarioAsync.
+        ValidarFechaNacimiento(usuarioCreacionDTO.FechaNacimiento);
+
         // --- Paso 2: logica de negocio + acceso a datos, protegida con try-catch ---
         try
         {
@@ -130,6 +147,8 @@ public class UsuarioService : IUsuarioService
             {
                 Nombre = usuarioCreacionDTO.Nombre.Trim(),
                 Email = usuarioCreacionDTO.Email.Trim(),
+                Dni = usuarioCreacionDTO.Dni.Trim(),
+                FechaNacimiento = usuarioCreacionDTO.FechaNacimiento.Date,
                 PasswordHash = passwordHash,
                 PasswordSalt = passwordSalt,
                 // Dato de auditoria minimo: quien genero el alta. En una etapa
@@ -273,6 +292,14 @@ public class UsuarioService : IUsuarioService
             throw new ReglaNegocioException("El email ingresado no tiene un formato valido.");
         }
 
+        if (string.IsNullOrWhiteSpace(usuarioActualizacionDTO.Dni) ||
+            !Regex.IsMatch(usuarioActualizacionDTO.Dni, @"^\d{7,8}$"))
+        {
+            throw new ReglaNegocioException("El DNI debe tener 7 u 8 digitos numericos.");
+        }
+
+        ValidarFechaNacimiento(usuarioActualizacionDTO.FechaNacimiento);
+
         try
         {
             // --- Paso 2: buscar la entidad EXISTENTE (no se "crea" una nueva) ---
@@ -294,6 +321,8 @@ public class UsuarioService : IUsuarioService
             // sobrescribirlas por este camino.
             usuario.Nombre = usuarioActualizacionDTO.Nombre.Trim();
             usuario.Email = usuarioActualizacionDTO.Email.Trim();
+            usuario.Dni = usuarioActualizacionDTO.Dni.Trim();
+            usuario.FechaNacimiento = usuarioActualizacionDTO.FechaNacimiento.Date;
 
             // Dato de auditoria: se deja constancia de CUANDO y QUIEN modifico
             // el registro (bonus de auditoria pedido por la rubrica).
@@ -706,6 +735,55 @@ public class UsuarioService : IUsuarioService
     // esta clase) para que la logica de seguridad de contrasenas tenga un
     // unico lugar de verdad, reutilizable por cualquier otro servicio futuro.
 
+    // ValidarFechaNacimiento: centraliza la regla "el titular debe ser mayor
+    // de edad" para que CrearUsuarioAsync y ActualizarUsuarioAsync apliquen
+    // EXACTAMENTE la misma regla (evita que, por ejemplo, alguien pudiera
+    // registrarse siendo mayor pero despues "corregir" su fecha de
+    // nacimiento a una que lo haria menor, sin que nadie lo revise).
+    private static void ValidarFechaNacimiento(DateTime fechaNacimiento)
+    {
+        var hoy = DateTime.UtcNow.Date;
+
+        // Una fecha de nacimiento en el futuro es, directamente, un dato
+        // estructuralmente invalido: se rechaza antes de calcular ninguna edad.
+        if (fechaNacimiento.Date > hoy)
+        {
+            throw new ReglaNegocioException("La fecha de nacimiento no puede ser futura.");
+        }
+
+        // --- Calculo de edad exacta (no solo "restar los anios") ---
+        // Restar unicamente "hoy.Year - fechaNacimiento.Year" sobreestima la
+        // edad de alguien que todavia no cumplio anios este anio calendario
+        // (ej: nacido el 20/12/2008, hoy 10/07/2026: la resta simple da 18,
+        // pero la persona recien cumple 18 en diciembre). Se corrige
+        // restando 1 si el cumpleanios de este anio TODAVIA no llego.
+        var edad = hoy.Year - fechaNacimiento.Year;
+        if (fechaNacimiento.Date > hoy.AddYears(-edad))
+        {
+            edad--;
+        }
+
+        // --- Por que exigir mayoria de edad (18 anios) ---
+        // Este sistema decide, en ultima instancia, la liberacion de bienes
+        // (claves de billeteras, datos bancarios) hacia terceros: operarlo
+        // exige la capacidad legal plena que el Codigo Civil y Comercial
+        // argentino reconoce recien a partir de los 18 anios (Art. 25). No es
+        // una eleccion de producto arbitraria, es un requisito del propio
+        // dominio que el sistema representa.
+        if (edad < 18)
+        {
+            throw new ReglaNegocioException("Debes ser mayor de edad (18 anios) para registrarte.");
+        }
+
+        // Limite superior de sanidad: una fecha de nacimiento de mas de 120
+        // anios atras es, con certeza practica, un error de tipeo (ej: un
+        // usuario que quiso escribir "1998" y tipeo "1898"), no un dato real.
+        if (edad > 120)
+        {
+            throw new ReglaNegocioException("La fecha de nacimiento ingresada no es valida.");
+        }
+    }
+
     // MapearADTO centraliza en un unico lugar la conversion de la entidad
     // "Usuario" (Data) hacia "UsuarioDTO" (Business/salida). Tenerlo en un
     // solo metodo evita repetir esta logica de mapeo en cada operacion del
@@ -719,6 +797,8 @@ public class UsuarioService : IUsuarioService
             Id = usuario.Id,
             Nombre = usuario.Nombre,
             Email = usuario.Email,
+            Dni = usuario.Dni,
+            FechaNacimiento = usuario.FechaNacimiento,
             FechaCreacion = usuario.FechaCreacion,
             Rol = usuario.Rol,
             DobleFactorHabilitado = usuario.DobleFactorHabilitado

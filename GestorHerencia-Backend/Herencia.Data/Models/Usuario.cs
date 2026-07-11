@@ -40,6 +40,23 @@ public class Usuario : EntidadBaseAuditable
 
     public string Email { get; set; } = string.Empty;
 
+    // --- Datos de identidad real, no solo de cuenta ---
+    // Dni: Documento Nacional de Identidad del titular. Se exige en el alta
+    // (ver UsuarioService.CrearUsuarioAsync) porque este sistema custodia
+    // informacion critica de terceros (claves de billeteras, CBUs, y
+    // eventualmente decide a quien libera esos bienes): saber con certeza
+    // QUIEN es cada cuenta deja de ser opcional en este dominio. Se guarda
+    // como string (no int) porque un DNI puede tener ceros a la izquierda y
+    // nunca se opera aritmeticamente sobre el.
+    public string Dni { get; set; } = string.Empty;
+
+    // FechaNacimiento: necesaria, ademas de como dato de identidad, para
+    // poder validar que el titular sea mayor de edad al registrarse (ver la
+    // regla de negocio en UsuarioService): un sistema que decide la
+    // liberacion de bienes hacia terceros exige capacidad legal plena de
+    // quien lo usa.
+    public DateTime FechaNacimiento { get; set; }
+
     // --- Seguridad de contrasenas: NUNCA se guarda la contrasena en texto plano. ---
     // PasswordHash: resultado de aplicar un algoritmo de hashing (ej: HMACSHA512 o PBKDF2)
     // sobre la contrasena original combinada con el "salt".

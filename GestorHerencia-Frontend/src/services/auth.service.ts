@@ -22,6 +22,10 @@ export interface RegistroDTO {
   nombre: string;
   email: string;
   password: string;
+  /** Documento Nacional de Identidad: 7 u 8 dígitos, validado también en el backend. */
+  dni: string;
+  /** Fecha de nacimiento en formato ISO ("AAAA-MM-DD"). El backend exige mayoría de edad. */
+  fechaNacimiento: string;
 }
 
 /**
@@ -46,6 +50,8 @@ export interface UsuarioDTO {
   id: number;
   nombre: string;
   email: string;
+  dni: string;
+  fechaNacimiento: string;
   rol: string;
   dobleFactorHabilitado: boolean;
 }
