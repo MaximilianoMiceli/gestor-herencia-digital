@@ -42,4 +42,11 @@ public class UsuarioRepository : RepositorioBase<Usuario>, IUsuarioRepository
         return await _contexto.Usuarios
             .FirstOrDefaultAsync(u => u.PasswordResetToken == token);
     }
+
+    // ObtenerPorDniAsync: busca un Usuario filtrando por su columna Dni.
+    public async Task<Usuario?> ObtenerPorDniAsync(string dni)
+    {
+        return await _contexto.Usuarios
+            .FirstOrDefaultAsync(u => u.Dni == dni);
+    }
 }

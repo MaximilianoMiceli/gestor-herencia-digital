@@ -88,10 +88,15 @@ public class AuthController : ControllerBase
         catch (ReglaNegocioException ex)
         {
             // Nombre vacio, email con formato invalido, contrasena demasiado
-            // corta, email ya registrado (constraint UNIQUE de la base de
-            // datos), etc.: todos estos casos ya llegan envueltos en
-            // ReglaNegocioException desde UsuarioService. 400 Bad Request:
-            // el problema es responsabilidad del cliente (datos invalidos).
+            // corta, email o DNI ya registrados (verificado explicitamente en
+            // UsuarioService.CrearUsuarioAsync antes del INSERT), etc.: todos
+            // estos casos ya llegan envueltos en ReglaNegocioException desde
+            // UsuarioService. Se loguea como Warning (no Error: no es una
+            // falla tecnica del servidor, es un dato invalido/duplicado del
+            // cliente) para que estos intentos de registro rechazados queden
+            // rastreables en los logs sin tener que reproducirlos a mano.
+            // 400 Bad Request: el problema es responsabilidad del cliente.
+            _logger.LogWarning(ex, "Registro de usuario rechazado: {Mensaje}", ex.Message);
             return BadRequest(new { mensaje = ex.Message });
         }
         catch (Exception ex)

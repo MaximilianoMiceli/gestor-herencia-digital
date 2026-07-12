@@ -64,7 +64,7 @@ export default function Dashboard({
 
   // Escala compartida para animar la pulsación del botón principal.
   const addBtnScale = useSharedValue(1);
-  // Escala compartida para animar la pulsación del botón de herencias (naranja).
+  // Escala compartida para animar la pulsación del botón de herencias (azul).
   const inheritancesBtnScale = useSharedValue(1);
 
   /**
@@ -292,16 +292,28 @@ export default function Dashboard({
             </Pressable>
           </Animated.View>
 
-          {/* BOTÓN ORANGE "+ AGREGAR NUEVO ACTIVO" (Fiel al Frame 41, redirige a "Mis Herencias") */}
+          {/* BOTÓN "MIS HERENCIAS" (Fiel al Frame 41). Se usa azul en vez de naranja/amarillo
+              para no repetir el color que ya usamos como aviso de "2FA Inactivo" y
+              "Verificación de vida" pendiente en la card de arriba (ver textOrange):
+              con el mismo color, este botón se leía como una advertencia en vez de
+              una acción normal de navegación. */}
           <Animated.View style={[animatedInheritancesBtnStyle, { marginTop: 16 }]}>
-            <Pressable
-              style={styles.addButtonOrange}
-              onPress={() => router.push('/mis-herencias')}
-              onPressIn={() => handlePressIn(inheritancesBtnScale)}
-              onPressOut={() => handlePressOut(inheritancesBtnScale)}
-            >
-              <Text style={styles.addButtonOrangeText}>Mis herencias</Text>
-            </Pressable>
+            <View style={styles.inheritancesBtnWrapper}>
+              <Pressable
+                style={styles.addButtonBlue}
+                onPress={() => router.push('/mis-herencias')}
+                onPressIn={() => handlePressIn(inheritancesBtnScale)}
+                onPressOut={() => handlePressOut(inheritancesBtnScale)}
+              >
+                <Text style={styles.addButtonBlueText}>Mis herencias</Text>
+              </Pressable>
+              {/* Puntito rojo de notificación: avisa, apenas se entra al Dashboard, que hay
+                  herencias nuevas asignadas (mismo dato que ya usa el banner de arriba,
+                  pendingHerenciasCount) sin necesidad de leer todo el banner o el texto. */}
+              {pendingHerenciasCount > 0 && (
+                <View style={styles.inheritancesBtnDot} />
+              )}
+            </View>
           </Animated.View>
         </View>
       </ScrollView>
@@ -484,19 +496,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#2E7D32',
   },
-  addButtonOrange: {
-    backgroundColor: '#FFF9E6', // Fondo naranja claro pastel
+  inheritancesBtnWrapper: {
+    // 'relative' para poder anclar el puntito de notificación en una esquina del botón.
+    position: 'relative',
+  },
+  addButtonBlue: {
+    backgroundColor: '#E7F1FA', // Fondo azul claro pastel (coherente con el degradé del header)
     borderWidth: 1.5,
-    borderColor: '#E2A53C', // Borde naranja
+    borderColor: '#2D6E9E', // Borde azul
     borderRadius: 16,
     paddingVertical: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addButtonOrangeText: {
+  addButtonBlueText: {
     fontFamily: 'MPLUS2-Bold',
     fontSize: 16,
-    color: '#E2A53C',
+    color: '#2D6E9E',
+  },
+  inheritancesBtnDot: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#D32F2F', // Rojo de notificación (mismo tono que usamos para "rechazado")
+    borderWidth: 2,
+    borderColor: '#DAF8BD', // Borde del color de fondo general, para que el punto no se vea pegado al botón
   },
   notificationPill: {
     position: 'absolute',

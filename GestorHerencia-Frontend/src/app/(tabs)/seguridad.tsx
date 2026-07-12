@@ -16,6 +16,10 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { LogOut, User, ShieldCheck, HelpCircle, ChevronRight } from 'lucide-react-native';
 
+/**
+ * Pantalla "Más" (pestaña Seguridad del Tab Navigator). Menú de accesos a Editar perfil,
+ * al panel de administrador (condicional según rol) y a Ayuda, más el botón de logout.
+ */
 export default function SeguridadScreen() {
   const router = useRouter();
   const { signOut, userRole } = useAuth();

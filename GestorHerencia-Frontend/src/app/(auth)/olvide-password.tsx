@@ -29,6 +29,11 @@ export default function OlvidePasswordScreen() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
+  /**
+   * Dispara el pedido de reseteo de contraseña. No hay nada que validar además de
+   * "no vacío": el formato del email y si corresponde o no a una cuenta lo resuelve
+   * el backend, que además responde siempre igual (ver comentario del encabezado).
+   */
   const handleEnviar = async () => {
     if (!email.trim()) {
       Alert.alert('Error', 'Ingresá tu email para poder enviarte el enlace de recuperación.');

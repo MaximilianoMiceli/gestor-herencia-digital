@@ -23,6 +23,9 @@ import { AuthService } from '../../services/auth.service';
 
 export default function ResetearPasswordScreen() {
   const router = useRouter();
+  // Precarga el token si la pantalla se abrió desde el link real (?token=...); si el
+  // usuario llegó acá manualmente (botón "Ya tengo un código" de olvide-password.tsx),
+  // el campo arranca vacío y lo completa pegando el valor a mano.
   const { token: tokenDeLaUrl } = useLocalSearchParams<{ token?: string }>();
 
   const [token, setToken] = useState(tokenDeLaUrl ?? '');
@@ -30,6 +33,11 @@ export default function ResetearPasswordScreen() {
   const [confirmarPassword, setConfirmarPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  /**
+   * Valida los campos localmente (token y contraseñas presentes, contraseñas
+   * coincidentes) y recién ahí llama al backend, que es quien realmente valida
+   * que el token exista, no haya expirado y no haya sido usado antes.
+   */
   const handleResetear = async () => {
     if (!token.trim() || !passwordNueva || !confirmarPassword) {
       Alert.alert('Error', 'Completá el código y la nueva contraseña en ambos campos.');

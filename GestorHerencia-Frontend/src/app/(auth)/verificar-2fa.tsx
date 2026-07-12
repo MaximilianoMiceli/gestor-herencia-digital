@@ -24,6 +24,11 @@ import { InvitacionesService } from '../../services/invitaciones.service';
 export default function Verificar2FAScreen() {
   const router = useRouter();
   const { signIn } = useAuth();
+  // "usuarioId" identifica a quién pertenece el código pendiente (login.tsx lo pasa por
+  // parámetro porque todavía no hay sesión ni token con el que identificar al usuario).
+  // "acceptInvitationId" viaja igual que en login.tsx: si el usuario llegó a loguearse
+  // a partir de un link de invitación, se retoma acá para aceptarla automáticamente
+  // apenas termine este segundo paso.
   const { usuarioId, acceptInvitationId } = useLocalSearchParams<{
     usuarioId?: string;
     acceptInvitationId?: string;
@@ -32,6 +37,11 @@ export default function Verificar2FAScreen() {
   const [codigo, setCodigo] = useState('');
   const [loading, setLoading] = useState(false);
 
+  /**
+   * Envía el código de 6 dígitos al backend para completar el login iniciado en
+   * login.tsx. Si falta el "usuarioId" (por ejemplo, se llegó a esta ruta directo,
+   * sin pasar por el login), no hay con qué verificar nada y se manda de vuelta.
+   */
   const handleVerificar = async () => {
     if (!usuarioId) {
       Alert.alert('Error', 'Faltan datos del login. Volvé a intentar iniciar sesión.');
@@ -55,10 +65,14 @@ export default function Verificar2FAScreen() {
         try {
           await InvitacionesService.procesar(acceptInvitationId, 'aceptar');
         } catch (e) {
+          // No se interrumpe el login por esto: el usuario ya quedó autenticado y
+          // puede aceptar la invitación más tarde a mano desde "Mis herencias".
           console.error('Error al auto-aceptar la invitación:', e);
         }
       }
     } catch (error: any) {
+      // El backend responde acá, por ejemplo, si el código no coincide o si ya venció
+      // (recordar el límite de 10 minutos mencionado en el texto de ayuda de abajo).
       Alert.alert('Código incorrecto', error.message);
     } finally {
       setLoading(false);

@@ -14,6 +14,12 @@ import LockLogo from '../../components/LockLogo';
 import GradientText from '../../components/GradientText';
 import AuthButton from '../../components/AuthButton';
 
+/**
+ * Pantalla de bienvenida: primera vista que ve cualquier usuario sin sesión iniciada
+ * (ver el layout de "(auth)", que redirige acá cuando no hay token). No hace ninguna
+ * llamada al backend ni maneja estado propio: es solo la puerta de entrada hacia
+ * "Iniciar sesión" o "Crear cuenta".
+ */
 export default function WelcomeScreen() {
   const router = useRouter();
 
@@ -22,9 +28,9 @@ export default function WelcomeScreen() {
       {/* Sección del Branding / Logotipo de la app */}
       <View style={styles.logoContainer}>
         <Text style={styles.titlePrefix}>Gestor de</Text>
-        <GradientText 
-          text="Herencia Digital" 
-          style={styles.titleGradient} 
+        <GradientText
+          text="Herencia Digital"
+          style={styles.titleGradient}
         />
         {/* Envoltorio con sombra elástica alrededor del logo */}
         <View style={styles.lockWrapper}>
@@ -32,16 +38,17 @@ export default function WelcomeScreen() {
         </View>
       </View>
 
-      {/* Botonera de acciones iniciales */}
+      {/* Botonera de acciones iniciales: "push" (no "replace") para que ambos destinos
+          conserven esta pantalla en el stack y el botón "atrás" funcione con normalidad. */}
       <View style={styles.buttonContainer}>
-        <AuthButton 
-          title="Iniciar sesión" 
-          onPress={() => router.push('/(auth)/login')} 
+        <AuthButton
+          title="Iniciar sesión"
+          onPress={() => router.push('/(auth)/login')}
         />
-        <AuthButton 
-          title="Crear cuenta" 
+        <AuthButton
+          title="Crear cuenta"
           variant="outline"
-          onPress={() => router.push('/(auth)/register')} 
+          onPress={() => router.push('/(auth)/register')}
         />
       </View>
     </View>

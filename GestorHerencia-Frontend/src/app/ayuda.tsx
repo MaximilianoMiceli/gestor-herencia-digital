@@ -12,12 +12,21 @@ import { ArrowLeft, Archive, Users, HeartPulse, FileCheck2, ShieldCheck } from '
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+/**
+ * Estructura de cada bloque temático mostrado en la pantalla de ayuda.
+ */
 interface Seccion {
+  /** Componente de ícono (lucide-react-native) que ilustra la sección. */
   icon: any;
+  /** Título corto del tema (ej. "Beneficiarios"). */
   titulo: string;
+  /** Texto explicativo en lenguaje simple, sin jerga técnica. */
   texto: string;
 }
 
+// Contenido estático de la ayuda: un resumen de cada funcionalidad principal de la app,
+// pensado para que un usuario nuevo entienda el flujo completo sin tener que navegar
+// cada pantalla. Se recorre con .map() para renderizar las cards en el mismo orden.
 const SECCIONES: Seccion[] = [
   {
     icon: Archive,
@@ -51,6 +60,10 @@ const SECCIONES: Seccion[] = [
   },
 ];
 
+/**
+ * Pantalla de ayuda: header con botón de volver y un listado de cards informativas
+ * (una por cada entrada de SECCIONES) que explican el propósito de la app.
+ */
 export default function AyudaScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -81,6 +94,9 @@ export default function AyudaScreen() {
           </Text>
 
           {SECCIONES.map((seccion) => {
+            // Se reasigna a una variable con mayúscula inicial para poder usarlo como
+            // componente JSX (<Icon .../>); React exige esa convención para distinguir
+            // un componente de una etiqueta HTML nativa.
             const Icon = seccion.icon;
             return (
               <View key={seccion.titulo} style={styles.card}>

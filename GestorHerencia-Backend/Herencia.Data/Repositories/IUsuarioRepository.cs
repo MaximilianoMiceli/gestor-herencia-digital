@@ -22,4 +22,12 @@ public interface IUsuarioRepository : IRepositorioBase<Usuario>
     // token podria no existir (ya fue usado, nunca existio, o pertenece a
     // otra cuenta).
     Task<Usuario?> ObtenerPorPasswordResetTokenAsync(string token);
+
+    // Busca un Usuario por su DNI (columna con indice UNICO, ver
+    // AppDbContext.OnModelCreating). La usa UsuarioService.CrearUsuarioAsync
+    // para rechazar, con un mensaje claro, un intento de registro con un DNI
+    // que ya pertenece a otra cuenta, en vez de dejar que la violacion del
+    // indice UNICO se descubra recien al intentar el INSERT (lo que
+    // terminaba devolviendo un mensaje generico sin explicar el motivo real).
+    Task<Usuario?> ObtenerPorDniAsync(string dni);
 }

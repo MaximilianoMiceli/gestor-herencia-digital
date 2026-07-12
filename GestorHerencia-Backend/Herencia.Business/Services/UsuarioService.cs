@@ -129,6 +129,27 @@ public class UsuarioService : IUsuarioService
         // --- Paso 2: logica de negocio + acceso a datos, protegida con try-catch ---
         try
         {
+            // --- Validacion de UNICIDAD: Email y DNI no pueden repetirse ---
+            // Se verifica ACA, explicitamente, en vez de dejar que la
+            // violacion del indice UNICO de la base de datos (ver
+            // AppDbContext.OnModelCreating, columnas Email y Dni) se
+            // descubra recien al intentar el INSERT: sin este chequeo previo,
+            // ese error tecnico de EF Core/SQLite caia en el catch generico
+            // de mas abajo y se traducia al mensaje generico "Ocurrio un
+            // error al procesar el usuario.", sin explicarle al cliente CUAL
+            // era el problema real.
+            var usuarioConMismoEmail = await _usuarioRepository.ObtenerPorEmailAsync(usuarioCreacionDTO.Email.Trim());
+            if (usuarioConMismoEmail is not null)
+            {
+                throw new ReglaNegocioException("Ya existe una cuenta registrada con ese email.");
+            }
+
+            var usuarioConMismoDni = await _usuarioRepository.ObtenerPorDniAsync(usuarioCreacionDTO.Dni.Trim());
+            if (usuarioConMismoDni is not null)
+            {
+                throw new ReglaNegocioException("Ya existe una cuenta registrada con ese DNI.");
+            }
+
             // Delegamos el calculo criptografico del hash/salt a
             // ISeguridadService (out parameters: la firma expone dos salidas
             // igual de importantes). UsuarioService ya no sabe COMO se calcula
