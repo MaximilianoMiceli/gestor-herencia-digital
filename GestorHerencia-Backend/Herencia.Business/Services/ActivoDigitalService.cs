@@ -7,39 +7,23 @@ using Microsoft.Extensions.Configuration;
 
 namespace Herencia.Business.Services;
 
-// ActivoDigitalService es la implementacion CONCRETA de IActivoDigitalService.
-// Contiene la logica de negocio de ActivoDigital: validaciones basicas,
-// la regla de negocio que exige que el Usuario titular exista antes de
-// asignarle un activo, y la traduccion de errores tecnicos a excepciones
-// amigables.
+/// <summary>
+/// Implementación de <see cref="IActivoDigitalService"/>: valida que el usuario titular
+/// exista antes de asignarle un activo y traduce errores técnicos a excepciones de negocio.
+/// </summary>
 public class ActivoDigitalService : IActivoDigitalService
 {
-    // Interfaz del repositorio de ActivoDigital: usada para las operaciones
-    // CRUD propias de esta entidad (crear, buscar por Id, listar por usuario).
     private readonly IActivoDigitalRepository _activoDigitalRepository;
 
-    // Interfaz del repositorio de Usuario: NO es un error de copy-paste. Este
-    // servicio la necesita exclusivamente para poder validar la regla de
-    // negocio "el usuario titular debe existir antes de crearle un activo".
-    // Es perfectamente valido (y muy comun en arquitecturas por capas) que un
-    // servicio de Business dependa de MAS DE UN repositorio cuando su logica
-    // de negocio involucra a mas de una entidad del dominio. Lo importante,
-    // y lo que exige la rubrica, es que siga dependiendo de INTERFACES de
-    // repositorio (nunca de AppDbContext ni de las clases concretas).
+    // Se usa además del repositorio de ActivoDigital para validar la regla de negocio
+    // "el usuario titular debe existir antes de crearle un activo".
     private readonly IUsuarioRepository _usuarioRepository;
 
-    // IAlmacenamientoArchivosService + IConfiguration se necesitan
-    // UNICAMENTE para SubirArchivoAsync (adjuntar un archivo a un activo ya
-    // existente): mismo patron ya usado por CertificadoDefuncionService para
-    // guardar certificados de defuncion en disco y leer el tamaño maximo
-    // permitido desde appsettings.json.
     private readonly IAlmacenamientoArchivosService _almacenamientoService;
     private readonly IConfiguration _configuration;
 
-    // Tipos de archivo aceptados como adjunto de un ActivoDigital: mismo
-    // criterio y misma lista que CertificadoDefuncionService (se valida el
-    // ContentType reportado por el cliente, no la extension del nombre, que
-    // es trivial de falsificar).
+    // Se valida el ContentType reportado por el cliente, no la extensión del nombre
+    // (trivial de falsificar). Misma lista que CertificadoDefuncionService.
     private static readonly string[] TiposPermitidos =
     [
         "application/pdf",
@@ -47,10 +31,6 @@ public class ActivoDigitalService : IActivoDigitalService
         "image/png"
     ];
 
-    // Todas las dependencias llegan por Inyeccion de Dependencias via
-    // constructor. El contenedor de DI (configurado en Program.cs en la capa
-    // Api) resuelve automaticamente que implementacion concreta corresponde
-    // a cada interfaz y las inyecta aca.
     public ActivoDigitalService(
         IActivoDigitalRepository activoDigitalRepository,
         IUsuarioRepository usuarioRepository,
@@ -63,14 +43,11 @@ public class ActivoDigitalService : IActivoDigitalService
         _configuration = configuration;
     }
 
-    // CrearActivoDigitalAsync: da de alta un nuevo ActivoDigital, pero solo si
-    // el Usuario titular indicado (dto.UsuarioId) realmente existe.
+    /// <summary>
+    /// Da de alta un nuevo activo digital, validando que el usuario titular exista.
+    /// </summary>
     public async Task<ActivoDigitalDTO> CrearActivoDigitalAsync(ActivoDigitalCreacionDTO activoDigitalCreacionDTO)
     {
-        // --- Paso 1: Validacion de negocio simple (formato/contenido) ---
-        // Se valida ANTES de ir a la base de datos: no tiene sentido gastar
-        // una consulta para verificar si existe el usuario si el nombre del
-        // activo ya es invalido de entrada.
         if (string.IsNullOrWhiteSpace(activoDigitalCreacionDTO.Nombre))
         {
             throw new ReglaNegocioException("El nombre del activo digital no puede estar vacio.");
@@ -78,31 +55,14 @@ public class ActivoDigitalService : IActivoDigitalService
 
         try
         {
-            // --- Paso 2: Regla de negocio explicita pedida por la rubrica ---
-            // "El usuario titular debe existir antes de asignarle un nuevo
-            // activo digital". Consultamos el repositorio de Usuario (a
-            // traves de su interfaz) para verificar la existencia del
-            // usuarioId recibido en el DTO.
             var usuarioTitular = await _usuarioRepository.ObtenerPorIdAsync(activoDigitalCreacionDTO.UsuarioId);
 
             if (usuarioTitular is null)
             {
-                // Si el usuario titular no existe, NO tiene sentido continuar:
-                // lanzamos RecursoNoEncontradoException (no ReglaNegocioException)
-                // porque el problema puntual es, literalmente, que el recurso
-                // "Usuario" referenciado no fue encontrado. Esto se hace DENTRO
-                // del try, pero se relanza sin modificaciones en el catch de
-                // abajo (ver el catch especifico para RecursoNoEncontradoException).
                 throw new RecursoNoEncontradoException(
                     $"No se puede crear el activo digital: el usuario titular con Id {activoDigitalCreacionDTO.UsuarioId} no existe.");
             }
 
-            // --- Paso 3: mapeo DTO -> Entidad y persistencia ---
-            // Igual que en UsuarioService, el mapeo manual desde el DTO hacia
-            // la entidad de EF Core es lo que impide que el llamador pueda
-            // "inyectar" valores que no deberia controlar (Id, FechaCreacion,
-            // la coleccion de AsignacionesHerencia, etc.), ya que esos campos
-            // ni siquiera existen en ActivoDigitalCreacionDTO.
             var activoDigital = new ActivoDigital
             {
                 Nombre = activoDigitalCreacionDTO.Nombre.Trim(),
@@ -113,37 +73,29 @@ public class ActivoDigitalService : IActivoDigitalService
                 UsuarioCreacion = "sistema"
             };
 
-            // Delegamos la persistencia al repositorio especifico de
-            // ActivoDigital, a traves de su interfaz.
             await _activoDigitalRepository.AgregarAsync(activoDigital);
 
             return MapearADTO(activoDigital);
         }
         catch (RecursoNoEncontradoException)
         {
-            // Relanzamos tal cual: ya es una excepcion "amigable" y especifica
-            // (el usuario titular no existe), no un error tecnico a envolver.
+            // Ya es una excepción de negocio específica: se relanza sin envolver.
             throw;
         }
         catch (ReglaNegocioException)
         {
-            // Por consistencia con el resto del servicio: si en el futuro se
-            // agrega alguna validacion adicional que lance ReglaNegocioException
-            // dentro del try, se relanza sin volver a envolverla.
             throw;
         }
         catch (Exception ex)
         {
-            // Cualquier otro error NO esperado (fallo de conexion a la base de
-            // datos, violacion de una constraint SQL, etc.) se traduce a un
-            // mensaje generico y seguro, sin exponer el detalle tecnico ni el
-            // StackTrace real al llamador. El detalle original queda
-            // preservado unicamente en "ex", como InnerException.
+            // Se evita exponer el detalle técnico (StackTrace, mensaje de EF/SQLite) al llamador.
             throw new ReglaNegocioException("Ocurrio un error al procesar el activo digital.", ex);
         }
     }
 
-    // ObtenerActivoDigitalPorIdAsync: busca un ActivoDigital por Id.
+    /// <summary>
+    /// Busca un activo digital por Id.
+    /// </summary>
     public async Task<ActivoDigitalDTO> ObtenerActivoDigitalPorIdAsync(int id)
     {
         try
@@ -167,10 +119,9 @@ public class ActivoDigitalService : IActivoDigitalService
         }
     }
 
-    // ObtenerActivosPorUsuarioAsync: devuelve todos los ActivosDigitales de un
-    // Usuario puntual, validando primero que ese Usuario exista (misma regla
-    // de negocio que en la creacion: no tiene sentido listar activos de un
-    // titular inexistente).
+    /// <summary>
+    /// Devuelve todos los activos digitales de un usuario, validando que exista.
+    /// </summary>
     public async Task<IEnumerable<ActivoDigitalDTO>> ObtenerActivosPorUsuarioAsync(int usuarioId)
     {
         try
@@ -196,13 +147,12 @@ public class ActivoDigitalService : IActivoDigitalService
         }
     }
 
-    // ActualizarActivoDigitalAsync: modifica Nombre, Tipo y Descripcion de un
-    // ActivoDigital que ya existe. El UsuarioId (titular) NUNCA se toca aca: no
-    // se puede "transferir" el activo por este medio (ver comentario en
-    // ActivoDigitalActualizacionDTO).
+    /// <summary>
+    /// Actualiza nombre, tipo y descripción de un activo existente. El usuario titular
+    /// nunca se modifica por este medio: no permite "transferir" el activo.
+    /// </summary>
     public async Task<ActivoDigitalDTO> ActualizarActivoDigitalAsync(int id, ActivoDigitalActualizacionDTO activoDigitalActualizacionDTO)
     {
-        // --- Paso 1: misma validacion de formato que en el alta ---
         if (string.IsNullOrWhiteSpace(activoDigitalActualizacionDTO.Nombre))
         {
             throw new ReglaNegocioException("El nombre del activo digital no puede estar vacio.");
@@ -210,10 +160,6 @@ public class ActivoDigitalService : IActivoDigitalService
 
         try
         {
-            // --- Paso 2: buscar la entidad EXISTENTE ---
-            // Se carga el activo completo (no solo se "arma" uno nuevo) para
-            // preservar sus campos que este DTO no expone: Id, UsuarioId,
-            // FechaCreacion y las AsignacionesHerencia ya vinculadas.
             var activoDigital = await _activoDigitalRepository.ObtenerPorIdAsync(id);
 
             if (activoDigital is null)
@@ -225,7 +171,6 @@ public class ActivoDigitalService : IActivoDigitalService
             activoDigital.Tipo = activoDigitalActualizacionDTO.Tipo;
             activoDigital.Descripcion = activoDigitalActualizacionDTO.Descripcion?.Trim() ?? string.Empty;
 
-            // Dato de auditoria: registra cuando y quien modifico el activo.
             activoDigital.FechaModificacion = DateTime.UtcNow;
             activoDigital.UsuarioModificacion = "sistema";
 
@@ -247,7 +192,9 @@ public class ActivoDigitalService : IActivoDigitalService
         }
     }
 
-    // EliminarActivoDigitalAsync: borra un ActivoDigital existente por su Id.
+    /// <summary>
+    /// Elimina un activo digital existente por su Id.
+    /// </summary>
     public async Task EliminarActivoDigitalAsync(int id)
     {
         try
@@ -259,8 +206,7 @@ public class ActivoDigitalService : IActivoDigitalService
                 throw new RecursoNoEncontradoException($"No se encontro el activo digital con Id {id}.");
             }
 
-            // La cascada configurada en AppDbContext para AsignacionHerencia ->
-            // ActivoDigital se encarga de eliminar tambien las asignaciones de
+            // La cascada configurada en AppDbContext elimina también las asignaciones de
             // herencia que dependan de este activo.
             await _activoDigitalRepository.EliminarAsync(id);
         }
@@ -274,22 +220,16 @@ public class ActivoDigitalService : IActivoDigitalService
         }
     }
 
-    // ObtenerActivosPorUsuarioPaginadoAsync: devuelve solo una "pagina" de los
-    // ActivosDigitales de un usuario, junto con los metadatos necesarios para
-    // que el cliente arme un paginador (total de registros y de paginas).
+    /// <summary>
+    /// Devuelve una página de los activos digitales de un usuario junto con los
+    /// metadatos necesarios para armar un paginador.
+    /// </summary>
     public async Task<ResultadoPaginadoDTO<ActivoDigitalDTO>> ObtenerActivosPorUsuarioPaginadoAsync(
         int usuarioId, int pagina, int limite, TipoActivoDigital? tipo, string? nombre)
     {
-        // --- Normalizacion defensiva de los parametros de paginacion ---
-        // Estos valores llegan directamente desde un query string HTTP (ej:
-        // "?pagina=-3&limite=999999"), es decir, son datos de entrada NO
-        // confiables. Si no los acotaramos aca, un cliente mal intencionado
-        // podria pedir "limite=999999" para forzar a la base de datos a traer
-        // absolutamente TODOS los activos de un usuario en una sola respuesta
-        // (anulando el proposito mismo de paginar, que es limitar cuanto se
-        // procesa/transfiere por request), o "pagina=0"/"pagina=-1", que
-        // rompería la formula Skip = (pagina - 1) * limite generando un Skip
-        // negativo (invalido para SQL).
+        // Normalización defensiva: pagina/limite llegan de un query string HTTP no confiable.
+        // Sin acotarlos, un cliente podría pedir "limite=999999" (anula el propósito de
+        // paginar) o "pagina=0/-1" (rompería Skip = (pagina - 1) * limite con un valor negativo).
         if (pagina < 1)
         {
             pagina = 1;
@@ -301,17 +241,11 @@ public class ActivoDigitalService : IActivoDigitalService
         }
         else if (limite > 100)
         {
-            // Tope MAXIMO razonable por pagina: protege el rendimiento del
-            // servidor y de la base de datos ante requests abusivos, sin
-            // afectar el uso normal (10-50 registros por pantalla).
             limite = 100;
         }
 
         try
         {
-            // Misma regla de negocio que en ObtenerActivosPorUsuarioAsync: el
-            // usuario titular debe existir antes de listar (o paginar) sus
-            // activos.
             var usuarioTitular = await _usuarioRepository.ObtenerPorIdAsync(usuarioId);
 
             if (usuarioTitular is null)
@@ -327,14 +261,8 @@ public class ActivoDigitalService : IActivoDigitalService
                 PaginaActual = pagina,
                 RegistrosPorPagina = limite,
                 TotalRegistros = total,
-                // Math.Ceiling redondea HACIA ARRIBA: si un usuario tiene 25
-                // activos con un limite de 10 por pagina, 25/10 = 2.5, y
-                // necesitamos 3 paginas completas para poder mostrar los 25
-                // (2 paginas de 10 + 1 pagina "incompleta" de 5). Se castea a
-                // "double" ANTES de dividir para forzar una division decimal
-                // (una division entre dos "int" en C# trunca el resultado,
-                // perdiendo justamente la parte fraccionaria que Ceiling
-                // necesita para redondear correctamente).
+                // Se castea a double antes de dividir (la división entera trunca) para que
+                // Math.Ceiling redondee hacia arriba y cubra la última página incompleta.
                 TotalPaginas = (int)Math.Ceiling(total / (double)limite)
             };
         }
@@ -348,22 +276,17 @@ public class ActivoDigitalService : IActivoDigitalService
         }
     }
 
-    // SubirArchivoAsync: adjunta (o reemplaza) el archivo de un ActivoDigital
-    // ya existente. Ver el detalle completo del "por que" en
-    // IActivoDigitalService.
+    /// <summary>
+    /// Adjunta (o reemplaza) el archivo de un activo digital ya existente.
+    /// </summary>
     public async Task<ActivoDigitalDTO> SubirArchivoAsync(
         int id, Stream contenido, string nombreArchivoOriginal, string contentType, long tamanioBytes)
     {
-        // --- Paso 1: validaciones de formato, antes de tocar disco o base de datos ---
         if (!TiposPermitidos.Contains(contentType))
         {
             throw new ReglaNegocioException("Solo se aceptan archivos PDF, JPG o PNG.");
         }
 
-        // Mismo criterio de lectura de configuracion que CertificadoDefuncionService:
-        // indexador plano de IConfiguration (no GetValue<T>, que exige un
-        // paquete que este proyecto no referencia), con un default de 10 MB
-        // si la clave no esta configurada.
         var tamanioMaximoBytes = long.TryParse(
             _configuration["VerificacionVida:TamanioMaximoCertificadoBytes"], out var valorConfigurado)
             ? valorConfigurado
@@ -384,9 +307,7 @@ public class ActivoDigitalService : IActivoDigitalService
                 throw new RecursoNoEncontradoException($"No se encontro el activo digital con Id {id}.");
             }
 
-            // "activos_digitales" separa estos archivos, como carpeta HERMANA
-            // de "certificados_defuncion" dentro del mismo almacen fisico
-            // (ver AlmacenamientoLocalService): nunca comparten directorio.
+            // "activos_digitales" es carpeta hermana de "certificados_defuncion": nunca comparten directorio.
             var rutaGuardada = await _almacenamientoService.GuardarArchivoAsync(
                 contenido, nombreArchivoOriginal, subcarpeta: "activos_digitales");
 
@@ -413,6 +334,9 @@ public class ActivoDigitalService : IActivoDigitalService
         }
     }
 
+    /// <summary>
+    /// Devuelve la ruta física y el nombre original del archivo adjunto de un activo digital.
+    /// </summary>
     public async Task<(string RutaArchivo, string NombreArchivoOriginal)> ObtenerArchivoAsync(int id)
     {
         var activoDigital = await _activoDigitalRepository.ObtenerPorIdAsync(id);
@@ -425,8 +349,6 @@ public class ActivoDigitalService : IActivoDigitalService
         return (activoDigital.RutaArchivo ?? string.Empty, activoDigital.NombreArchivoOriginal ?? string.Empty);
     }
 
-    // MapearADTO centraliza la conversion Entidad -> DTO de salida, evitando
-    // repetir este mapeo en cada metodo publico del servicio.
     private static ActivoDigitalDTO MapearADTO(ActivoDigital activoDigital)
     {
         return new ActivoDigitalDTO

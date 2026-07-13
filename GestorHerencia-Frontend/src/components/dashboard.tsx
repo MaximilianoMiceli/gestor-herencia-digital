@@ -67,41 +67,27 @@ export default function Dashboard({
   // Escala compartida para animar la pulsación del botón de herencias (azul).
   const inheritancesBtnScale = useSharedValue(1);
 
-  /**
-   * Genera el estilo animado de escala para el botón de agregar activo.
-   */
   const animatedAddBtnStyle = useAnimatedStyle(() => {
     return {
       transform: [{ scale: addBtnScale.value }],
     };
   });
 
-  /**
-   * Genera el estilo animado de escala para el botón de herencias.
-   */
   const animatedInheritancesBtnStyle = useAnimatedStyle(() => {
     return {
       transform: [{ scale: inheritancesBtnScale.value }],
     };
   });
 
-  /**
-   * Reduce el tamaño del elemento al presionarlo para dar feedback táctil elástico.
-   */
   const handlePressIn = (scaleVar: SharedValue<number>) => {
     scaleVar.value = withSpring(0.96, { damping: 10, stiffness: 300 });
   };
 
-  /**
-   * Restablece el tamaño original del elemento al soltarlo.
-   */
   const handlePressOut = (scaleVar: SharedValue<number>) => {
     scaleVar.value = withSpring(1, { damping: 10, stiffness: 300 });
   };
 
-  /**
-   * Ejecuta el callback onAddAsset provisto o dispara una alerta fallback.
-   */
+  // Fallback para cuando el componente se usa sin conectar a la navegación real.
   const defaultOnAddAsset = () => {
     if (onAddAsset) {
       onAddAsset();
@@ -112,14 +98,12 @@ export default function Dashboard({
 
   return (
     <View style={styles.container}>
-      {/* HEADER SUPERIOR CON GRADIENTE DESDE EL WIREFRAME */}
       <LinearGradient
         colors={['#23856C', '#022739']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0.5 }}
         style={[styles.header, { paddingTop: insets.top + 20 }]}
       >
-        {/* NOTIFICACIÓN ÉXITO (MOCKUP FRAME 34) */}
         {showSuccessNotification && (
           <View style={[styles.notificationPill, { top: insets.top + 4 }]}>
             <Info size={16} color="#1a2e2e" />
@@ -145,16 +129,13 @@ export default function Dashboard({
         </View>
       </LinearGradient>
 
-      {/* CONTENIDO PRINCIPAL */}
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.centeredWrapper}>
-          {/* AVISO DE HERENCIAS PENDIENTES: destacado a propósito (no es una píldora que se
-              autodesvanece como el resto de las notificaciones) para que alguien que se
-              acaba de registrar y ya tenía un beneficio esperándolo lo encuentre de
-              inmediato, sin tener que descubrir por su cuenta el botón "Mis herencias". */}
+          {/* Banner persistente (no es una píldora que se autodesvanece): así alguien que ya
+              tenía una herencia esperándolo la ve de inmediato, sin buscar "Mis herencias". */}
           {pendingHerenciasCount > 0 && (
             <Pressable style={styles.pendingBanner} onPress={() => router.push('/mis-herencias')}>
               <View style={styles.pendingBannerIconWrapper}>
@@ -171,24 +152,20 @@ export default function Dashboard({
             </Pressable>
           )}
 
-          {/* CARD "ESTADO GENERAL" */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Estado General</Text>
 
-            {/* Fila 1: Activos Guardados */}
             <Pressable
               style={styles.cardRow}
               onPress={() => onNavigateToTab?.('Activos')}
             >
               <View style={styles.rowIconContainer}>
-                {/* Cambia el color del ícono según si hay activos guardados (verde) o ninguno (gris) */}
                 <Archive
                   size={24}
                   color={assetsCount > 0 ? '#23856C' : '#8A9E95'}
                   strokeWidth={2}
                 />
               </View>
-              {/* Cambia el estilo y etiqueta del texto para reflejar el estado vacío (empty state) */}
               <Text
                 style={[
                   styles.rowText,
@@ -201,20 +178,17 @@ export default function Dashboard({
               </Text>
             </Pressable>
 
-            {/* Fila 2: Beneficiarios Asignados */}
             <Pressable
               style={styles.cardRow}
               onPress={() => onNavigateToTab?.('Beneficiarios')}
             >
               <View style={styles.rowIconContainer}>
-                {/* Cambia el color del ícono según si hay beneficiarios asignados (verde) o ninguno (gris) */}
                 <Users
                   size={24}
                   color={beneficiariosCount > 0 ? '#23856C' : '#8A9E95'}
                   strokeWidth={2}
                 />
               </View>
-              {/* Cambia el estilo y etiqueta del texto para reflejar el estado vacío (empty state) */}
               <Text
                 style={[
                   styles.rowText,
@@ -227,20 +201,17 @@ export default function Dashboard({
               </Text>
             </Pressable>
 
-            {/* Fila 3: Verificación de Vida */}
             <Pressable
               style={styles.cardRow}
               onPress={() => router.push('/verificacion-vida' as any)}
             >
               <View style={styles.rowIconContainer}>
-                {/* Muestra un check de éxito (verde) si está activa, o una alerta (naranja) si está pendiente */}
                 {isLifeVerificationActive ? (
                   <CheckCircle size={24} color="#23856C" strokeWidth={2} />
                 ) : (
                   <AlertCircle size={24} color="#f59e0b" strokeWidth={2} />
                 )}
               </View>
-              {/* Cambia el estilo del texto de verde a naranja si requiere atención o configuración */}
               <Text
                 style={[
                   styles.rowText,
@@ -253,22 +224,19 @@ export default function Dashboard({
               </Text>
             </Pressable>
 
-            {/* Fila 4: 2FA. Va directo a la sección de 2FA dentro de "Editar perfil" (ahí
-                vive el toggle real), en vez de mandar a la pestaña Más y obligar a un
-                segundo toque + scroll manual para encontrarlo. */}
+            {/* Navega directo a la sección 2FA de "Editar perfil" (donde vive el toggle real)
+                en vez de la pestaña Más, evitando un segundo toque + scroll para encontrarlo. */}
             <Pressable
               style={[styles.cardRow, styles.lastRow]}
               onPress={() => router.push({ pathname: '/editar-perfil', params: { focus: '2fa' } })}
             >
               <View style={styles.rowIconContainer}>
-                {/* Se muestra en verde si está configurado, o en naranja si es vulnerable (inactivo) */}
                 <Lock
                   size={24}
                   color={is2FAActive ? '#23856C' : '#f59e0b'}
                   strokeWidth={2}
                 />
               </View>
-              {/* Refleja en color de advertencia (naranja) si no tiene segundo factor activo */}
               <Text
                 style={[
                   styles.rowText,
@@ -280,7 +248,6 @@ export default function Dashboard({
             </Pressable>
           </View>
 
-          {/* BOTÓN GREEN "+ AGREGAR NUEVO ACTIVO" (Fiel al Frame 41) */}
           <Animated.View style={animatedAddBtnStyle}>
             <Pressable
               style={styles.addButtonGreen}
@@ -292,11 +259,9 @@ export default function Dashboard({
             </Pressable>
           </Animated.View>
 
-          {/* BOTÓN "MIS HERENCIAS" (Fiel al Frame 41). Se usa azul en vez de naranja/amarillo
-              para no repetir el color que ya usamos como aviso de "2FA Inactivo" y
-              "Verificación de vida" pendiente en la card de arriba (ver textOrange):
-              con el mismo color, este botón se leía como una advertencia en vez de
-              una acción normal de navegación. */}
+          {/* Azul en vez de naranja/amarillo: ese color ya se usa como aviso de "2FA Inactivo" y
+              verificación de vida pendiente (ver textOrange); reutilizarlo acá lo hacía leerse
+              como advertencia en vez de una acción normal de navegación. */}
           <Animated.View style={[animatedInheritancesBtnStyle, { marginTop: 16 }]}>
             <View style={styles.inheritancesBtnWrapper}>
               <Pressable
@@ -307,9 +272,8 @@ export default function Dashboard({
               >
                 <Text style={styles.addButtonBlueText}>Mis herencias</Text>
               </Pressable>
-              {/* Puntito rojo de notificación: avisa, apenas se entra al Dashboard, que hay
-                  herencias nuevas asignadas (mismo dato que ya usa el banner de arriba,
-                  pendingHerenciasCount) sin necesidad de leer todo el banner o el texto. */}
+              {/* Mismo dato que el banner de arriba (pendingHerenciasCount): un aviso visible
+                  sin necesidad de leer el banner completo. */}
               {pendingHerenciasCount > 0 && (
                 <View style={styles.inheritancesBtnDot} />
               )}

@@ -1,10 +1,8 @@
 /**
  * @file animated-icon.tsx
  * @description Variante nativa (iOS/Android) del logotipo animado de bienvenida y de la
- * cortina que se superpone a la splash screen nativa mientras la app termina de montarse.
- * Ver también animated-icon.web.tsx, la variante equivalente para Web (mismo propósito,
- * implementación adaptada porque Web no tiene splash screen nativa ni soporta los mismos
- * estilos de gradiente).
+ * cortina que cubre la splash screen nativa mientras la app termina de montarse.
+ * Ver animated-icon.web.tsx para la variante Web (sin splash nativa ni mismo soporte de gradiente).
  */
 
 import { Image } from 'expo-image';
@@ -28,7 +26,6 @@ export function AnimatedSplashOverlay() {
   const [animate, setAnimate] = useState(false);
   const [visible, setVisible] = useState(true);
 
-  // Remueve completamente el overlay del árbol de componentes al finalizar la animación.
   if (!visible) return null;
 
   // Cortina que imita el logo de la splash nativa (opaca) y luego se desvanece,
@@ -115,9 +112,8 @@ const logoKeyframe = new Keyframe({
   },
 });
 
-// Brillo de fondo: una rotación completa (0° a 7200° = 20 vueltas) estirada a lo largo
-// de varios minutos (ver duration en AnimatedIcon) para que se perciba como un giro
-// lento y sutil, no como una animación que "termina" en pantalla.
+// Brillo de fondo: 20 vueltas completas (7200°) estiradas a varios minutos de duration
+// para que se perciba como un giro lento y sutil, no como una animación que "termina".
 const glowKeyframe = new Keyframe({
   0: {
     transform: [{ rotateZ: '0deg' }],

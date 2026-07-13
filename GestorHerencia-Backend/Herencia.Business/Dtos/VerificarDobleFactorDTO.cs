@@ -2,10 +2,8 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Herencia.Business.Dtos;
 
-// VerificarDobleFactorDTO: body de POST /api/auth/verificar-doble-factor.
-// Es un endpoint PUBLICO (todavia no hay JWT en este punto del login), asi
-// que el cliente debe indicar explicitamente de QUIEN es el codigo que esta
-// confirmando (UsuarioId, devuelto por TokenRespuestaDTO en el login inicial).
+// Endpoint publico (todavia no hay JWT), por eso el cliente debe indicar
+// explicitamente UsuarioId (devuelto por TokenRespuestaDTO en el login inicial).
 public class VerificarDobleFactorDTO
 {
     [Required(ErrorMessage = "El identificador de usuario es obligatorio.")]

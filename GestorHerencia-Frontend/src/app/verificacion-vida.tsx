@@ -1,18 +1,15 @@
 /**
  * @file verificacion-vida.tsx
- * @description Pantalla de configuración del sistema de Verificación de Vida (Frames 11, 37 y 39).
+ * @description Configuración del sistema de Verificación de Vida ("proof of life"): el
+ * mecanismo que determina cuándo se libera una herencia a los beneficiarios.
  *
- * Antes esta pantalla guardaba toda la configuración en SecureStore LOCAL, sin llamar
- * nunca al backend: el switch, la frecuencia y el contacto no tenían ningún efecto real,
- * porque es el backend (vía VerificacionVidaBackgroundService, un job que corre cada 24h)
- * quien decide cuándo escalar recordatorios y liberar la herencia. Ahora esta pantalla:
- *   - Al montarse, hace GET /api/verificacion-vida/configuracion para traer el estado real.
- *   - Al guardar, hace PUT /api/verificacion-vida/configuracion.
- *   - Tiene un botón de "Confirmar que sigo con vida" que llama a POST .../check-in.
+ * La lógica de negocio vive en el backend (VerificacionVidaBackgroundService, job diario)
+ * que escala recordatorios y libera la herencia si el titular no responde a tiempo; esta
+ * pantalla solo lee/escribe esa configuración (GET/PUT /api/verificacion-vida/configuracion)
+ * y dispara el check-in (POST .../check-in) que resetea el plazo del lado del servidor.
  *
- * El "contacto de confianza" del backend es un Id de Usuario (ContactoConfianzaId), NO un
- * email de texto libre: por eso se eligió de una lista de beneficiarios ya ACEPTADOS
- * (con cuenta propia) en vez de tipearlo a mano.
+ * El "contacto de confianza" es el Id de un Usuario (ContactoConfianzaId), no un email de
+ * texto libre: se elige de los beneficiarios ya ACEPTADOS que tienen cuenta propia.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -71,7 +68,7 @@ export default function VerificacionVidaScreen() {
   const [saving, setSaving] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
 
-  // Estados de configuración (ya en las UNIDADES que el backend espera: frecuencia en
+  // Estados de configuración, ya en las unidades que espera el backend (frecuencia en
   // meses, método como código numérico, contacto como Id de usuario).
   const [isActive, setIsActive] = useState(false);
   const [frecuenciaMeses, setFrecuenciaMeses] = useState(3);
@@ -79,10 +76,9 @@ export default function VerificacionVidaScreen() {
   const [contactoConfianzaId, setContactoConfianzaId] = useState<number | null>(null);
   const [ultimoCheckIn, setUltimoCheckIn] = useState<string | null>(null);
 
-  // Estado granular real del monitoreo (ver VerificacionVidaBackgroundService en el
-  // backend): antes esta pantalla solo mostraba un switch binario Activo/Inactivo, sin
-  // ninguna forma de ver si ya se envió un recordatorio o si el protocolo de
-  // fallecimiento ya se activó.
+  // Estado granular del monitoreo (ver VerificacionVidaBackgroundService): distingue si
+  // ya se envió un recordatorio o si el protocolo de fallecimiento se activó, más allá
+  // del simple switch Activo/Inactivo.
   const [estado, setEstado] = useState<EstadoVerificacionVida>(1);
   const [recordatoriosEnviados, setRecordatoriosEnviados] = useState(0);
   const [fechaUltimoRecordatorio, setFechaUltimoRecordatorio] = useState<string | null>(null);
@@ -93,7 +89,6 @@ export default function VerificacionVidaScreen() {
   // al menos una herencia de este titular.
   const [contactosElegibles, setContactosElegibles] = useState<BeneficiarioResumen[]>([]);
 
-  // Control de visibilidad de los dropdowns (estilo inline condicional)
   const [showFrecuenciaDropdown, setShowFrecuenciaDropdown] = useState(false);
   const [showMetodoDropdown, setShowMetodoDropdown] = useState(false);
   const [showContactoDropdown, setShowContactoDropdown] = useState(false);
@@ -152,6 +147,7 @@ export default function VerificacionVidaScreen() {
     setIsActive(value);
   };
 
+  /** Persiste la configuración; exige contacto de confianza si el monitoreo va activo (misma regla que valida el backend). */
   const handleGuardarConfiguracion = async () => {
     if (isActive && !contactoConfianzaId) {
       Alert.alert('Contacto requerido', 'Debés elegir un contacto de confianza para activar el monitoreo.');
@@ -180,10 +176,9 @@ export default function VerificacionVidaScreen() {
   };
 
   /**
-   * Confirma actividad ante el backend ("todavía estoy vivo"): resetea el reloj de
-   * vencimiento del lado del servidor. Es la acción real equivalente a lo que, en un
-   * caso de uso real, dispararía una notificación push que el usuario toca para
-   * confirmar que sigue activo.
+   * Confirma actividad ante el backend ("sigo con vida"): resetea el plazo de vencimiento
+   * y cancela cualquier certificado de defunción pendiente sobre la cuenta. Simula la
+   * acción real de tocar una notificación push de chequeo.
    */
   const handleCheckIn = async () => {
     setCheckingIn(true);
@@ -217,7 +212,6 @@ export default function VerificacionVidaScreen() {
 
   return (
     <View style={styles.container}>
-      {/* HEADER CON GRADIENTE */}
       <LinearGradient
         colors={['#23856C', '#022739']}
         start={{ x: 0, y: 0 }}
@@ -236,7 +230,6 @@ export default function VerificacionVidaScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.centeredWrapper}>
 
-          {/* CARD DE ESTADO (Frame 11/37/39) */}
           <View style={styles.statusCard}>
             <View style={styles.statusTextContainer}>
               <Text style={styles.statusLabel}>Estado</Text>
@@ -258,10 +251,8 @@ export default function VerificacionVidaScreen() {
             />
           </View>
 
-          {/* DETALLE DEL PROCESO: solo tiene sentido mostrarlo si ya se envió al menos un
-              recordatorio o si el protocolo de fallecimiento ya se activó. Antes esta
-              información existía en el backend pero era invisible para el usuario, que
-              solo veía "Activo/Inactivo" sin saber si ya estaba en escalamiento. */}
+          {/* Solo se muestra una vez que arrancó el escalamiento (hubo recordatorios o
+              se activó el protocolo); si no, no hay nada que reportar. */}
           {isActive && (recordatoriosEnviados > 0 || fechaProtocoloActivado) && (
             <View style={styles.detailCard}>
               <Text style={styles.detailRow}>
@@ -281,7 +272,6 @@ export default function VerificacionVidaScreen() {
             </View>
           )}
 
-          {/* BOTÓN DE CHECK-IN: confirma actividad real contra el backend */}
           <TouchableOpacity style={styles.checkInButton} onPress={handleCheckIn} disabled={checkingIn}>
             {checkingIn ? (
               <ActivityIndicator color="#FFFFFF" />
@@ -290,7 +280,6 @@ export default function VerificacionVidaScreen() {
             )}
           </TouchableOpacity>
 
-          {/* CAMPO: FRECUENCIA DE CHEQUEO (DROPDOWN CON HIGHLIGHT) */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Frecuencia de chequeo</Text>
             <TouchableOpacity
@@ -340,7 +329,6 @@ export default function VerificacionVidaScreen() {
             )}
           </View>
 
-          {/* CAMPO: MÉTODO DE VERIFICACIÓN (DROPDOWN CON HIGHLIGHT) */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Metodo de verificacion</Text>
             <TouchableOpacity
@@ -390,8 +378,6 @@ export default function VerificacionVidaScreen() {
             )}
           </View>
 
-          {/* CAMPO: CONTACTO DE CONFIANZA (elegido de la lista real de beneficiarios
-              aceptados, no tipeado a mano: el backend espera un Id de Usuario) */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Contacto de confianza</Text>
             <TouchableOpacity
@@ -455,7 +441,6 @@ export default function VerificacionVidaScreen() {
             )}
           </View>
 
-          {/* MENSAJE DE ADVERTENCIA */}
           <View style={styles.infoCard}>
             <AlertCircle size={20} color="#0B4B5C" style={styles.infoIcon} />
             <Text style={styles.infoText}>
@@ -463,7 +448,6 @@ export default function VerificacionVidaScreen() {
             </Text>
           </View>
 
-          {/* BOTÓN GUARDAR CONFIGURACIÓN */}
           <TouchableOpacity
             style={styles.saveButton}
             onPress={handleGuardarConfiguracion}

@@ -1,13 +1,8 @@
 /**
  * @file subir-certificado.tsx
- * @description Pantalla para que un heredero suba el certificado de defunción de un
- * titular que ya lo designó como beneficiario y cuya invitación ya ACEPTÓ (el backend
- * exige exactamente esa condición: CertificadoDefuncionService.SubirCertificadoAsync
- * rechaza a cualquiera que no sea un heredero aceptado de ese titular puntual).
- *
- * Antes esta funcionalidad no existía en el frontend en absoluto, pese a que el
- * backend ya tenía todo el flujo (POST /api/certificados-defuncion, más el panel de
- * Administrador para aprobar/rechazar) completamente implementado.
+ * @description Pantalla para que un heredero suba el certificado de defunción de un titular
+ * que ya lo designó como beneficiario y cuya invitación ya aceptó. El backend exige esa misma
+ * condición (CertificadoDefuncionService.SubirCertificadoAsync la valida server-side).
  */
 
 import React, { useState, useEffect } from 'react';

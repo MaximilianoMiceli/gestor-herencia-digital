@@ -67,11 +67,6 @@ export class AuthService {
    * decisiones de navegación.
    */
   static async login(data: LoginDTO): Promise<TokenRespuestaDTO> {
-    // Axios devuelve un objeto "AxiosResponse": los datos del body deserializados ya
-    // vienen en la propiedad ".data" (a diferencia de `fetch`, que exige un
-    // `await response.json()` manual). Si el servidor responde 4xx/5xx, Axios NO
-    // llega a esta línea: lanza una excepción que ya queda atrapada y traducida por
-    // el interceptor de respuesta de api.ts (ver ese archivo).
     const response = await api.post<TokenRespuestaDTO>('/auth/login', data);
     return response.data;
   }

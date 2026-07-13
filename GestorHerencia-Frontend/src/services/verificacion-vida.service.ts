@@ -1,11 +1,9 @@
 /**
  * @file verificacion-vida.service.ts
  * @description Servicio HTTP del monitoreo de "verificación de vida" (check-ins
- * periódicos del titular). Reemplaza la persistencia anterior, que guardaba toda la
- * configuración en SecureStore local sin sincronizar nunca con el backend: ese enfoque
- * hacía que la configuración mostrada en pantalla no tuviera NINGÚN efecto real, ya que
- * es el backend (vía VerificacionVidaBackgroundService) quien decide cuándo escalar
- * recordatorios y liberar la herencia.
+ * periódicos del titular). La configuración vive en el backend (no en SecureStore local):
+ * es VerificacionVidaBackgroundService quien decide cuándo escalar recordatorios y
+ * liberar la herencia, así que el cliente debe leer/escribir siempre contra la API.
  */
 
 import { api } from './api';

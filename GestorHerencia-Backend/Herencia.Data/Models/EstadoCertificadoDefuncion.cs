@@ -1,25 +1,24 @@
 namespace Herencia.Data.Models;
 
-// EstadoCertificadoDefuncion representa el resultado de la revision de UN
-// CertificadoDefuncion puntual subido por un heredero. Mismo criterio que
-// EstadoBeneficiario: enum arrancando en 1, persistido como INTEGER.
+/// <summary>
+/// Resultado de la revision de UN CertificadoDefuncion. Mismo criterio que
+/// EstadoBeneficiario: enum arrancando en 1, persistido como INTEGER.
+/// </summary>
 public enum EstadoCertificadoDefuncion
 {
-    // Recien subido, todavia sin revisar por ningun Administrador.
+    /// <summary>Recien subido, sin revisar todavia.</summary>
     Pendiente = 1,
 
-    // Un Administrador confirmo que el documento es valido: dispara la
-    // liberacion de bienes (ver CertificadoDefuncionService.AprobarAsync).
+    /// <summary>Un Administrador confirmo el documento: dispara la liberacion de bienes.</summary>
     Aprobado = 2,
 
-    // Un Administrador determino que el documento NO es valido (ej: no
-    // corresponde al titular, esta incompleto, es ilegible).
+    /// <summary>Un Administrador determino que el documento no es valido.</summary>
     Rechazado = 3,
 
-    // El titular volvio a confirmar actividad (check-in) mientras este
-    // certificado seguia Pendiente: el pedido se cancela SOLO, sin
-    // intervencion de ningun Administrador, pero la fila se conserva (no se
-    // borra) para dejar registro de que existio un pedido de liberacion que
-    // resulto ser una falsa alarma. Ver VerificacionVidaService.RegistrarCheckInAsync.
+    // El titular volvio a confirmar actividad mientras el certificado seguia
+    // Pendiente: se cancela solo, sin intervencion de un Administrador, pero la
+    // fila se conserva como registro de que hubo una falsa alarma.
+
+    /// <summary>El titular hizo check-in antes de que el certificado fuera revisado.</summary>
     CanceladoPorActividad = 4
 }

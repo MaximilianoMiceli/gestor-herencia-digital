@@ -19,9 +19,7 @@ public class CertificadoDefuncionDTO
 
     public string NombreArchivoOriginal { get; set; } = string.Empty;
 
-    // Se completa a partir de la propiedad heredada FechaCreacion (ver el
-    // comentario en CertificadoDefuncion: no se duplica un campo propio
-    // "FechaSubida" en la entidad).
+    // Se completa a partir de la FechaCreacion heredada de la entidad.
     public DateTime FechaSubida { get; set; }
 
     public EstadoCertificadoDefuncion Estado { get; set; }

@@ -1,13 +1,10 @@
 /**
  * @file nuevo-activo.tsx
  * @description Pantalla de creación y registro de nuevos activos digitales.
- * 
- * Implementa un formulario modular e interactivo fiel a las maquetas de Figma.
- * Utiliza selectores dropdown con diseño idéntico al de Verificación de Vida (Frame 11):
- * - Botón de cabecera en forma de cápsula con borde negro fino (#1A202C).
- * - Borde verde destacado (#2E7D32) cuando el selector está abierto.
- * - Tarjeta de opciones flotante con bordes redondeados (borderRadius: 20) y borde verde suave.
- * - Opción seleccionada con fondo verde pastel (#DAF8BD) y texto verde negrita (#2E7D32).
+ *
+ * Formulario con campos dinámicos según el TipoActivoDigital elegido (cripto, cuenta
+ * bancaria, red social, correo o archivo) y asignación del 100% del activo a un único
+ * beneficiario, que se invita por email en la misma operación de guardado.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -120,23 +117,15 @@ export default function NuevoActivoScreen() {
   const [showValidationError, setShowValidationError] = useState(false);
   const [emailError, setEmailError] = useState(false);
 
-  /**
-   * Abre el selector de archivos NATIVO del sistema operativo (el mismo picker de
-   * "Archivos"/"Files" de iOS o Android que usa cualquier otra app) para elegir un
-   * PDF, JPG o PNG real. Reemplaza el mock anterior (un `setTimeout` que simulaba la
-   * espera y fijaba siempre el mismo nombre de archivo falso "contrato_digital.pdf",
-   * sin leer ni subir ningún archivo de verdad).
-   */
+  /** Abre el selector de archivos nativo (PDF, JPG o PNG) para el activo tipo "Archivo". */
   const handleAttachFile = async () => {
     setLoadingArchivo(true);
     try {
-      // `getDocumentAsync` es una Promise que se resuelve recién cuando el usuario
-      // elige un archivo O cancela el diálogo (nunca "falla" por cancelar: hay que
-      // chequear `result.canceled`, no envolver la cancelación en un catch).
+      // Cancelar el diálogo resuelve la promesa con `canceled: true`, no la rechaza:
+      // no hay que tratarlo como error.
       const resultado = await DocumentPicker.getDocumentAsync({
-        // Restringe el picker nativo a los mismos tipos que el backend acepta
-        // (ver ActivoDigitalService.TiposPermitidos): evita que el usuario elija un
-        // archivo que el servidor va a rechazar igual, un paso después.
+        // Mismos tipos que acepta el backend (ActivoDigitalService.TiposPermitidos),
+        // para no dejar elegir un archivo que el servidor rechazaría después.
         type: TIPOS_MIME_PERMITIDOS,
         copyToCacheDirectory: true,
       });
@@ -150,9 +139,8 @@ export default function NuevoActivoScreen() {
       setArchivoSeleccionado({
         uri: archivo.uri,
         name: archivo.name,
-        // `mimeType` puede venir undefined en algunas plataformas/archivos: se usa un
-        // valor genérico de respaldo para que el backend igual reciba un Content-Type,
-        // aunque probablemente sea rechazado si no es uno de los 3 tipos permitidos.
+        // mimeType puede venir undefined según la plataforma; se usa un valor genérico
+        // de respaldo (igual será rechazado por el backend si no es uno de los 3 permitidos).
         mimeType: archivo.mimeType ?? 'application/octet-stream',
       });
     } catch (err) {
@@ -163,6 +151,10 @@ export default function NuevoActivoScreen() {
     }
   };
 
+  /**
+   * Valida y crea el activo, con sus campos requeridos dependiendo del tipo elegido,
+   * y lo asigna 100% al beneficiario indicado (invitándolo por email si no existe).
+   */
   const handleSave = async () => {
     setEmailError(false);
 
@@ -176,6 +168,8 @@ export default function NuevoActivoScreen() {
       return;
     }
 
+    // Cada tipo de activo tiene su propio set de campos obligatorios (ver el bloque
+    // "INFORMACIÓN DINÁMICA DEL ACTIVO" más abajo, donde se renderizan)
     if (tipo.label === 'Cripto' && (!blockchain || !wallet || !clavePrivada)) {
       setShowValidationError(true);
       return;
@@ -203,6 +197,10 @@ export default function NuevoActivoScreen() {
     try {
       if (!token) throw new Error('Usuario no autenticado.');
 
+      // Los campos estructurados se serializan dentro de "descripcion" con un formato fijo
+      // por tipo (el backend no tiene columnas propias para ellos). editar-activo.tsx
+      // parsea este mismo formato con regex para poder editarlos por separado: si se
+      // cambia el formato acá, hay que actualizar esas regex también.
       let descripcionFinal = '';
       if (tipo.label === 'Cripto') {
         descripcionFinal = `[CRIPTO] Blockchain: ${blockchain} | Wallet: ${wallet} | Clave Privada: ${clavePrivada}\n\nInstrucciones:\n${instrucciones}`;
@@ -226,9 +224,8 @@ export default function NuevoActivoScreen() {
         prioridad
       );
 
-      // Si el tipo es "Archivo" y se seleccionó uno real, se sube RECIÉN DESPUÉS de
-      // crear el activo: el endpoint de subida (POST .../{id}/archivo) necesita el Id
-      // que la base de datos le asigna al activo, que no existe hasta este punto.
+      // El archivo se sube recién después de crear el activo: el endpoint de subida
+      // necesita el Id que la base de datos le asigna, inexistente hasta este punto.
       if (tipo.label === 'Archivo' && archivoSeleccionado) {
         await AssetsService.subirArchivoActivo(activoCreado.id, archivoSeleccionado);
       }
@@ -248,7 +245,7 @@ export default function NuevoActivoScreen() {
 
   return (
     <View style={styles.container}>
-      {/* HEADER DE ALTA FIDELIDAD CON GRADIENTE */}
+      {/* Header con gradiente */}
       <LinearGradient
         colors={['#23856C', '#022739']}
         start={{ x: 0, y: 0 }}
@@ -661,7 +658,7 @@ export default function NuevoActivoScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#DAF8BD', // Fondo verde claro pastel Figma
+    backgroundColor: '#DAF8BD',
   },
   header: {
     paddingHorizontal: 20,
@@ -703,7 +700,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#C1E3A4', // Borde verde claro suave
+    borderColor: '#C1E3A4',
     paddingHorizontal: 16,
     height: 52,
     fontSize: 15,
@@ -737,9 +734,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12, // Menos redondeado (rectangular suave)
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#C1E3A4', // Borde verde claro suave
+    borderColor: '#C1E3A4',
   },
   dropdownHeaderActive: {
     borderColor: '#2E7D32',
@@ -747,9 +744,9 @@ const styles = StyleSheet.create({
   },
   dropdownOptionsList: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12, // Menos redondeado
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#C1E3A4', // Borde verde claro suave
+    borderColor: '#C1E3A4',
     padding: 10,
     marginTop: 6,
     gap: 2,
@@ -771,17 +768,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8, // Esquinas más suaves para la selección interna
+    borderRadius: 8,
   },
   simpleOptionRow: {
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8, // Esquinas más suaves
+    borderRadius: 8,
     height: 48,
     justifyContent: 'center',
   },
   optionSelected: {
-    backgroundColor: '#DAF8BD', // Fondo verde claro de selección
+    backgroundColor: '#DAF8BD',
   },
   optionSelectedText: {
     color: '#2E7D32',
@@ -856,7 +853,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#C1E3A4', // Borde verde claro suave
+    borderColor: '#C1E3A4',
   },
   nestedDropdownHeaderActive: {
     borderColor: '#2E7D32',
@@ -866,14 +863,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#C1E3A4', // Borde verde claro suave
+    borderColor: '#C1E3A4',
     marginTop: 4,
     overflow: 'hidden',
   },
   nestedDropdownOption: {
     paddingVertical: 12,
     paddingHorizontal: 12,
-    borderRadius: 8, // Esquinas más suaves para selección interna
+    borderRadius: 8,
   },
   fileBoxBorder: {
     borderWidth: 1.5,

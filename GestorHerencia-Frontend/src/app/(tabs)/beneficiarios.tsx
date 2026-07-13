@@ -40,7 +40,6 @@ export default function BeneficiariosScreen() {
   const [beneficiarios, setBeneficiarios] = useState<BeneficiarioResumen[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Función para volver a cargar la lista (se puede invocar al enfocar la pantalla)
   const fetchBeneficiarios = async () => {
     if (!token) return;
     try {

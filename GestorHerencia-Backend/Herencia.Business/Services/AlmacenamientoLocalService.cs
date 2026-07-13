@@ -3,55 +3,44 @@ using Microsoft.Extensions.Configuration;
 
 namespace Herencia.Business.Services;
 
-// AlmacenamientoLocalService es la unica implementacion de
-// IAlmacenamientoArchivosService por ahora: guarda los archivos en una
-// carpeta del disco local del servidor. Sigue el MISMO criterio que ya usa
-// Program.cs para resolver la ruta del archivo SQLite: si la carpeta
-// configurada ("Almacenamiento:CarpetaRaiz") es RELATIVA, se resuelve contra
-// AppContext.BaseDirectory (la carpeta donde estan los binarios en
-// ejecucion), para que sea estable sin importar desde donde se invoque el
-// proceso.
-//
-// "_carpetaDestino" es solo la RAIZ compartida: cada tipo de archivo vive en
-// su propia subcarpeta (ver "subcarpeta" mas abajo), para que un certificado
-// de defuncion y el adjunto de un activo digital nunca terminen mezclados en
-// el mismo directorio.
+/// <summary>
+/// Única implementación de <see cref="IAlmacenamientoArchivosService"/>: guarda los
+/// archivos en una carpeta del disco local del servidor.
+/// </summary>
 public class AlmacenamientoLocalService : IAlmacenamientoArchivosService
 {
+    // Carpeta raíz compartida; cada tipo de archivo vive en su propia subcarpeta para que,
+    // por ejemplo, un certificado de defunción y un adjunto de activo digital nunca
+    // terminen mezclados en el mismo directorio.
     private readonly string _carpetaDestino;
 
     public AlmacenamientoLocalService(IConfiguration configuration)
     {
         var carpetaConfigurada = configuration["Almacenamiento:CarpetaRaiz"] ?? "uploads";
 
+        // Si la carpeta configurada es relativa, se resuelve contra AppContext.BaseDirectory
+        // (mismo criterio que usa Program.cs para la ruta del archivo SQLite) para que sea
+        // estable sin importar desde dónde se invoque el proceso.
         _carpetaDestino = Path.IsPathRooted(carpetaConfigurada)
             ? carpetaConfigurada
             : Path.Combine(AppContext.BaseDirectory, carpetaConfigurada);
     }
 
+    /// <summary>
+    /// Guarda el contenido recibido en disco bajo un nombre generado (nunca el original)
+    /// y devuelve la ruta física resultante.
+    /// </summary>
     public async Task<string> GuardarArchivoAsync(Stream contenido, string nombreArchivoOriginal, string subcarpeta = "")
     {
-        // Cada llamador pasa su propia subcarpeta (CertificadoDefuncionService
-        // pasa "certificados_defuncion", ActivoDigitalService pasa
-        // "activos_digitales"): ambas cuelgan como HERMANAS dentro de la
-        // misma carpeta raiz configurada, nunca una anidada dentro de la
-        // otra. Un string vacio (sin llamadores actuales) guardaria directo
-        // en la raiz.
         var carpetaDestinoFinal = string.IsNullOrWhiteSpace(subcarpeta)
             ? _carpetaDestino
             : Path.Combine(_carpetaDestino, subcarpeta);
 
         Directory.CreateDirectory(carpetaDestinoFinal);
 
-        // --- Nunca se reutiliza el nombre original en disco ---
-        // Un nombre de archivo elegido por el CLIENTE (ej: "../../etc/passwd",
-        // o simplemente un nombre que colisiona con el de otro certificado
-        // ya subido) es un dato NO CONFIABLE. Generar un nombre nuevo con
-        // Guid.NewGuid() elimina de raiz tanto la posibilidad de un ataque
-        // de path traversal como la de sobreescribir sin querer un archivo
-        // ya existente; el nombre original se preserva aparte, solo como
-        // metadato de exhibicion (ver CertificadoDefuncion.NombreArchivoOriginal
-        // y ActivoDigital.NombreArchivoOriginal).
+        // El nombre original es un dato del cliente, no confiable (podría ser un path
+        // traversal como "../../etc/passwd" o colisionar con otro ya guardado). Se genera
+        // un nombre nuevo con Guid.NewGuid(); el original se conserva solo como metadato.
         var extension = Path.GetExtension(nombreArchivoOriginal);
         var nombreEnDisco = $"{Guid.NewGuid():N}{extension}";
         var rutaCompleta = Path.Combine(carpetaDestinoFinal, nombreEnDisco);

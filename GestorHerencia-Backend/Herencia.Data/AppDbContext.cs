@@ -3,129 +3,90 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Herencia.Data;
 
-// AppDbContext es el "puente" entre nuestras clases C# (Models) y la base de datos
-// SQLite. EF Core usa esta clase para saber que tablas crear (a traves de las
-// migraciones Code-First) y como traducir LINQ a SQL.
+/// <summary>
+/// Puente entre los Models de C# y la base de datos SQLite: EF Core la usa para
+/// generar migraciones Code-First y traducir LINQ a SQL.
+/// </summary>
 public class AppDbContext : DbContext
 {
-    // El constructor recibe las DbContextOptions (cadena de conexion, proveedor, etc.)
-    // desde el contenedor de Inyeccion de Dependencias configurado en la capa Api.
-    // La capa Data NO decide la cadena de conexion: solo la recibe.
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
     }
 
-    // Cada DbSet<T> representa una tabla en la base de datos. Notar que ya NO
-    // existe un DbSet<Beneficiario>: ese rol lo cumple ahora el propio Usuario
-    // (ver el comentario de "doble rol" en Usuario.cs).
+    // Ya no existe un DbSet<Beneficiario>: ese rol lo cumple el propio Usuario
+    // (ver el doble rol en Usuario.cs).
     public DbSet<Usuario> Usuarios => Set<Usuario>();
     public DbSet<ActivoDigital> ActivosDigitales => Set<ActivoDigital>();
     public DbSet<AsignacionHerencia> AsignacionesHerencia => Set<AsignacionHerencia>();
     public DbSet<ConfiguracionVerificacionVida> ConfiguracionesVerificacionVida => Set<ConfiguracionVerificacionVida>();
     public DbSet<CertificadoDefuncion> CertificadosDefuncion => Set<CertificadoDefuncion>();
 
-    // OnModelCreating es el lugar donde, con Fluent API, le decimos EXPLICITAMENTE
-    // a EF Core como mapear cada entidad: claves primarias, foraneas, longitudes
-    // maximas, indices, comportamiento ante borrados y datos semilla (seeders).
-    // Usamos Fluent API (en vez de solo Data Annotations) porque nos da control
-    // total y mantiene las clases de dominio (Models) limpias de detalles de
-    // infraestructura/persistencia.
+    // Fluent API (en vez de solo Data Annotations) para mantener las clases de
+    // dominio (Models) libres de detalles de infraestructura/persistencia.
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
         // ==========================================================
-        // 1) CONFIGURACION DE Usuario
+        // 1) Usuario
         // ==========================================================
         modelBuilder.Entity<Usuario>(entity =>
         {
-            // Clave primaria explicita (aunque EF ya la detectaria por convencion,
-            // dejarla explicita documenta la intencion para quien lea el codigo).
             entity.HasKey(u => u.Id);
 
-            // Nombre obligatorio con longitud maxima razonable para evitar
-            // columnas de texto ilimitado en la base de datos.
             entity.Property(u => u.Nombre)
                   .IsRequired()
                   .HasMaxLength(150);
 
-            // Email obligatorio. Ademas creamos un indice UNICO: dos usuarios
-            // no pueden registrarse con el mismo email (regla de negocio basica
-            // de cualquier sistema de autenticacion, y ademas la LLAVE con la
-            // que se "reclaman" automaticamente las invitaciones pendientes de
-            // AsignacionHerencia.EmailInvitado al registrarse, ver
-            // UsuarioService.CrearUsuarioAsync).
             entity.Property(u => u.Email)
                   .IsRequired()
                   .HasMaxLength(150);
 
+            // Unico: regla basica de autenticacion, y ademas la llave con la que
+            // se reclaman automaticamente las invitaciones pendientes de
+            // AsignacionHerencia.EmailInvitado al registrarse (ver UsuarioService.CrearUsuarioAsync).
             entity.HasIndex(u => u.Email)
                   .IsUnique();
 
-            // Dni obligatorio, con un largo maximo generoso (documentos de otros
-            // paises pueden tener mas digitos que un DNI argentino de 7/8) pero
-            // acotado igual para no dejar una columna de texto ilimitado. Se
-            // crea, ademas, un indice UNICO: la misma logica que ya se aplica a
-            // Email (nadie puede registrarse dos veces con el mismo documento).
             entity.Property(u => u.Dni)
                   .IsRequired()
                   .HasMaxLength(15);
 
+            // Unico, mismo criterio que Email: nadie puede registrarse dos veces
+            // con el mismo documento.
             entity.HasIndex(u => u.Dni)
                   .IsUnique();
 
-            // FechaNacimiento obligatoria: todo Usuario tiene que declarar su
-            // fecha de nacimiento en el alta (ver la validacion de mayoria de
-            // edad en UsuarioService.CrearUsuarioAsync).
             entity.Property(u => u.FechaNacimiento)
                   .IsRequired();
 
-            // PasswordHash y PasswordSalt son obligatorios: un Usuario no puede
-            // existir sin sus credenciales de seguridad calculadas.
             entity.Property(u => u.PasswordHash)
                   .IsRequired();
 
             entity.Property(u => u.PasswordSalt)
                   .IsRequired();
 
-            // Rol es obligatorio (todo Usuario tiene SIEMPRE un nivel de
-            // permisos definido, nunca "sin rol"). EF Core persiste el enum
-            // como INTEGER por defecto (0 = Usuario, 1 = Administrador).
             entity.Property(u => u.Rol)
                   .IsRequired();
 
-            // PasswordResetToken/PasswordResetExpiracion son OPCIONALES
-            // (nullable en la entidad): la mayoria de los Usuarios no tiene
-            // ningun reseteo de contraseña en curso. HasMaxLength acota el
-            // tamaño de un valor que, al ser generado por el propio servidor
-            // (ver UsuarioService.SolicitarResetPasswordAsync), tiene un
-            // largo fijo y conocido de antemano.
             entity.Property(u => u.PasswordResetToken)
                   .HasMaxLength(100);
 
-            // --- Relacion 1-N: Usuario (1, rol OTORGANTE) -> ActivoDigital (N) ---
-            // Un usuario es dueño de muchos activos digitales; cada activo
-            // pertenece a un unico otorgante. Si se borra el Usuario, se
-            // borran en cascada sus ActivoDigital: no tiene sentido conservar
-            // un activo "huerfano" sin ningun titular. Esta es la UNICA ruta
-            // de cascada que nace directamente en Usuario hacia ActivoDigital,
-            // por lo que Cascade aca no genera ninguna ambiguedad.
+            // Cascade: si se borra el Usuario, no tiene sentido conservar sus
+            // ActivoDigital huerfanos. Es la unica ruta de cascada que nace en
+            // Usuario hacia ActivoDigital, asi que no hay ambiguedad.
             entity.HasMany(u => u.ActivosOtorgados)
                   .WithOne(a => a.Usuario)
                   .HasForeignKey(a => a.UsuarioId)
                   .OnDelete(DeleteBehavior.Cascade);
 
-            // La relacion 1-N: Usuario (1, rol BENEFICIARIO) -> AsignacionHerencia (N)
-            // ("HerenciasRecibidas") se configura mas abajo, DESDE el lado de
-            // AsignacionHerencia (seccion 3), junto con el resto de sus FKs:
-            // asi quedan juntas, en un solo lugar, las DOS rutas de cascada
-            // que llegan a esa misma tabla, que es justamente lo que hay que
-            // analizar en conjunto para decidir cual debe ser Restrict (ver
-            // el comentario detallado ahi).
+            // La relacion Usuario(BENEFICIARIO) -> AsignacionHerencia se configura
+            // en la seccion 3, junto con la otra FK que llega a esa misma tabla
+            // (ahi se explica por que esa debe ser Restrict).
         });
 
         // ==========================================================
-        // 2) CONFIGURACION DE ActivoDigital
+        // 2) ActivoDigital
         // ==========================================================
         modelBuilder.Entity<ActivoDigital>(entity =>
         {
@@ -135,9 +96,6 @@ public class AppDbContext : DbContext
                   .IsRequired()
                   .HasMaxLength(150);
 
-            // El enum TipoActivoDigital se guarda por defecto como INTEGER en SQLite;
-            // no hace falta una conversion explicita, pero lo dejamos como Required
-            // para que la columna no admita NULL.
             entity.Property(a => a.Tipo)
                   .IsRequired();
 
@@ -146,15 +104,14 @@ public class AppDbContext : DbContext
         });
 
         // ==========================================================
-        // 3) CONFIGURACION DE AsignacionHerencia (tabla intermedia N-N)
+        // 3) AsignacionHerencia (tabla intermedia N-N)
         // ==========================================================
         modelBuilder.Entity<AsignacionHerencia>(entity =>
         {
             entity.HasKey(x => x.Id);
 
-            // decimal(5,2): permite valores como 100.00 (3 enteros + 2 decimales).
-            // Usamos HasPrecision en vez de dejar el default porque SQLite/EF
-            // necesita saber la precision para no truncar el porcentaje.
+            // HasPrecision explicito: SQLite/EF necesita saber la precision para
+            // no truncar el porcentaje (5,2 admite hasta 100.00).
             entity.Property(x => x.PorcentajeAsignado)
                   .HasPrecision(5, 2)
                   .IsRequired();
@@ -162,39 +119,20 @@ public class AppDbContext : DbContext
             entity.Property(x => x.CondicionLiberacion)
                   .HasMaxLength(300);
 
-            // EmailInvitado es obligatorio (SIEMPRE se completa, tenga o no
-            // cuenta esa persona todavia: ver el comentario de la propiedad
-            // en AsignacionHerencia.cs), con la misma longitud maxima que
-            // Usuario.Email por tratarse del mismo tipo de dato.
             entity.Property(x => x.EmailInvitado)
                   .IsRequired()
                   .HasMaxLength(150);
 
-            // Estado (enum EstadoBeneficiario) es OBLIGATORIO: toda asignacion
-            // esta SIEMPRE en alguno de los 3 estados definidos, nunca "sin
-            // estado". Se persiste como INTEGER (comportamiento por defecto
-            // de EF Core para enums), por CONSISTENCIA con el resto de los
-            // enums de este proyecto (RolUsuario, TipoActivoDigital) — la
-            // alternativa seria ".HasConversion<string>()" (mas legible
-            // mirando la tabla "a mano" con un cliente SQLite), pero se
-            // descarto por ocupar mas espacio y ser mas lento de indexar.
-            // HasDefaultValue es una segunda capa de defensa (ademas del
-            // valor por defecto ya fijado en el propio modelo,
-            // AsignacionHerencia.Estado = EstadoBeneficiario.Pendiente): si
-            // una fila se inserta por fuera de la logica de negocio de
-            // Business, la base de datos la completa con "Pendiente" en vez
-            // de dejarla en un 0 que no corresponde a ningun miembro del enum.
+            // HasDefaultValue es una segunda capa de defensa (ademas del default
+            // ya fijado en el modelo): si una fila se inserta por fuera de la
+            // logica de negocio, la base la completa en "Pendiente" en vez de un
+            // 0 que no corresponde a ningun miembro del enum.
             entity.Property(x => x.Estado)
                   .IsRequired()
                   .HasDefaultValue(EstadoBeneficiario.Pendiente);
 
-            // TokenInvitacion es el identificador PUBLICO no adivinable
-            // (ver el comentario detallado en AsignacionHerencia.cs). El
-            // indice UNICO evita, a nivel de base de datos, que dos filas
-            // terminen compartiendo el mismo token por un bug futuro en la
-            // generacion aleatoria (colision practicamente imposible con
-            // RandomNumberGenerator de 256 bits, pero la constraint es una
-            // red de seguridad casi gratis).
+            // Unico: evita, a nivel de base de datos, que dos filas compartan
+            // token por un bug futuro en la generacion aleatoria.
             entity.Property(x => x.TokenInvitacion)
                   .IsRequired()
                   .HasMaxLength(100);
@@ -202,51 +140,24 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => x.TokenInvitacion)
                   .IsUnique();
 
-            // --- Lado N-N, parte 1: AsignacionHerencia -> ActivoDigital ---
-            // Si se borra un ActivoDigital, se borran en cascada las
-            // asignaciones que lo referencian (ya no tiene sentido
-            // conservarlas: el activo que reparten ya no existe).
+            // Cascade: si se borra el ActivoDigital, sus asignaciones ya no tienen
+            // sentido (el activo que reparten dejo de existir).
             entity.HasOne(x => x.ActivoDigital)
                   .WithMany(a => a.AsignacionesHerencia)
                   .HasForeignKey(x => x.ActivoDigitalId)
                   .OnDelete(DeleteBehavior.Cascade);
 
-            // --- Lado N-N, parte 2: AsignacionHerencia -> Usuario (rol BENEFICIARIO) ---
-            //
-            // IsRequired(false): a diferencia de ActivoDigitalId, esta FK es
-            // OPCIONAL, porque UsuarioId es nullable (int?) en la entidad: el
-            // otorgante puede invitar a alguien por Email que todavia no
-            // tiene cuenta (ver AsignacionHerencia.EmailInvitado). Mientras
-            // esa persona no se registre, esta columna vive en NULL.
-            //
-            // --- ¿Por que DeleteBehavior.Restrict (y no Cascade) aca? ---
-            // Este mismo Usuario (tabla "Usuarios") ya tiene, desde arriba,
-            // OTRA ruta de cascada hacia esta MISMA tabla AsignacionHerencia:
-            // Usuario -[Cascade]-> ActivoDigital -[Cascade]-> AsignacionHerencia
-            // (seccion 1 + la regla de arriba, en el rol OTORGANTE). Si
-            // ADEMAS configuraramos esta segunda ruta,
-            // Usuario -[Cascade]-> AsignacionHerencia (en el rol BENEFICIARIO),
-            // quedarian DOS caminos de cascada distintos conviniendo en la
-            // MISMA tabla, ambos originados en "Usuarios". Motores como SQL
-            // Server rechazan directamente ese tipo de esquema al crear las
-            // FKs ("may cause cycles or multiple cascade paths"); con SQLite,
-            // ademas, el propio EF Core puede comportarse de forma ambigua o
-            // fallar al generar la migracion ante este patron, especialmente
-            // en el caso limite (aunque en teoria posible con este esquema)
-            // de que un mismo Usuario sea, para una misma fila, TANTO el
-            // otorgante (via su ActivoDigital) COMO el beneficiario (via esta
-            // FK directa): borrar ese Usuario dispararia dos ordenes de
-            // cascada distintas apuntando a la MISMA fila, algo que un motor
-            // relacional no puede resolver de forma deterministica.
-            //
-            // Ademas de esa razon tecnica, hay una razon de NEGOCIO igual de
-            // valida: si un Beneficiario decidiera eliminar su cuenta, no
-            // queremos perder en silencio el registro de "que le fue
-            // asignado y por quien" (el otorgante original podria seguir
-            // necesitando esa informacion, por ejemplo para reasignarlo a
-            // otra persona). Restrict fuerza a resolver esa situacion
-            // explicitamente (reasignar o eliminar la AsignacionHerencia a
-            // mano) antes de poder borrar la cuenta del beneficiario.
+            // Restrict (no Cascade): esta tabla ya recibe otra ruta de cascada
+            // desde Usuario (Usuario -[Cascade]-> ActivoDigital -[Cascade]->
+            // AsignacionHerencia, seccion 1). Agregar una segunda ruta directa
+            // Usuario -[Cascade]-> AsignacionHerencia generaria dos caminos de
+            // cascada convergiendo en la misma tabla desde el mismo origen, algo
+            // que SQL Server rechaza de plano y que en SQLite/EF puede comportarse
+            // de forma ambigua (mas aun si un mismo Usuario es, para una fila,
+            // otorgante y beneficiario a la vez). De negocio: si el beneficiario
+            // borra su cuenta no queremos perder en silencio el registro de que
+            // le fue asignado y por quien; Restrict fuerza a reasignar o eliminar
+            // la fila explicitamente antes.
             entity.HasOne(x => x.Usuario)
                   .WithMany(u => u.HerenciasRecibidas)
                   .HasForeignKey(x => x.UsuarioId)
@@ -255,16 +166,13 @@ public class AppDbContext : DbContext
         });
 
         // ==========================================================
-        // 4) CONFIGURACION DE ConfiguracionVerificacionVida (1-1 con Usuario)
+        // 4) ConfiguracionVerificacionVida (1-1 con Usuario)
         // ==========================================================
         modelBuilder.Entity<ConfiguracionVerificacionVida>(entity =>
         {
-            // --- Clave primaria COMPARTIDA con Usuario ---
-            // UsuarioId es, a la vez, la PK de esta tabla y la FK hacia
-            // Usuario: es la forma estandar en EF Core de modelar una
-            // relacion 1-1 OBLIGATORIA (un Usuario tiene, como maximo, una
-            // sola fila de configuracion, nunca varias), sin necesitar un
-            // Id autoincremental propio que nunca tendria sentido de negocio.
+            // PK compartida con Usuario: forma estandar de EF Core para modelar
+            // una relacion 1-1 obligatoria sin un Id autoincremental que no
+            // tendria sentido de negocio propio.
             entity.HasKey(c => c.UsuarioId);
 
             entity.Property(c => c.FrecuenciaMeses)
@@ -276,34 +184,23 @@ public class AppDbContext : DbContext
             entity.Property(c => c.UltimoCheckIn)
                   .IsRequired();
 
-            // Mismo criterio que AsignacionHerencia.Estado: default a nivel
-            // de base de datos como segunda capa de defensa ademas del
-            // default ya fijado en el modelo (Estado = Activo).
             entity.Property(c => c.Estado)
                   .IsRequired()
                   .HasDefaultValue(EstadoVerificacionVida.Activo);
 
-            // --- FK 1: UsuarioId (PK compartida) -> Usuario (rol TITULAR) ---
             // Cascade: si se borra el Usuario, no tiene sentido conservar
-            // "huerfana" su propia configuracion de monitoreo. A diferencia
-            // del caso de AsignacionHerencia (ver seccion 3), esta es la
-            // UNICA ruta de cascada que llega a esta tabla desde Usuario
-            // (la otra FK de abajo, ContactoConfianzaId, va con Restrict),
-            // asi que Cascade aca no genera ninguna ambiguedad.
+            // huerfana su propia configuracion. Es la unica ruta de cascada que
+            // llega a esta tabla desde Usuario (la otra FK, de abajo, es Restrict).
             entity.HasOne(c => c.Usuario)
                   .WithOne()
                   .HasForeignKey<ConfiguracionVerificacionVida>(c => c.UsuarioId)
                   .OnDelete(DeleteBehavior.Cascade);
 
-            // --- FK 2: ContactoConfianzaId -> Usuario (rol CONTACTO) ---
-            // Segunda FK hacia la MISMA tabla Usuarios: igual que
-            // AsignacionHerencia.UsuarioId (ver el comentario detallado en
-            // la seccion 3), debe ir con Restrict para no generar una
-            // segunda ruta de cascada convergente sobre esta tabla. Ademas,
-            // de negocio: si el contacto de confianza elimina su cuenta, no
-            // queremos que la configuracion del titular desaparezca en
-            // silencio junto con el (obligaria a elegir uno nuevo, no a
-            // perder toda la configuracion de frecuencia/metodo).
+            // Restrict: segunda FK hacia la misma tabla Usuarios (mismo motivo
+            // que AsignacionHerencia.UsuarioId en la seccion 3: solo una puede ir
+            // en Cascade). De negocio: si el contacto de confianza borra su
+            // cuenta, no queremos perder toda la configuracion del titular junto
+            // con el; Restrict obliga a elegir un contacto nuevo.
             entity.HasOne(c => c.ContactoConfianza)
                   .WithMany()
                   .HasForeignKey(c => c.ContactoConfianzaId)
@@ -312,7 +209,7 @@ public class AppDbContext : DbContext
         });
 
         // ==========================================================
-        // 5) CONFIGURACION DE CertificadoDefuncion
+        // 5) CertificadoDefuncion
         // ==========================================================
         modelBuilder.Entity<CertificadoDefuncion>(entity =>
         {
@@ -333,18 +230,11 @@ public class AppDbContext : DbContext
             entity.Property(c => c.MotivoRechazo)
                   .HasMaxLength(500);
 
-            // --- TRES FKs distintas hacia la MISMA tabla Usuarios ---
-            // (titular fallecido, heredero que subio el documento, admin
-            // que lo reviso). Las TRES van con Restrict, por el mismo
-            // motivo ya justificado en AsignacionHerencia.UsuarioId (seccion
-            // 3) y en ConfiguracionVerificacionVida.ContactoConfianzaId
-            // (seccion 4): con multiples FKs hacia una misma tabla, a lo
-            // sumo UNA puede ir en Cascade sin generar rutas convergentes
-            // ambiguas, y esta tabla en particular no tiene ninguna razon
-            // de negocio para borrar certificados en cascada al eliminar
-            // CUALQUIERA de los tres usuarios involucrados: son, ante todo,
-            // un registro de auditoria que debe sobrevivir a la baja de
-            // cualquiera de las cuentas que participaron.
+            // Tres FKs distintas hacia Usuarios (titular, heredero que subio el
+            // documento, admin que reviso), todas Restrict por el mismo motivo de
+            // las secciones anteriores (a lo sumo una FK hacia la misma tabla
+            // puede ir en Cascade). Ademas es, ante todo, un registro de
+            // auditoria que debe sobrevivir a la baja de cualquiera de los tres.
             entity.HasOne(c => c.UsuarioTitular)
                   .WithMany()
                   .HasForeignKey(c => c.UsuarioTitularId)
@@ -365,30 +255,24 @@ public class AppDbContext : DbContext
         });
 
         // ==========================================================
-        // 6) SEEDERS (HasData) - datos de prueba
+        // 6) Seeders (HasData) - datos de prueba
         // ==========================================================
-        // IMPORTANTE: HasData exige valores ESTATICOS y solo propiedades escalares
-        // (no se pueden asignar objetos de navegacion). Por eso cada semilla fija
-        // manualmente sus FKs (UsuarioId, ActivoDigitalId) y usa una fecha fija
-        // (no DateTime.Now/UtcNow) para que la migracion generada sea siempre
-        // identica y reproducible entre entornos.
+        // HasData exige valores estaticos, solo propiedades escalares (sin
+        // objetos de navegacion) y una fecha fija (no DateTime.Now/UtcNow) para
+        // que la migracion generada sea siempre identica y reproducible.
         var fechaSeed = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        // Hash/salt REALES (no un placeholder): calculados una sola vez, fuera de
-        // este proyecto, con el mismo algoritmo que usa SeguridadService.CrearPasswordHash
-        // (HMACSHA512), para que los 3 usuarios de prueba puedan loguearse de verdad.
-        // La contrasena en texto plano de los 3 es: "Test123456!"
+        // Hash/salt reales (HMACSHA512, mismo algoritmo que SeguridadService.CrearPasswordHash),
+        // para que los 3 usuarios de prueba puedan loguearse de verdad.
+        // Contraseña en texto plano de los 3: "Test123456!"
         var passwordHashSeed = Convert.FromBase64String("7lDUenhjxBwPX/DKjqDlkN4PIKL8ydsEt3aTmhITAoBXodJ0wdibMst4wfaWliKF6CeW51ys8aI3tBm4C4eRuw==");
         var passwordSaltSeed = Convert.FromBase64String("HHYRrwJEzysVkjRbfTwwuY628CYOQv9HgbWh5w3jOl9YRsO/9lz1t6a+dPFFe0oO479Mdtn4KPNYpZ/N4hajHdTehwBvW+6pWR4uVmsC4eJ7GB/zgWA4VngYKcunwnffJalF6V9pC2IzEhQeiUvWXybgDsz0IxSIAxM65VFKqTU=");
 
-        // --- 3 Usuarios de prueba ---
-        // Los 3 son necesarios para demostrar el modelo de DOBLE ROL con una
-        // cadena real: Usuario 1 (Otorgante) le deja un activo a Usuario 2
-        // (que ahi actua de Beneficiario), y ESE MISMO Usuario 2 (ahora en su
-        // rol de Otorgante) le deja, a su vez, un activo a Usuario 3 (ver la
-        // seccion de AsignacionHerencia mas abajo). El Usuario 1 se siembra
-        // como Administrador (para poder probar de entrada el endpoint "GET
-        // /api/usuarios", restringido por rol); los otros dos, como Usuario comun.
+        // Los 3 usuarios demuestran el doble rol con una cadena real: Usuario 1
+        // (Otorgante) le deja un activo a Usuario 2 (Beneficiario), y ese mismo
+        // Usuario 2, ahora de Otorgante, le deja uno a Usuario 3 (ver AsignacionHerencia
+        // mas abajo). Usuario 1 se siembra como Administrador para poder probar
+        // de entrada GET /api/usuarios; los otros dos, como Usuario comun.
         modelBuilder.Entity<Usuario>().HasData(
             new Usuario
             {
@@ -431,10 +315,8 @@ public class AppDbContext : DbContext
             }
         );
 
-        // --- 17 Activos Digitales de prueba (>= 15 pedidos por la rubrica) ---
-        // Repartidos entre los 3 usuarios (9 + 6 + 2) para que los tres
-        // puedan actuar como otorgantes en algun momento del escenario de
-        // prueba, no solo como beneficiarios.
+        // 17 activos (>= 15 pedidos por la rubrica), repartidos 9/6/2 para que
+        // los tres usuarios actuen como otorgantes en algun momento.
         modelBuilder.Entity<ActivoDigital>().HasData(
             new ActivoDigital { Id = 1, Nombre = "Cuenta Banco Santander", Tipo = TipoActivoDigital.CuentaBancaria, Descripcion = "Caja de ahorro en pesos", UsuarioId = 1, FechaCreacion = fechaSeed, UsuarioCreacion = "seed" },
             new ActivoDigital { Id = 2, Nombre = "Cuenta Banco Galicia", Tipo = TipoActivoDigital.CuentaBancaria, Descripcion = "Cuenta corriente en dolares", UsuarioId = 1, FechaCreacion = fechaSeed, UsuarioCreacion = "seed" },
@@ -455,30 +337,15 @@ public class AppDbContext : DbContext
             new ActivoDigital { Id = 17, Nombre = "Cuenta X (Twitter)", Tipo = TipoActivoDigital.RedSocial, Descripcion = "Perfil personal", UsuarioId = 3, FechaCreacion = fechaSeed, UsuarioCreacion = "seed" }
         );
 
-        // --- 5 Asignaciones de herencia de prueba ---
-        // Demuestran, en conjunto:
-        //  - El reparto N-N de un mismo activo entre 2 beneficiarios (Id 1 y 2).
-        //  - La cadena pedida por la rubrica "Usuario A le deja un activo a
-        //    Usuario B, y Usuario B le deja uno a Usuario C": Id 1 es
-        //    Maximiliano(1, Otorgante) -> Ana(2, Beneficiario), e Id 3 es
-        //    Ana(2, Otorgante) -> Carlos(3, Beneficiario). Ana aparece asi
-        //    simultaneamente en AMBOS roles, la esencia misma del modelo de
-        //    doble rol.
-        //  - Una invitacion a alguien SIN CUENTA todavia (Id 4: UsuarioId
-        //    null + EmailInvitado), que el dia que esa persona se registre
-        //    con ese mismo email quedara reclamada automaticamente (ver
-        //    UsuarioService.CrearUsuarioAsync).
-        //  - Una asignacion YA RESUELTA de antemano (Id 5, Estado = Aceptado),
-        //    util para probar de entrada la regla critica de
-        //    AsignacionHerenciaService.CambiarEstadoAsync ("el estado ya fue
-        //    procesado y no puede modificarse") sin depender de haber llamado
-        //    antes al endpoint PATCH.
-        // NOTA sobre TokenInvitacion en los seeds: HasData exige valores
-        // ESTATICOS conocidos en tiempo de compilacion (no se puede llamar a
-        // RandomNumberGenerator aca), asi que se fijan strings arbitrarios
-        // pero unicos "a mano" para las 5 filas semilla. En la operacion
-        // normal de la Api (AsignacionHerenciaService.CrearAsignacionesAsync)
-        // este valor SI se genera aleatoriamente en cada alta.
+        // 5 asignaciones que demuestran: el reparto N-N de un mismo activo entre 2
+        // beneficiarios (Id 1 y 2); la cadena Otorgante->Beneficiario->Otorgante
+        // (Id 1 y 3, con Ana en ambos roles); una invitacion sin cuenta todavia
+        // (Id 4: UsuarioId null + EmailInvitado); y una asignacion ya aceptada de
+        // antemano (Id 5) para probar la regla de AsignacionHerenciaService.CambiarEstadoAsync
+        // sin depender de haber llamado antes al endpoint PATCH.
+        // TokenInvitacion se fija a mano en los seeds porque HasData exige valores
+        // conocidos en tiempo de compilacion; en la operacion normal de la Api se
+        // genera aleatoriamente en cada alta.
         modelBuilder.Entity<AsignacionHerencia>().HasData(
             new AsignacionHerencia { Id = 1, ActivoDigitalId = 1, UsuarioId = 2, EmailInvitado = "ana.torres@example.com", PorcentajeAsignado = 50.00m, CondicionLiberacion = "Certificado de defuncion + 30 dias", Estado = EstadoBeneficiario.Pendiente, TokenInvitacion = "seed-token-0000000000000000000000000000001", FechaCreacion = fechaSeed, UsuarioCreacion = "seed" },
             new AsignacionHerencia { Id = 2, ActivoDigitalId = 1, UsuarioId = 3, EmailInvitado = "carlos.sosa@example.com", PorcentajeAsignado = 50.00m, CondicionLiberacion = "Certificado de defuncion + 30 dias", Estado = EstadoBeneficiario.Pendiente, TokenInvitacion = "seed-token-0000000000000000000000000000002", FechaCreacion = fechaSeed, UsuarioCreacion = "seed" },

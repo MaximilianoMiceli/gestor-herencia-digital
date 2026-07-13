@@ -1,18 +1,9 @@
 /**
  * @file admin/certificados.tsx
- * @description Panel de Administrador para revisar certificados de defunción pendientes.
- *
- * Antes no existía NINGÚN flujo de administración en el frontend, pese a que el backend
- * ya protegía estos 3 endpoints con `[Authorize(Roles = "Administrador")]`:
- *   - GET /api/certificados-defuncion/pendientes
- *   - PATCH /api/certificados-defuncion/{id}/aprobar  (libera TODOS los bienes del titular)
- *   - PATCH /api/certificados-defuncion/{id}/rechazar (requiere un motivo)
- *
- * La pantalla se auto-protege: si el usuario autenticado no tiene rol Administrador
- * (leído del Claim de Rol del JWT, ver AuthContext), se lo redirige de vuelta. Esto es
- * una comodidad de UX, NO el control de seguridad real: ese ya lo aplica el propio
- * backend en cada uno de los 3 endpoints, así que aunque alguien manipulara el cliente
- * para saltarse este chequeo, el servidor igual rechazaría la request con 403.
+ * @description Panel de Administrador para revisar certificados de defunción pendientes:
+ * listarlos, ver el archivo adjunto, aprobarlos (libera todos los bienes del titular) o
+ * rechazarlos con un motivo. Los 3 endpoints ya exigen `[Authorize(Roles = "Administrador")]`
+ * en el backend; el chequeo de rol acá (vía AuthContext) es solo UX, no el control real.
  */
 
 import React, { useState, useCallback } from 'react';
@@ -33,11 +24,8 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { ArrowLeft, ShieldCheck, FileText, Eye } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-// Se usa la API "legacy" de expo-file-system (downloadAsync a un fileUri de texto), no
-// la nueva API basada en clases (File/Directory): en la práctica, esta última rechazó la
-// descarga con un error genérico ("Call to function 'FileSystem.downloadFileAsync' has
-// been rejected") sin más detalle. La legacy además permite chequear el status HTTP real
-// de la respuesta, algo que la nueva API no expone directamente.
+// API "legacy" de expo-file-system: la nueva API basada en clases (File/Directory) rechazaba
+// la descarga con un error genérico y, a diferencia de esta, no expone el status HTTP real.
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as SecureStore from 'expo-secure-store';
@@ -91,10 +79,9 @@ export default function AdminCertificadosScreen() {
   }, [fetchPendientes]);
 
   /**
-   * Descarga el archivo del certificado (con el JWT del admin como header, ya que el
-   * endpoint GET /{id}/archivo está protegido) a una carpeta temporal del dispositivo y
-   * abre el selector nativo "Abrir con..." para visualizarlo (PDF o imagen), en vez de
-   * dejar al admin aprobar/rechazar a ciegas sin poder ver el documento real.
+   * Descarga el certificado (con el JWT del admin, ya que el endpoint está protegido) y
+   * abre el selector nativo "Abrir con..." para visualizarlo, en vez de dejar que se
+   * apruebe o rechace a ciegas sin ver el documento real.
    */
   const handleVerArchivo = async (certificado: CertificadoDefuncionDTO) => {
     if (!FileSystem.cacheDirectory) {
@@ -112,9 +99,8 @@ export default function AdminCertificadosScreen() {
         { headers: token ? { Authorization: `Bearer ${token}` } : {} }
       );
 
-      // downloadAsync guarda el body de la respuesta tal cual venga, incluso si el
-      // servidor respondió un error (ej: 401/404 con un JSON de "{ mensaje: ... }" en
-      // vez del archivo real): hay que chequear el status a mano antes de "compartirlo".
+      // downloadAsync guarda el body tal cual venga aunque el servidor haya respondido un
+      // error (ej: JSON de "{ mensaje: ... }" en vez del archivo): hay que validar el status.
       if (resultado.status !== 200) {
         Alert.alert('Error', `El servidor respondió con un error (${resultado.status}) al pedir el archivo.`);
         return;

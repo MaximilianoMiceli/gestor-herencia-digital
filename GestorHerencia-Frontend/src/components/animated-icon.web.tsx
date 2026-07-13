@@ -1,10 +1,8 @@
 /**
  * @file animated-icon.web.tsx
- * @description Variante Web del logotipo animado de bienvenida. Metro resuelve este
- * archivo automáticamente en vez de animated-icon.tsx cuando la plataforma es 'web'
- * (convención de sufijo .web.tsx de React Native/Expo), ya que Web no tiene splash
- * screen nativa y necesita un gradiente de fondo vía CSS en lugar de un estilo de
- * React Native.
+ * @description Variante Web del logotipo animado de bienvenida. Metro resuelve este archivo
+ * en vez de animated-icon.tsx cuando la plataforma es 'web' (convención de sufijo .web.tsx),
+ * ya que Web no tiene splash screen nativa y necesita el gradiente vía CSS en vez de estilo RN.
  */
 
 import { Image } from 'expo-image';
@@ -17,9 +15,8 @@ import classes from './animated-icon.module.css';
 const DURATION = 300;
 
 /**
- * Componente placeholder para la versión Web.
- * En web no es necesaria la cortina de splash nativa, por lo que retorna null
- * (el archivo nativo sí implementa un overlay real; ver animated-icon.tsx).
+ * Placeholder Web: no hay splash nativa que cubrir, por lo que no renderiza nada
+ * (el overlay real vive en animated-icon.tsx).
  */
 export function AnimatedSplashOverlay() {
   return null;
@@ -59,11 +56,9 @@ const logoKeyframe = new Keyframe({
   },
 });
 
-// Brillo: a diferencia de la versión nativa (que solo gira), acá también hace un fade-in
-// y un pequeño "destape" rotado (-180deg a 0deg) durante la entrada. Los keys de Keyframe
-// son porcentajes (0-100) del total de duration(), no milisegundos: como este brillo se
-// usa con una duration mucho más larga (varios minutos, en AnimatedIcon), el key
-// "DURATION / 1000" cae muy cerca del 0%, haciendo que el destape ocurra casi al instante.
+// Brillo: además de girar (como en nativo) hace fade-in y un "destape" rotado (-180deg a 0deg).
+// Los keys de Keyframe son porcentajes (0-100) de duration(), no ms: como acá duration() es
+// de varios minutos, "DURATION / 1000" cae casi en el 0%, así el destape ocurre casi al instante.
 const glowKeyframe = new Keyframe({
   0: {
     transform: [{ rotateZ: '-180deg' }, { scale: 0.8 }],
@@ -91,10 +86,8 @@ export function AnimatedIcon() {
       </Animated.View>
 
       <Animated.View style={styles.background} entering={keyframe.duration(DURATION)}>
-        {/* El gradiente se aplica con una clase CSS (animated-icon.module.css) en vez del
-            estilo "experimental_backgroundImage" que usa la versión nativa, porque esa
-            propiedad de React Native Web no siempre se traduce de forma confiable a CSS
-            real en el DOM; un <div> con className es la forma directa de lograrlo en Web. */}
+        {/* Gradiente vía clase CSS en vez de "experimental_backgroundImage" (usado en nativo):
+            esa propiedad de RN Web no siempre se traduce de forma confiable a CSS real en el DOM. */}
         <div className={classes.expoLogoBackground} />
       </Animated.View>
 

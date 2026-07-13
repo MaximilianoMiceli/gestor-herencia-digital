@@ -8,17 +8,14 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Herencia.Api.Controllers;
 
-// CertificadosDefuncionController expone la subida y revision de
-// certificados de defuncion.
-//
-// --- ¿Por que [Authorize] simple (no por Rol) alcanza para Subir? ---
-// Cualquier Usuario autenticado puede intentar subir un certificado: no
-// hace falta un rol especial, porque la propia regla de negocio
-// (CertificadoDefuncionService.SubirCertificadoAsync exige que
-// "subidoPorUsuarioId" sea un heredero YA ACEPTADO del titular indicado) ya
-// impide que un usuario sin ninguna relacion con ese titular pueda subir
-// algo a su nombre. Aprobar/Rechazar, en cambio, SI requieren el rol
-// Administrador: un heredero no puede autoaprobar su propio certificado.
+/// <summary>Expone la subida y revision de certificados de defuncion.</summary>
+/// <remarks>
+/// Subir solo requiere [Authorize] simple: la propia regla de negocio
+/// (CertificadoDefuncionService.SubirCertificadoAsync exige que quien sube sea un heredero
+/// ya aceptado del titular indicado) ya impide subir a nombre de alguien sin relacion.
+/// Aprobar/Rechazar, en cambio, requieren el rol Administrador: un heredero no puede
+/// autoaprobar su propio certificado.
+/// </remarks>
 [ApiController]
 [Authorize]
 [Route("api/certificados-defuncion")]
@@ -41,10 +38,7 @@ public class CertificadosDefuncionController : ControllerBase
         return (claim is not null && int.TryParse(claim.Value, out var usuarioId)) ? usuarioId : null;
     }
 
-    // POST api/certificados-defuncion
-    //
-    // Recibe un formulario multipart (no JSON): "usuarioTitularId" identifica
-    // de quien es el certificado, y "archivo" es el documento en si (PDF/JPG/PNG).
+    /// <summary>Sube el certificado de defuncion (PDF/JPG/PNG) de un titular.</summary>
     [HttpPost]
     public async Task<ActionResult<CertificadoDefuncionDTO>> Subir([FromForm] int usuarioTitularId, [FromForm] IFormFile archivo)
     {
@@ -62,11 +56,8 @@ public class CertificadosDefuncionController : ControllerBase
 
         try
         {
-            // --- Nunca confiar en un "SubidoPorUsuarioId" del body ---
-            // No existe tal campo en el formulario: el heredero que sube el
-            // documento es SIEMPRE el usuario autenticado (mismo criterio
-            // que ActivosDigitalesController.Crear sobreescribiendo
-            // dto.UsuarioId antes de llamar al servicio).
+            // El heredero que sube el documento es siempre el usuario autenticado, nunca un
+            // valor del body (mismo criterio que ActivosDigitalesController.Crear).
             await using var contenido = archivo.OpenReadStream();
 
             var certificado = await _certificadoDefuncionService.SubirCertificadoAsync(
@@ -77,10 +68,7 @@ public class CertificadosDefuncionController : ControllerBase
                 archivo.ContentType,
                 archivo.Length);
 
-            // 201 Created sin header "Location": no existe, en esta etapa,
-            // un endpoint "GET certificado por Id" para un heredero comun
-            // (solo el Administrador tiene un listado, y es de TODOS los
-            // pendientes, no de uno puntual).
+            // Sin header Location: no existe un "GET certificado por Id" para un heredero comun.
             return StatusCode(StatusCodes.Status201Created, certificado);
         }
         catch (RecursoNoEncontradoException ex)
@@ -99,7 +87,7 @@ public class CertificadosDefuncionController : ControllerBase
         }
     }
 
-    // GET api/certificados-defuncion/pendientes
+    /// <summary>Lista los certificados de defuncion pendientes de revision (solo Administrador).</summary>
     [Authorize(Roles = nameof(RolUsuario.Administrador))]
     [HttpGet("pendientes")]
     public async Task<ActionResult<IEnumerable<CertificadoDefuncionDTO>>> ObtenerPendientes()
@@ -118,7 +106,7 @@ public class CertificadosDefuncionController : ControllerBase
         }
     }
 
-    // PATCH api/certificados-defuncion/{id}/aprobar
+    /// <summary>Aprueba un certificado de defuncion pendiente (solo Administrador).</summary>
     [Authorize(Roles = nameof(RolUsuario.Administrador))]
     [HttpPatch("{id:int}/aprobar")]
     public async Task<ActionResult<CertificadoDefuncionDTO>> Aprobar(int id)
@@ -152,12 +140,7 @@ public class CertificadosDefuncionController : ControllerBase
         }
     }
 
-    // GET api/certificados-defuncion/{id}/archivo
-    //
-    // Sirve el binario del certificado (PDF/JPG/PNG) para que un
-    // Administrador pueda verlo mientras decide si aprobar o rechazar: antes
-    // el panel solo mostraba metadatos (titular, quien lo subio, fecha), sin
-    // forma de abrir el documento en si.
+    /// <summary>Descarga el binario del certificado (PDF/JPG/PNG) para que un Administrador pueda revisarlo.</summary>
     [Authorize(Roles = nameof(RolUsuario.Administrador))]
     [HttpGet("{id:int}/archivo")]
     public async Task<IActionResult> ObtenerArchivo(int id)
@@ -187,11 +170,9 @@ public class CertificadosDefuncionController : ControllerBase
         }
     }
 
-    // Determina el Content-Type a partir de la EXTENSION del nombre original
-    // guardado (nunca de la del archivo en disco, que es un Guid sin
-    // extension confiable de por si para este chequeo): alcanza porque
-    // SubirCertificadoAsync ya restringio de antemano los tipos posibles a
-    // PDF/JPG/PNG.
+    // Determina el Content-Type a partir de la extension del nombre original guardado (nunca
+    // la del archivo en disco, un Guid sin extension confiable): alcanza porque
+    // SubirCertificadoAsync ya restringio los tipos posibles a PDF/JPG/PNG.
     private static string ObtenerContentType(string nombreArchivoOriginal)
     {
         var extension = Path.GetExtension(nombreArchivoOriginal).ToLowerInvariant();
@@ -204,7 +185,7 @@ public class CertificadosDefuncionController : ControllerBase
         };
     }
 
-    // PATCH api/certificados-defuncion/{id}/rechazar
+    /// <summary>Rechaza un certificado de defuncion pendiente, con motivo (solo Administrador).</summary>
     [Authorize(Roles = nameof(RolUsuario.Administrador))]
     [HttpPatch("{id:int}/rechazar")]
     public async Task<ActionResult<CertificadoDefuncionDTO>> Rechazar(int id, RechazarCertificadoDTO rechazarDTO)

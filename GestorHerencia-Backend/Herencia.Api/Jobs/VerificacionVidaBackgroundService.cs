@@ -2,21 +2,18 @@ using Herencia.Business.Interfaces;
 
 namespace Herencia.Api.Jobs;
 
-// VerificacionVidaBackgroundService ejecuta, en un ciclo periodico,
-// IVerificacionVidaService.EjecutarEscaneoAsync() para detectar titulares
-// vencidos y disparar recordatorios/escalamiento sin depender de que
-// alguien abra la app.
-//
-// --- ¿Por que IServiceScopeFactory y no inyectar IVerificacionVidaService directo? ---
-// Un BackgroundService se registra como SINGLETON (una unica instancia
-// durante toda la vida del proceso), pero IVerificacionVidaService (y,
-// transitivamente, AppDbContext) es SCOPED (una instancia nueva por
-// request HTTP, ver Program.cs). Inyectar un servicio Scoped directo en el
-// constructor de un Singleton es un error clasico de "captive dependency"
-// que el propio contenedor de DI de ASP.NET Core rechaza en tiempo de
-// ejecucion. La solucion estandar es pedir IServiceScopeFactory (que SI es
-// Singleton) y abrir un scope nuevo, de corta vida, en cada tick: el mismo
-// ciclo de vida que tendria una request HTTP normal.
+/// <summary>
+/// Ejecuta, en un ciclo periodico, IVerificacionVidaService.EjecutarEscaneoAsync() para
+/// detectar titulares vencidos y disparar recordatorios/escalamiento sin depender de que
+/// alguien abra la app.
+/// </summary>
+/// <remarks>
+/// Se inyecta IServiceScopeFactory (no IVerificacionVidaService directo) porque un
+/// BackgroundService es Singleton, mientras que IVerificacionVidaService (y, transitivamente,
+/// AppDbContext) es Scoped: inyectar un servicio Scoped en un Singleton es una "captive
+/// dependency" que el contenedor de DI rechaza en tiempo de ejecucion. Por eso se abre un
+/// scope nuevo, de corta vida, en cada tick.
+/// </remarks>
 public class VerificacionVidaBackgroundService : BackgroundService
 {
     private static readonly TimeSpan IntervaloEntreEscaneos = TimeSpan.FromHours(24);
@@ -36,9 +33,8 @@ public class VerificacionVidaBackgroundService : BackgroundService
     {
         using var timer = new PeriodicTimer(IntervaloEntreEscaneos);
 
-        // Se ejecuta un primer escaneo apenas arranca el proceso (no tiene
-        // sentido esperar 24hs para el primero), y despues uno por cada
-        // tick del PeriodicTimer.
+        // Primer escaneo apenas arranca el proceso (no tiene sentido esperar 24hs para el
+        // primero), y despues uno por cada tick del PeriodicTimer.
         do
         {
             await EjecutarUnEscaneoAsync(stoppingToken);
@@ -50,9 +46,6 @@ public class VerificacionVidaBackgroundService : BackgroundService
     {
         try
         {
-            // "using" (no "await using" con vida larga): el scope se crea y
-            // se descarta DENTRO de este mismo tick, nunca se mantiene
-            // abierto entre ejecuciones.
             using var scope = _scopeFactory.CreateScope();
             var verificacionVidaService = scope.ServiceProvider.GetRequiredService<IVerificacionVidaService>();
 
@@ -60,9 +53,8 @@ public class VerificacionVidaBackgroundService : BackgroundService
         }
         catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
         {
-            // Un error puntual en UN escaneo (ej: la base de datos no
-            // respondio momentaneamente) no debe tumbar el proceso
-            // completo: se registra y se reintenta en el proximo tick.
+            // Un error puntual en un escaneo no debe tumbar el proceso: se registra y se
+            // reintenta en el proximo tick.
             _logger.LogError(ex, "Error inesperado durante el escaneo de verificacion de vida.");
         }
     }

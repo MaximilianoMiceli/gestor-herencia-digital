@@ -42,7 +42,6 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      // 1. Enviamos credenciales al endpoint de login.
       const response = await AuthService.login({ email, password });
 
       // Si el usuario tiene 2FA habilitado, el backend NO devuelve un token todavía
@@ -56,11 +55,8 @@ export default function LoginScreen() {
         return;
       }
 
-      // 2. Persistimos el JWT devuelto PRIMERO: esto guarda el token en SecureStore, que
-      // es de donde el interceptor de request de Axios (ver api.ts) lo lee para adjuntar
-      // el header "Authorization" en cualquier llamada posterior (como la de aceptar la
-      // invitación, un renglón más abajo). Hacerlo en este orden evita tener que armar el
-      // header a mano con el token "recién recibido".
+      // Se persiste el token ANTES de aceptar la invitación: el interceptor de Axios
+      // (ver api.ts) lo lee de SecureStore para adjuntar el header Authorization.
       await signIn(response.token);
 
       // Si el inicio de sesión fue disparado por una invitación, procesamos la aceptación.
@@ -80,8 +76,8 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Botón de volver: por si el usuario entró a Login y se arrepiente, sin esto la
-          única salida era el botón físico/gesto de "atrás" del sistema. */}
+      {/* Si no hay pantalla previa en el stack (se entró directo a /login), cae a welcome
+          en vez de dejar el back button sin destino. */}
       <TouchableOpacity
         style={[styles.backButton, { top: insets.top + 12 }]}
         onPress={() => (router.canGoBack() ? router.back() : router.replace('/(auth)/welcome'))}
@@ -89,7 +85,6 @@ export default function LoginScreen() {
         <ArrowLeft size={24} color="#02213D" />
       </TouchableOpacity>
 
-      {/* Cabecera del Branding */}
       <View style={styles.logoContainer}>
         <Text style={styles.titlePrefix}>Gestor de</Text>
         <GradientText text="Herencia Digital" style={styles.titleGradient} />
@@ -98,7 +93,6 @@ export default function LoginScreen() {
         </View>
       </View>
 
-      {/* Formulario de entradas del usuario */}
       <View style={styles.formContainer}>
         <AuthInput 
           placeholder="Email" 
@@ -112,8 +106,7 @@ export default function LoginScreen() {
           value={password}
           onChangeText={setPassword}
         />
-        
-        {/* Acceso al flujo real de recuperación de contraseña (POST /auth/olvide-password) */}
+
         <TouchableOpacity
           style={styles.forgotPassword}
           onPress={() => router.push('/(auth)/olvide-password')}

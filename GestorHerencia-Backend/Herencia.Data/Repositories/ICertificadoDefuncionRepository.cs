@@ -2,33 +2,30 @@ using Herencia.Data.Models;
 
 namespace Herencia.Data.Repositories;
 
-// ICertificadoDefuncionRepository extiende el contrato generico
-// IRepositorioBase<CertificadoDefuncion> para sumar las consultas propias
-// del flujo de revision de certificados.
+/// <summary>Extiende el CRUD genérico con las consultas propias del flujo de revisión de certificados.</summary>
 public interface ICertificadoDefuncionRepository : IRepositorioBase<CertificadoDefuncion>
 {
-    // Devuelve los certificados PENDIENTES de un titular puntual. Se usa
-    // (a) en VerificacionVidaService.RegistrarCheckInAsync, para saber si
-    // hay que auto-cancelarlos cuando el titular vuelve a confirmar
-    // actividad, y (b) en CertificadoDefuncionService, para decidir si ya
-    // existe una revision en curso antes de crear una nueva fila.
+    /// <summary>
+    /// Devuelve los certificados Pendientes de un titular. La usa (a)
+    /// VerificacionVidaService.RegistrarCheckInAsync, para saber si hay que auto-cancelarlos
+    /// cuando el titular confirma actividad, y (b) CertificadoDefuncionService, para evitar
+    /// crear una revisión duplicada.
+    /// </summary>
     Task<IEnumerable<CertificadoDefuncion>> ObtenerPendientesPorTitularAsync(int usuarioTitularId);
 
-    // Devuelve TODOS los certificados Pendientes de TODOS los titulares:
-    // es la cola de revision que consume el panel de un Administrador
-    // (GET /api/certificados-defuncion/pendientes).
+    /// <summary>Devuelve todos los certificados Pendientes: la cola de revisión del panel de Administrador.</summary>
     Task<IEnumerable<CertificadoDefuncion>> ObtenerPendientesAsync();
 
-    // Busca un certificado por Id, con UsuarioTitular y SubidoPor ya
-    // cargados (Include): lo necesitan Aprobar/Rechazar para poder devolver
-    // el DTO completo (con los nombres resueltos) sin una consulta extra.
+    /// <summary>
+    /// Busca un certificado por Id con UsuarioTitular y SubidoPor cargados (Include), para poder
+    /// devolver el DTO completo al Aprobar/Rechazar sin una consulta extra.
+    /// </summary>
     Task<CertificadoDefuncion?> ObtenerConUsuariosAsync(int id);
 
-    // true si YA existe un certificado APROBADO para este titular (su
-    // fallecimiento ya fue confirmado antes). Lo usa
-    // CertificadoDefuncionService.SubirCertificadoAsync para rechazar nuevas
-    // subidas sobre un titular cuya herencia ya se liberó: sin este chequeo,
-    // cualquier heredero aceptado podía seguir mandando certificados
-    // indefinidamente para la misma persona, incluso después de aprobado uno.
+    /// <summary>
+    /// True si ya existe un certificado Aprobado para este titular. La usa
+    /// CertificadoDefuncionService.SubirCertificadoAsync para rechazar nuevas subidas sobre un
+    /// titular cuya herencia ya se liberó.
+    /// </summary>
     Task<bool> ExisteCertificadoAprobadoAsync(int usuarioTitularId);
 }

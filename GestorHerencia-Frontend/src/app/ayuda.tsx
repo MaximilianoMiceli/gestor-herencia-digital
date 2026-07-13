@@ -24,9 +24,6 @@ interface Seccion {
   texto: string;
 }
 
-// Contenido estático de la ayuda: un resumen de cada funcionalidad principal de la app,
-// pensado para que un usuario nuevo entienda el flujo completo sin tener que navegar
-// cada pantalla. Se recorre con .map() para renderizar las cards en el mismo orden.
 const SECCIONES: Seccion[] = [
   {
     icon: Archive,
@@ -94,9 +91,6 @@ export default function AyudaScreen() {
           </Text>
 
           {SECCIONES.map((seccion) => {
-            // Se reasigna a una variable con mayúscula inicial para poder usarlo como
-            // componente JSX (<Icon .../>); React exige esa convención para distinguir
-            // un componente de una etiqueta HTML nativa.
             const Icon = seccion.icon;
             return (
               <View key={seccion.titulo} style={styles.card}>

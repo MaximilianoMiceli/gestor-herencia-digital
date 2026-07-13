@@ -1,11 +1,17 @@
 /**
  * @file fecha.ts
- * @description Utilidades compartidas para el campo "fecha de nacimiento", usado tanto
- * en el registro (register.tsx) como en la edición de perfil (editar-perfil.tsx). No hay
- * ningún selector de fecha nativo instalado en el proyecto (@react-native-community/
- * datetimepicker no es una dependencia), así que se pide como texto libre en formato
- * "DD/MM/AAAA" y se valida/convierte a mano acá, en un único lugar, para que ambas
- * pantallas apliquen EXACTAMENTE la misma regla que el backend (mayoría de edad).
+ * @description Utilidades compartidas para el campo "fecha de nacimiento" (register.tsx
+ * y editar-perfil.tsx). No hay selector de fecha nativo instalado, así que se pide como
+ * texto libre "DD/MM/AAAA" y se valida/convierte acá para que ambas pantallas apliquen
+ * la misma regla que el backend (mayoría de edad).
+ *
+ * El `Date` que devuelve este módulo se arma siempre con el constructor numérico
+ * (año, mes, día) en hora LOCAL, nunca parseando un string ISO. Es deliberado: los
+ * llamadores reconstruyen el "AAAA-MM-DD" para el backend leyendo getFullYear/getMonth/
+ * getDate (hora local) en vez de usar `Date.toISOString()`, que convierte a UTC primero.
+ * En husos horarios negativos (Argentina, UTC-3) ese paso extra puede correr la fecha un
+ * día hacia atrás — el bug real que rompió altas de usuarios con fecha de nacimiento
+ * cercana a medianoche. Mantener todo en hora local evita esa clase de error.
  */
 
 /** true si el string tiene la forma DD/MM/AAAA con separadores "/". No valida todavía

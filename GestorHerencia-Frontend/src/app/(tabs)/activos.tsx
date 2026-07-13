@@ -60,10 +60,8 @@ export default function ActivosScreen() {
   const fetchActivos = async () => {
     if (!token) return;
     try {
-      // Llamar al endpoint filtrando localmente o mediante query string
+      // El backend no expone búsqueda por query params: se trae la lista completa y se filtra acá.
       const fullList = await AssetsService.getAssets();
-      
-      // Aplicar filtros locales sobre los activos obtenidos
       let filtered = fullList;
       if (searchQuery.trim().length > 0) {
         const query = searchQuery.toLowerCase();
@@ -141,7 +139,6 @@ export default function ActivosScreen() {
 
   return (
     <View style={styles.container}>
-      {/* HEADER DE ALTA FIDELIDAD */}
       <LinearGradient
         colors={['#23856C', '#022739']}
         start={{ x: 0, y: 0 }}
@@ -157,10 +154,7 @@ export default function ActivosScreen() {
         </View>
       </LinearGradient>
 
-      {/* CONTENIDO PRINCIPAL */}
       <View style={styles.content}>
-        
-        {/* BANNER DE ÉXITO AL ELIMINAR */}
         {showSuccessBanner && (
           <View style={styles.successBanner}>
             <Info size={18} color="#0E4A4C" />
@@ -168,7 +162,6 @@ export default function ActivosScreen() {
           </View>
         )}
 
-        {/* BARRA DE BÚSQUEDA Y FILTRADO */}
         <View style={styles.searchFilterRow}>
           <View style={styles.searchContainer}>
             <Search size={18} color="#8A9E95" style={styles.searchIcon} />
@@ -192,7 +185,6 @@ export default function ActivosScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* DROPDOWN DE FILTRADO EXPANDIBLE INLINE */}
         {showFilterDropdown && (
           <View style={styles.dropdownContainer}>
             {tiposActivo.map((tipo) => (
@@ -220,7 +212,6 @@ export default function ActivosScreen() {
           </View>
         )}
 
-        {/* LISTADO DE ACTIVOS */}
         {loading ? (
           <View style={styles.loadingWrapper}>
             <ActivityIndicator size="large" color="#23856C" />

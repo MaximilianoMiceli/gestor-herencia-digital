@@ -1,18 +1,11 @@
 /**
  * @file assets.service.ts
- * @description Servicio de comunicación HTTP encargado de la gestión de activos digitales
- * y asignaciones de herencia contra la API de ASP.NET Core.
+ * @description Servicio HTTP de gestión de activos digitales y asignaciones de herencia.
  *
- * Todas las llamadas pasan por el cliente Axios centralizado (ver api.ts): el interceptor
- * de request ya inyecta el header "Authorization: Bearer <token>" automáticamente, así
- * que NINGÚN método de acá recibe un parámetro "token" (a diferencia de la versión
- * anterior, que lo pedía y lo repetía a mano en cada `fetch`).
- *
- * IMPORTANTE: el backend no tiene ninguna entidad "Beneficiario" independiente. Invitar a
- * alguien y asignarle un activo son la MISMA operación (POST /activosdigitales/{id}/asignaciones
- * con su email); no existe ningún endpoint "/api/beneficiarios" ni un Id de beneficiario propio.
- * Por eso "BeneficiarioResumen" (más abajo) es un agregado armado en el cliente a partir de las
- * asignaciones reales, no un recurso que exista tal cual en el servidor.
+ * El backend no tiene una entidad "Beneficiario" propia: invitar a alguien y asignarle un
+ * activo son la misma operación (POST /activosdigitales/{id}/asignaciones con su email).
+ * Por eso "BeneficiarioResumen" (más abajo) es un agregado armado en el cliente a partir
+ * de las asignaciones existentes, no un recurso que exista tal cual en el servidor.
  */
 
 import { api } from './api';
@@ -221,41 +214,26 @@ export class AssetsService {
    * Adjunta (o reemplaza) el archivo de un activo digital ya creado.
    * Llama a: POST /api/activosdigitales/{id}/archivo
    *
-   * --- ¿Cómo funciona FormData con archivos en React Native? ---
-   * A diferencia del navegador (donde `FormData` se arma a partir de un `<input type="file">`
-   * y un `File`/`Blob` real), en React Native no existe un objeto `File` nativo: lo que
-   * `expo-document-picker` devuelve es un objeto plano `{ uri, name, mimeType, size }`, donde
-   * `uri` es una ruta local al archivo temporal (ej: "file:///data/.../documento.pdf" en
-   * Android, o un "content://..." en algunos casos). Para adjuntarlo a un FormData, React
-   * Native reconoce una convención especial: en vez de pasar un Blob, se le pasa un objeto
-   * `{ uri, name, type }` y el propio motor nativo (no JavaScript) se encarga de LEER el
-   * archivo del disco y transmitirlo como parte del cuerpo multipart en el momento de hacer
-   * la request real. Por eso "as any" es necesario acá: el tipo `FormDataValue` de la
-   * librería de tipos de React Native no contempla esta forma (fue pensada mirando la spec
-   * web), pero es el único formato que el runtime nativo de React Native sabe interpretar.
+   * React Native no tiene un `File`/`Blob` nativo: `expo-document-picker` devuelve un
+   * objeto plano `{ uri, name, mimeType }`, y ese es el formato que FormData espera para
+   * que el motor nativo lea el archivo del disco al armar el body real. El "as any" es
+   * necesario porque los tipos de FormData en RN no contemplan esta forma (pensados
+   * mirando la spec web).
    */
   static async subirArchivoActivo(
     id: number,
     archivo: { uri: string; name: string; mimeType: string }
   ): Promise<ActivoDigitalDTO> {
-    // FormData es la única forma de mandar un archivo binario + eventuales campos de texto
-    // en una request "multipart/form-data" (el formato que el backend espera en
-    // ActivosDigitalesController.SubirArchivo, vía [FromForm] IFormFile).
     const formData = new FormData();
 
-    // El nombre del campo ("archivo") DEBE coincidir exactamente con el parámetro
-    // `[FromForm] IFormFile archivo` del controller: ASP.NET Core arma el binding a partir
-    // de ese nombre de campo, no del nombre del archivo en sí.
+    // El nombre de campo "archivo" debe coincidir con `[FromForm] IFormFile archivo` del
+    // controller: ASP.NET Core arma el binding a partir del nombre de campo, no del archivo.
     formData.append('archivo', {
       uri: archivo.uri,
       name: archivo.name,
       type: archivo.mimeType,
     } as any);
 
-    // No se pasa ningún header "Content-Type" manual acá: axios (y, por debajo, el XHR de
-    // React Native) detecta que el body es un FormData y arma automáticamente
-    // "multipart/form-data; boundary=----XXXX" con el boundary correcto. Fijarlo a mano
-    // rompería el request (faltaría el boundary real que separa cada parte del formulario).
     const response = await api.post<ActivoDigitalDTO>(`/activosdigitales/${id}/archivo`, formData);
     return response.data;
   }

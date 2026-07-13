@@ -64,12 +64,11 @@ export default function AppTabs() {
         headerShown: false,
         animation: 'fade', // Hace que la transición entre pantallas sea un desvanecido suave (slide no está disponible en Tabs)
         tabBarStyle: {
-          // Ajusta la altura de forma dinámica sumando el área segura inferior (evita colisiones con barras de gestos)
+          // Suma el inset inferior a la altura fija para no invadir el área de gestos del SO.
           height: Platform.OS === 'ios' ? 56 + insets.bottom : 64 + insets.bottom,
           backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
-          borderTopColor: '#C1E3A4', // Borde superior sutil gris/verde
-          // Agrega un padding inferior proporcional para empujar las etiquetas de las pestañas fuera del área física de gestos
+          borderTopColor: '#C1E3A4',
           paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
           paddingTop: 8,
           elevation: 8,
@@ -78,8 +77,8 @@ export default function AppTabs() {
           shadowOpacity: 0.05,
           shadowRadius: 4,
         },
-        tabBarActiveTintColor: '#1a2e2e', // Color activo (negro/oscuro)
-        tabBarInactiveTintColor: '#8A9E95', // Color inactivo (gris-verde)
+        tabBarActiveTintColor: '#1a2e2e',
+        tabBarInactiveTintColor: '#8A9E95',
         tabBarLabelStyle: {
           fontFamily: 'MPLUS2-Regular',
           fontSize: 11,

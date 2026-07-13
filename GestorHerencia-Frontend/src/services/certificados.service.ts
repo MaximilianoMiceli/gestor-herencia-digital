@@ -32,10 +32,8 @@ export class CertificadosService {
    * (el backend lo valida; ver CertificadoDefuncionService.SubirCertificadoAsync).
    * Llama a: POST /api/certificados-defuncion
    *
-   * Igual que en `AssetsService.subirArchivoActivo`, el archivo viaja como un objeto
-   * `{ uri, name, mimeType }` (la forma que devuelve expo-document-picker) dentro de un
-   * FormData: React Native lee el archivo del disco a partir de esa "uri" en el momento
-   * de armar el body real de la request, no antes.
+   * El archivo viaja como `{ uri, name, mimeType }` dentro de un FormData, igual que en
+   * `AssetsService.subirArchivoActivo` (ver ese archivo para el porqué de este formato).
    */
   static async subirCertificado(
     usuarioTitularId: number,

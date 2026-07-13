@@ -1,140 +1,70 @@
 namespace Herencia.Data.Models;
 
-// Representa a CUALQUIER persona registrada en el sistema, con UNA UNICA
-// cuenta (un unico Email, un unico PasswordHash/PasswordSalt, un unico Id).
-//
-// --- ¿Por que la MISMA entidad Usuario sirve para "Otorgante" Y "Beneficiario"? ---
-// En versiones anteriores de este modelo existia una entidad separada
-// "Beneficiario" (sin credenciales propias): un simple registro de
-// Nombre/Email/Parentesco creado por el titular. Ese diseño generaba una
-// friccion real: el mismo ser humano podia terminar representado por DOS
-// filas distintas en la base de datos (una fila "Usuario" si el mismo se
-// registraba con cuenta propia, y otra fila "Beneficiario" separada si
-// alguien mas lo designaba como heredero), sin ninguna relacion formal entre
-// ambas. Eso obligaba a "linkear" ambas identidades mas adelante (por
-// email) con logica ad-hoc, y no dejaba modelar con naturalidad el caso mas
-// comun del dominio real: una persona que es DUEÑA de sus propios activos
-// digitales (rol de OTORGANTE) Y AL MISMO TIEMPO fue designada por otra
-// persona para heredar los suyos (rol de BENEFICIARIO). Ambos roles no son
-// mutuamente excluyentes ni pertenecen a "tipos" de persona distintos: son
-// simplemente los DOS EXTREMOS posibles de una misma relacion
-// (AsignacionHerencia), y cualquier Usuario puede aparecer en cualquiera de
-// los dos extremos, incluso en varias filas distintas al mismo tiempo (ej:
-// Juan es Otorgante de un activo para Maria, y a la vez Beneficiario de un
-// activo que le dejo Pedro).
-//
-// Modelar un UNICO "Usuario" con dos colecciones de navegacion (una por cada
-// rol) refleja esa realidad con fidelidad, evita la duplicacion de identidad
-// digital (una sola cuenta, una sola contraseña, un solo Email por persona) y
-// elimina de raiz la necesidad de "fusionar" registros el dia que un
-// Beneficiario finalmente decide crearse una cuenta propia.
-//
-// Hereda de EntidadBaseAuditable para tener trazabilidad de creacion/modificacion.
+/// <summary>
+/// Cualquier persona registrada en el sistema, con una unica cuenta (Email,
+/// PasswordHash/Salt e Id unicos).
+/// </summary>
+// La misma entidad Usuario sirve para OTORGANTE y BENEFICIARIO. En una version
+// anterior existia una entidad "Beneficiario" separada, sin credenciales propias,
+// lo que obligaba a "linkear" por email dos filas de la misma persona cuando esta
+// terminaba creandose una cuenta propia. Un unico Usuario con dos colecciones de
+// navegacion (una por rol) refleja que ambos roles no son excluyentes -una misma
+// persona puede ser dueña de sus activos y, a la vez, beneficiaria de otra- y
+// elimina la necesidad de fusionar identidades.
 public class Usuario : EntidadBaseAuditable
 {
-    // Clave primaria. La convencion "Id" es reconocida automaticamente por EF Core
-    // (Conventions) como PK, pero igual la reforzamos explicitamente en el Fluent API.
     public int Id { get; set; }
 
     public string Nombre { get; set; } = string.Empty;
 
     public string Email { get; set; } = string.Empty;
 
-    // --- Datos de identidad real, no solo de cuenta ---
-    // Dni: Documento Nacional de Identidad del titular. Se exige en el alta
-    // (ver UsuarioService.CrearUsuarioAsync) porque este sistema custodia
-    // informacion critica de terceros (claves de billeteras, CBUs, y
-    // eventualmente decide a quien libera esos bienes): saber con certeza
-    // QUIEN es cada cuenta deja de ser opcional en este dominio. Se guarda
-    // como string (no int) porque un DNI puede tener ceros a la izquierda y
-    // nunca se opera aritmeticamente sobre el.
+    // Se exige en el alta (UsuarioService.CrearUsuarioAsync) porque el sistema
+    // custodia informacion critica de terceros y decide a quien libera esos
+    // bienes: saber con certeza quien es cada cuenta no es opcional. String (no
+    // int) porque puede tener ceros a la izquierda y nunca se opera aritmeticamente.
+
+    /// <summary>Documento Nacional de Identidad del titular.</summary>
     public string Dni { get; set; } = string.Empty;
 
-    // FechaNacimiento: necesaria, ademas de como dato de identidad, para
-    // poder validar que el titular sea mayor de edad al registrarse (ver la
-    // regla de negocio en UsuarioService): un sistema que decide la
-    // liberacion de bienes hacia terceros exige capacidad legal plena de
-    // quien lo usa.
+    /// <summary>Necesaria para validar mayoria de edad al registrarse (ver UsuarioService).</summary>
     public DateTime FechaNacimiento { get; set; }
 
-    // --- Seguridad de contrasenas: NUNCA se guarda la contrasena en texto plano. ---
-    // PasswordHash: resultado de aplicar un algoritmo de hashing (ej: HMACSHA512 o PBKDF2)
-    // sobre la contrasena original combinada con el "salt".
-    // Se guarda como arreglo de bytes porque el hash es informacion binaria, no texto.
+    /// <summary>Hash de la contraseña (nunca se guarda en texto plano). Binario: arreglo de bytes.</summary>
     public byte[] PasswordHash { get; set; } = [];
 
-    // PasswordSalt: valor aleatorio unico generado por usuario, usado como entrada extra
-    // del algoritmo de hashing. Su proposito es evitar que dos usuarios con la misma
-    // contrasena tengan el mismo hash, y frustrar ataques de "rainbow tables".
+    /// <summary>Valor aleatorio unico por usuario usado en el hashing, para evitar hashes iguales entre contraseñas iguales.</summary>
     public byte[] PasswordSalt { get; set; } = [];
 
-    // Nivel de permisos del usuario dentro del sistema. Por defecto,
-    // RolUsuario.Usuario: solo el auto-registro publico crea usuarios, y
-    // siempre con este rol basico, nunca con privilegios elevados.
     public RolUsuario Rol { get; set; } = RolUsuario.Usuario;
 
-    // --- Flujo de "olvide mi contraseña" ---
-    // PasswordResetToken: un valor aleatorio de UN SOLO USO que se genera en
-    // UsuarioService.SolicitarResetPasswordAsync y se envia (simulado, por
-    // consola) al Email del usuario. Es nullable porque la INMENSA mayoria
-    // del tiempo un Usuario NO tiene ningun reseteo en curso: solo se
-    // completa temporalmente mientras dura la ventana de reseteo, y se
-    // vuelve a limpiar (null) apenas se usa (o se pide uno nuevo, que
-    // invalida al anterior).
-    //
-    // ¿Por que no reutilizar directamente un JWT para esto? Un JWT firmado
-    // por TokenService no se puede "revocar" individualmente (ver el
-    // comentario de Expires en TokenService.CrearToken): si se filtrara el
-    // link de reseteo, seguiria siendo valido hasta expirar. Guardando el
-    // token de reseteo en la base de datos, en cambio, se puede invalidar en
-    // cualquier momento (poniendolo en null) apenas se usa una vez, o si el
-    // usuario pide otro nuevo antes de usar el primero.
+    // Nullable: la mayoria del tiempo un Usuario no tiene ningun reseteo en curso.
+    // No se reutiliza un JWT para esto porque un JWT firmado no se puede revocar
+    // individualmente (ver Expires en TokenService.CrearToken); este token, en
+    // cambio, se invalida (null) apenas se usa o se pide uno nuevo.
+
+    /// <summary>Token de un solo uso para el flujo de "olvide mi contraseña" (ver UsuarioService.SolicitarResetPasswordAsync).</summary>
     public string? PasswordResetToken { get; set; }
 
-    // Fecha de expiracion del PasswordResetToken de arriba. Un link de
-    // reseteo de contraseña debe ser de vida CORTA (a diferencia del propio
-    // Usuario): si alguien accede a una bandeja de entrada vieja, no
-    // deberia poder resetear la contraseña con un link de hace meses.
+    /// <summary>Expiracion de PasswordResetToken: un link de reseteo debe ser de vida corta.</summary>
     public DateTime? PasswordResetExpiracion { get; set; }
 
-    // --- Autenticacion de dos pasos (2FA) por email ---
-    // DobleFactorHabilitado: si el usuario activo este segundo factor desde
-    // su perfil (ver UsuarioService.ActualizarDobleFactorAsync). Por defecto
-    // false: la inmensa mayoria de los usuarios no lo activa, y activarlo es
-    // una decision explicita del propio usuario, nunca automatica.
+    /// <summary>Si el usuario activo el segundo factor por email desde su perfil.</summary>
     public bool DobleFactorHabilitado { get; set; } = false;
 
-    // CodigoDobleFactor: codigo numerico de 6 digitos, de UN SOLO USO,
-    // generado en UsuarioService.GenerarYEnviarCodigoDobleFactorAsync cada
-    // vez que este usuario hace login con DobleFactorHabilitado=true. Se
-    // guarda en texto plano (no hasheado) siguiendo el MISMO criterio que
-    // PasswordResetToken de arriba: su seguridad depende de ser de vida
-    // CORTA y de un solo uso, no de resistir un volcado de la base de datos.
-    // Es nullable porque, la mayor parte del tiempo, no hay ningun login en
-    // curso esperando este segundo factor.
+    // Se guarda en texto plano (no hasheado), igual que PasswordResetToken: su
+    // seguridad depende de ser de vida corta y de un solo uso, no de resistir un
+    // volcado de la base de datos.
+
+    /// <summary>Codigo de 6 digitos de un solo uso para el login con 2FA (ver UsuarioService.GenerarYEnviarCodigoDobleFactorAsync).</summary>
     public string? CodigoDobleFactor { get; set; }
 
-    // Fecha de expiracion del CodigoDobleFactor de arriba. Una ventana corta
-    // (10 minutos, ver UsuarioService) impide que un codigo viejo, filtrado
-    // mucho despues del intento de login original, siga siendo utilizable.
+    /// <summary>Expiracion del CodigoDobleFactor (ventana corta, 10 minutos).</summary>
     public DateTime? CodigoDobleFactorExpiracion { get; set; }
 
-    // --- ROL 1: OTORGANTE ---
-    // Los ActivoDigital que ESTE usuario registro como propios y que,
-    // eventualmente, va a repartir entre sus beneficiarios. Es el lado "1" de
-    // la relacion 1-N Usuario(Otorgante) -> ActivoDigital: un otorgante puede
-    // tener muchos activos, pero cada activo pertenece a un unico otorgante.
+    /// <summary>Rol OTORGANTE: activos que este usuario registro como propios.</summary>
     public ICollection<ActivoDigital> ActivosOtorgados { get; set; } = new List<ActivoDigital>();
 
-    // --- ROL 2: BENEFICIARIO ---
-    // Las AsignacionHerencia en las que ESTE usuario fue designado como
-    // destinatario de un activo ajeno (de OTRO usuario, el otorgante de esa
-    // fila puntual). Notar que esta coleccion NO tiene relacion directa con
-    // "ActivosOtorgados": son dos colecciones independientes que conviven en
-    // el mismo Usuario, una por cada rol posible. Un mismo Usuario puede
-    // tener CERO, una o muchas herencias recibidas, cada una de un otorgante
-    // distinto (o incluso del mismo), y puede aceptar unas y rechazar otras
-    // de forma completamente independiente (ver EstadoBeneficiario en
-    // AsignacionHerencia.Estado).
+    /// <summary>Rol BENEFICIARIO: asignaciones en las que este usuario fue designado destinatario de un activo ajeno.</summary>
     public ICollection<AsignacionHerencia> HerenciasRecibidas { get; set; } = new List<AsignacionHerencia>();
 }

@@ -7,15 +7,15 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Herencia.Api.Controllers;
 
-// VerificacionVidaController expone el monitoreo de actividad del titular
-// AUTENTICADO: consultar/guardar su propia configuracion, y confirmar
-// actividad (check-in). Todas las operaciones son siempre sobre "el propio
-// usuario del token", nunca sobre un Id recibido en la ruta o el body (ver
-// el mismo criterio de OWNERSHIP que ActivosDigitalesController): no existe
-// ningun escenario legitimo donde alguien deba poder tocar la configuracion
-// de OTRO usuario desde este controller (eso, en cambio, lo hace el
-// Administrador indirectamente al aprobar un certificado, nunca editando
-// esta configuracion a mano).
+/// <summary>
+/// Expone el monitoreo de actividad del titular autenticado: consultar/guardar su
+/// configuracion y confirmar actividad (check-in).
+/// </summary>
+/// <remarks>
+/// Todas las operaciones actuan siempre sobre el propio usuario del token, nunca sobre un Id
+/// recibido en la ruta o el body: no existe ningun escenario legitimo donde alguien deba
+/// poder tocar la configuracion de otro usuario desde este controller.
+/// </remarks>
 [ApiController]
 [Authorize]
 [Route("api/verificacion-vida")]
@@ -38,7 +38,7 @@ public class VerificacionVidaController : ControllerBase
         return (claim is not null && int.TryParse(claim.Value, out var usuarioId)) ? usuarioId : null;
     }
 
-    // GET api/verificacion-vida/configuracion
+    /// <summary>Obtiene la configuracion de verificacion de vida del usuario autenticado.</summary>
     [HttpGet("configuracion")]
     public async Task<ActionResult<ConfiguracionVerificacionVidaDTO>> ObtenerConfiguracion()
     {
@@ -63,7 +63,7 @@ public class VerificacionVidaController : ControllerBase
         }
     }
 
-    // PUT api/verificacion-vida/configuracion
+    /// <summary>Guarda la configuracion de verificacion de vida del usuario autenticado.</summary>
     [HttpPut("configuracion")]
     public async Task<ActionResult<ConfiguracionVerificacionVidaDTO>> GuardarConfiguracion(
         ConfiguracionVerificacionVidaActualizacionDTO configuracionDTO)
@@ -97,7 +97,7 @@ public class VerificacionVidaController : ControllerBase
         }
     }
 
-    // POST api/verificacion-vida/check-in
+    /// <summary>Registra un check-in de actividad del usuario autenticado.</summary>
     [HttpPost("check-in")]
     public async Task<ActionResult<ConfiguracionVerificacionVidaDTO>> RegistrarCheckIn()
     {

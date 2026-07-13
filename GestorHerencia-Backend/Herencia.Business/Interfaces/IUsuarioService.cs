@@ -2,122 +2,105 @@ using Herencia.Business.Dtos;
 
 namespace Herencia.Business.Interfaces;
 
-// IUsuarioService es el CONTRATO publico de la logica de negocio relacionada a
-// Usuario. Es el equivalente, en la capa Business, a lo que IUsuarioRepository
-// es en la capa Data: asi como la capa Business jamas depende de la clase
-// concreta "RepositorioBase" ni de EF Core, la futura capa Api (los controllers)
-// jamas van a depender de la clase concreta "UsuarioService", sino de ESTA
-// interfaz. Esto permite, entre otras cosas, registrar la implementacion en el
-// contenedor de Inyeccion de Dependencias (Program.cs) e inyectarla en
-// cualquier controller sin acoplarlo a los detalles internos del servicio.
-//
-// Notar que todos los metodos trabajan exclusivamente con DTOs (UsuarioCreacionDTO
-// de entrada, UsuarioDTO de salida) y NUNCA con la entidad "Usuario" de
-// Herencia.Data.Models: esa entidad es un detalle de implementacion interno de
-// la capa Data/Business, y no debe "fugarse" hacia capas superiores.
+/// <summary>
+/// Contrato de la logica de negocio de Usuario. Todos los metodos trabajan
+/// exclusivamente con DTOs (nunca con la entidad Usuario de Herencia.Data.Models), para
+/// que la capa Api dependa unicamente de esta interfaz y la entidad no se fugue hacia
+/// capas superiores.
+/// </summary>
 public interface IUsuarioService
 {
-    // Da de alta un nuevo Usuario a partir de los datos basicos de registro.
-    // Ademas, reclama automaticamente cualquier AsignacionHerencia pendiente
-    // (invitacion sin cuenta) que lo nombraba por este mismo Email, dejandola
-    // vinculada a la cuenta recien creada (ver la implementacion para el
-    // detalle). Devuelve el UsuarioDTO ya creado (con su Id autogenerado)
-    // para que quien llama pueda, por ejemplo, redirigir al cliente a
-    // "/api/usuarios/{id}".
-    // Puede lanzar ReglaNegocioException (datos invalidos o error tecnico).
+    /// <summary>
+    /// Da de alta un nuevo Usuario. Ademas reclama automaticamente cualquier
+    /// AsignacionHerencia pendiente (invitacion sin cuenta) que lo nombraba por este
+    /// mismo Email, dejandola vinculada a la cuenta recien creada.
+    /// </summary>
+    /// <exception cref="ReglaNegocioException">Datos invalidos o error tecnico.</exception>
     Task<UsuarioDTO> CrearUsuarioAsync(UsuarioCreacionDTO usuarioCreacionDTO);
 
-    // Busca un unico Usuario por su Id.
-    // Puede lanzar RecursoNoEncontradoException si el Id no existe, o
-    // ReglaNegocioException si ocurre un error tecnico al consultarlo.
+    /// <summary>Busca un Usuario por su Id.</summary>
+    /// <exception cref="RecursoNoEncontradoException">El Id no existe.</exception>
+    /// <exception cref="ReglaNegocioException">Error tecnico al consultarlo.</exception>
     Task<UsuarioDTO> ObtenerUsuarioPorIdAsync(int id);
 
-    // Devuelve el listado completo de Usuarios registrados.
-    // Puede lanzar ReglaNegocioException si ocurre un error tecnico al consultarlos.
+    /// <summary>Devuelve el listado completo de Usuarios registrados.</summary>
+    /// <exception cref="ReglaNegocioException">Error tecnico al consultarlos.</exception>
     Task<IEnumerable<UsuarioDTO>> ObtenerTodosLosUsuariosAsync();
 
-    // Actualiza el Nombre y el Email de un Usuario ya existente.
-    // Puede lanzar RecursoNoEncontradoException si el Id no existe, o
-    // ReglaNegocioException si los nuevos datos son invalidos o si ocurre un
-    // error tecnico al persistir el cambio.
+    /// <summary>Actualiza Nombre y Email de un Usuario existente.</summary>
+    /// <exception cref="RecursoNoEncontradoException">El Id no existe.</exception>
+    /// <exception cref="ReglaNegocioException">Datos invalidos o error tecnico al persistir.</exception>
     Task<UsuarioDTO> ActualizarUsuarioAsync(int id, UsuarioActualizacionDTO usuarioActualizacionDTO);
 
-    // Elimina un Usuario existente (y, por la configuracion de cascada del
-    // AppDbContext, tambien sus ActivosDigitales asociados, en su rol de
-    // otorgante). Si el Usuario todavia tiene HerenciasRecibidas activas (fue
-    // designado como beneficiario de algo), el borrado se rechaza.
-    // Puede lanzar RecursoNoEncontradoException si el Id no existe, o
-    // ReglaNegocioException si ocurre un error tecnico al eliminarlo.
+    /// <summary>
+    /// Elimina un Usuario (y, por cascada en AppDbContext, sus ActivosDigitales como
+    /// otorgante). Rechaza el borrado si el Usuario todavia tiene HerenciasRecibidas activas.
+    /// </summary>
+    /// <exception cref="RecursoNoEncontradoException">El Id no existe.</exception>
+    /// <exception cref="ReglaNegocioException">Error tecnico al eliminarlo.</exception>
     Task EliminarUsuarioAsync(int id);
 
-    // Busca un Usuario por su Email y devuelve un UsuarioAutenticacionDTO,
-    // el UNICO DTO de este servicio que SI incluye PasswordHash/PasswordSalt
-    // (ver el comentario de esa clase para el porque). Este metodo existe
-    // exclusivamente para que AuthController pueda completar el flujo de
-    // LOGIN: obtener los datos necesarios para verificar la contrasena
-    // ingresada contra el hash/salt persistidos.
-    // Puede lanzar RecursoNoEncontradoException si el email no corresponde a
-    // ningun Usuario registrado, o ReglaNegocioException si ocurre un error
-    // tecnico al consultarlo.
+    /// <summary>
+    /// Busca un Usuario por Email para el flujo de login de AuthController.
+    /// </summary>
+    /// <returns>
+    /// El unico DTO de este servicio que incluye PasswordHash/PasswordSalt (ver
+    /// UsuarioAutenticacionDTO), necesario para verificar la contraseña ingresada.
+    /// </returns>
+    /// <exception cref="RecursoNoEncontradoException">El email no corresponde a ningun Usuario.</exception>
+    /// <exception cref="ReglaNegocioException">Error tecnico al consultarlo.</exception>
     Task<UsuarioAutenticacionDTO> ObtenerUsuarioParaAutenticacionAsync(string email);
 
-    // CambiarPasswordAsync: cambia la contraseña de un Usuario YA
-    // AUTENTICADO que conoce su contraseña actual (ver CambiarPasswordDTO).
-    // Puede lanzar:
-    //  - RecursoNoEncontradoException: si el Id no existe.
-    //  - ReglaNegocioException: si "PasswordActual" no coincide con la
-    //    contraseña realmente persistida, si "PasswordNueva" no cumple el
-    //    largo minimo, o si ocurre un error tecnico al persistir el cambio.
+    /// <summary>Cambia la contraseña de un Usuario ya autenticado que conoce su contraseña actual.</summary>
+    /// <exception cref="RecursoNoEncontradoException">El Id no existe.</exception>
+    /// <exception cref="ReglaNegocioException">
+    /// "PasswordActual" no coincide con la persistida, "PasswordNueva" no cumple el largo
+    /// minimo, o error tecnico al persistir.
+    /// </exception>
     Task CambiarPasswordAsync(int usuarioId, CambiarPasswordDTO cambiarPasswordDTO);
 
-    // SolicitarResetPasswordAsync: primer paso del flujo de "olvide mi
-    // contraseña". Genera un token de reseteo de un solo uso y vida corta,
-    // lo persiste junto a su fecha de expiracion, y lo devuelve en texto
-    // plano para que el CONTROLLER lo "envie" (simulado, por consola) al
-    // Email del usuario.
-    //
-    // Devuelve null (en vez de lanzar RecursoNoEncontradoException) si el
-    // email no corresponde a ningun Usuario registrado: esto es
-    // DELIBERADO, el mismo criterio anti "user enumeration" que ya aplica
-    // UsuarioService.ObtenerUsuarioParaAutenticacionAsync en el Login. El
-    // controller debe responder el MISMO mensaje generico de exito exista o
-    // no exista esa cuenta, para no revelar por la respuesta HTTP que
-    // emails estan registrados en el sistema.
+    /// <summary>
+    /// Primer paso del flujo de "olvide mi contraseña": genera un token de reseteo de un
+    /// solo uso y vida corta, lo persiste con su expiracion, y lo devuelve en texto plano
+    /// para que el controller lo "envie" (simulado) al Email del usuario.
+    /// </summary>
+    /// <returns>
+    /// Null si el email no corresponde a ningun Usuario registrado. Es deliberado (mismo
+    /// criterio anti "user enumeration" que ObtenerUsuarioParaAutenticacionAsync): el
+    /// controller debe responder el mismo mensaje generico exista o no la cuenta.
+    /// </returns>
     Task<string?> SolicitarResetPasswordAsync(string email);
 
-    // ResetearPasswordAsync: segundo y ultimo paso del flujo de "olvide mi
-    // contraseña". Busca al Usuario por su PasswordResetToken vigente y,
-    // si todavia no expiro, reemplaza su contraseña por la nueva.
-    // Puede lanzar ReglaNegocioException si el token no existe, ya expiro, o
-    // "PasswordNueva" no cumple el largo minimo.
+    /// <summary>
+    /// Segundo paso de "olvide mi contraseña": busca al Usuario por su
+    /// PasswordResetToken vigente y, si no expiro, reemplaza la contraseña.
+    /// </summary>
+    /// <exception cref="ReglaNegocioException">El token no existe, ya expiro, o "PasswordNueva" no cumple el largo minimo.</exception>
     Task ResetearPasswordAsync(ResetearPasswordDTO resetearPasswordDTO);
 
-    // GenerarYEnviarCodigoDobleFactorAsync: primer paso del segundo factor de
-    // autenticacion. Se invoca desde AuthController.Login DESPUES de validar
-    // la contraseña, solo si el Usuario tiene DobleFactorHabilitado=true.
-    // Genera un codigo numerico de 6 digitos (CSPRNG), lo persiste con una
-    // ventana de vigencia corta, y lo envia (via INotificationService, por
-    // el canal Email) al propio Usuario. No devuelve el codigo: nadie fuera
-    // de este metodo (ni siquiera el controller) necesita conocerlo en texto
-    // plano, ya que quien deba confirmarlo lo va a leer directamente de su
-    // casilla de correo.
-    // Puede lanzar RecursoNoEncontradoException si el Id no existe.
+    /// <summary>
+    /// Primer paso del segundo factor de autenticacion: se invoca desde
+    /// AuthController.Login tras validar la contraseña, si el Usuario tiene
+    /// DobleFactorHabilitado=true. Genera un codigo de 6 digitos (CSPRNG), lo persiste con
+    /// una ventana de vigencia corta, y lo envia por Email.
+    /// </summary>
+    /// <remarks>No devuelve el codigo: nadie fuera de este metodo necesita conocerlo en texto plano.</remarks>
+    /// <exception cref="RecursoNoEncontradoException">El Id no existe.</exception>
     Task GenerarYEnviarCodigoDobleFactorAsync(int usuarioId);
 
-    // VerificarCodigoDobleFactorAsync: segundo y ultimo paso del segundo
-    // factor. Compara el codigo ingresado contra el persistido en
-    // GenerarYEnviarCodigoDobleFactorAsync; si coincide y todavia no expiro,
-    // lo invalida (uso unico) y devuelve el UsuarioDTO para que
-    // AuthController pueda recien ahi emitir el JWT real.
-    // Puede lanzar ReglaNegocioException si el codigo es invalido o ya
-    // expiro, o RecursoNoEncontradoException si el Id no existe.
+    /// <summary>
+    /// Segundo paso del segundo factor: compara el codigo ingresado contra el persistido
+    /// en <see cref="GenerarYEnviarCodigoDobleFactorAsync"/>; si coincide y no expiro, lo
+    /// invalida (uso unico) y devuelve el UsuarioDTO para que AuthController emita el JWT real.
+    /// </summary>
+    /// <exception cref="ReglaNegocioException">El codigo es invalido o ya expiro.</exception>
+    /// <exception cref="RecursoNoEncontradoException">El Id no existe.</exception>
     Task<UsuarioDTO> VerificarCodigoDobleFactorAsync(int usuarioId, string codigo);
 
-    // ActualizarDobleFactorAsync: activa o desactiva el 2FA por email para
-    // la propia cuenta (ownership verificado en UsuariosController, igual
-    // que CambiarPasswordAsync). Al desactivarlo, se limpia cualquier codigo
-    // pendiente para no dejar un codigo "vivo" de una sesion de login que
-    // quedo a mitad de camino.
-    // Puede lanzar RecursoNoEncontradoException si el Id no existe.
+    /// <summary>
+    /// Activa o desactiva el 2FA por email para la propia cuenta. Al desactivarlo, limpia
+    /// cualquier codigo pendiente para no dejar un codigo vivo de un login a mitad de camino.
+    /// </summary>
+    /// <exception cref="RecursoNoEncontradoException">El Id no existe.</exception>
     Task<UsuarioDTO> ActualizarDobleFactorAsync(int usuarioId, bool habilitado);
 }

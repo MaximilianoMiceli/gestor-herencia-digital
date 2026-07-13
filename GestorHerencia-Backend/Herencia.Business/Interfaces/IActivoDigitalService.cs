@@ -3,79 +3,77 @@ using Herencia.Data.Models;
 
 namespace Herencia.Business.Interfaces;
 
-// IActivoDigitalService es el CONTRATO publico de la logica de negocio
-// relacionada a ActivoDigital. Mismo criterio que IUsuarioService: trabaja
-// solo con DTOs, para que la futura capa Api dependa unicamente de esta
-// interfaz y no de la implementacion concreta ni de las entidades de Data.
+/// <summary>
+/// Contrato de la logica de negocio de ActivoDigital. Trabaja exclusivamente
+/// con DTOs para que la capa Api dependa de esta interfaz, nunca de la
+/// implementacion concreta ni de las entidades de Data.
+/// </summary>
 public interface IActivoDigitalService
 {
-    // Da de alta un nuevo ActivoDigital para un Usuario titular puntual
-    // (dto.UsuarioId). Antes de crear el activo, el servicio valida que ese
-    // Usuario realmente exista (regla de negocio explicita de la rubrica).
-    // Puede lanzar:
-    //  - ReglaNegocioException: si el Nombre del activo viene vacio, o si
-    //    ocurre un error tecnico al persistirlo.
-    //  - RecursoNoEncontradoException: si el UsuarioId indicado no corresponde
-    //    a ningun Usuario existente.
+    /// <summary>
+    /// Da de alta un nuevo ActivoDigital para el Usuario titular indicado en el DTO.
+    /// </summary>
+    /// <exception cref="ReglaNegocioException">Nombre vacio o error tecnico al persistir.</exception>
+    /// <exception cref="RecursoNoEncontradoException">El UsuarioId no corresponde a ningun Usuario.</exception>
     Task<ActivoDigitalDTO> CrearActivoDigitalAsync(ActivoDigitalCreacionDTO activoDigitalCreacionDTO);
 
-    // Busca un unico ActivoDigital por su Id.
-    // Puede lanzar RecursoNoEncontradoException si el Id no existe, o
-    // ReglaNegocioException si ocurre un error tecnico al consultarlo.
+    /// <summary>Busca un ActivoDigital por su Id.</summary>
+    /// <exception cref="RecursoNoEncontradoException">El Id no existe.</exception>
+    /// <exception cref="ReglaNegocioException">Error tecnico al consultarlo.</exception>
     Task<ActivoDigitalDTO> ObtenerActivoDigitalPorIdAsync(int id);
 
-    // Devuelve todos los ActivosDigitales que pertenecen a un Usuario puntual.
-    // Puede lanzar RecursoNoEncontradoException si el usuarioId no existe, o
-    // ReglaNegocioException si ocurre un error tecnico al consultarlos.
+    /// <summary>Devuelve todos los ActivosDigitales de un Usuario.</summary>
+    /// <exception cref="RecursoNoEncontradoException">El usuarioId no existe.</exception>
+    /// <exception cref="ReglaNegocioException">Error tecnico al consultarlos.</exception>
     Task<IEnumerable<ActivoDigitalDTO>> ObtenerActivosPorUsuarioAsync(int usuarioId);
 
-    // Actualiza el Nombre, Tipo y Descripcion de un ActivoDigital existente.
-    // No permite reasignar el Usuario titular (ver comentario en
-    // ActivoDigitalActualizacionDTO). Puede lanzar RecursoNoEncontradoException
-    // si el Id no existe, o ReglaNegocioException si los nuevos datos son
-    // invalidos o si ocurre un error tecnico al persistir el cambio.
+    /// <summary>
+    /// Actualiza Nombre, Tipo y Descripcion de un ActivoDigital existente. No permite
+    /// reasignar el Usuario titular (ver ActivoDigitalActualizacionDTO).
+    /// </summary>
+    /// <exception cref="RecursoNoEncontradoException">El Id no existe.</exception>
+    /// <exception cref="ReglaNegocioException">Datos invalidos o error tecnico al persistir.</exception>
     Task<ActivoDigitalDTO> ActualizarActivoDigitalAsync(int id, ActivoDigitalActualizacionDTO activoDigitalActualizacionDTO);
 
-    // Elimina un ActivoDigital existente (y, por la configuracion de cascada del
-    // AppDbContext, tambien sus AsignacionesHerencia asociadas).
-    // Puede lanzar RecursoNoEncontradoException si el Id no existe, o
-    // ReglaNegocioException si ocurre un error tecnico al eliminarlo.
+    /// <summary>
+    /// Elimina un ActivoDigital existente (y, por cascada en AppDbContext, sus
+    /// AsignacionesHerencia asociadas).
+    /// </summary>
+    /// <exception cref="RecursoNoEncontradoException">El Id no existe.</exception>
+    /// <exception cref="ReglaNegocioException">Error tecnico al eliminarlo.</exception>
     Task EliminarActivoDigitalAsync(int id);
 
-    // Version PAGINADA y FILTRADA de ObtenerActivosPorUsuarioAsync: en vez de
-    // devolver TODOS los activos de un usuario de una sola vez, devuelve
-    // solo la "pagina" pedida (parametros "pagina" y "limite"), envuelta en
-    // un ResultadoPaginadoDTO que ademas informa el total de registros/
-    // paginas. Los parametros "tipo" y "nombre" son FILTROS OPCIONALES
-    // (nullable): si ambos vienen null, se comporta igual que sin filtrar;
-    // si se envian, restringen la busqueda por categoria y/o por texto
-    // parcial del nombre. Es el metodo que consume el endpoint
-    // "GET /api/activos" (protegido con [Authorize]), donde el usuarioId
-    // SIEMPRE proviene del Claim del Token JWT del usuario autenticado,
-    // nunca de un parametro que el cliente pueda manipular libremente.
-    // Puede lanzar RecursoNoEncontradoException si el usuarioId no existe, o
-    // ReglaNegocioException si ocurre un error tecnico al consultarlos.
+    /// <summary>
+    /// Version paginada y filtrada de <see cref="ObtenerActivosPorUsuarioAsync"/>: devuelve
+    /// solo la pagina pedida junto con el total de registros/paginas. "tipo" y "nombre" son
+    /// filtros opcionales (categoria exacta y/o texto parcial del nombre).
+    /// </summary>
+    /// <param name="usuarioId">
+    /// Siempre proviene del Claim del Token JWT del usuario autenticado, nunca de un
+    /// parametro que el cliente pueda manipular libremente.
+    /// </param>
+    /// <exception cref="RecursoNoEncontradoException">El usuarioId no existe.</exception>
+    /// <exception cref="ReglaNegocioException">Error tecnico al consultarlos.</exception>
     Task<ResultadoPaginadoDTO<ActivoDigitalDTO>> ObtenerActivosPorUsuarioPaginadoAsync(
         int usuarioId, int pagina, int limite, TipoActivoDigital? tipo, string? nombre);
 
-    // SubirArchivoAsync: adjunta (o reemplaza) el archivo asociado a un
-    // ActivoDigital existente (ej: el escaneo de un contrato, un PDF con
-    // instrucciones notariales). Recibe un Stream + metadatos en vez de
-    // "IFormFile" por el mismo motivo que ICertificadoDefuncionService: esta
-    // libreria de Business no referencia el framework web (ver el comentario
-    // de IAlmacenamientoArchivosService).
-    // Puede lanzar:
-    //  - RecursoNoEncontradoException: si el Id no existe.
-    //  - ReglaNegocioException: si el tipo de archivo no esta permitido, si
-    //    supera el tamaño maximo, o si ocurre un error tecnico al guardarlo.
+    /// <summary>
+    /// Adjunta (o reemplaza) el archivo asociado a un ActivoDigital existente.
+    /// Recibe un Stream + metadatos en vez de IFormFile porque Business no referencia
+    /// el framework web (ver IAlmacenamientoArchivosService).
+    /// </summary>
+    /// <exception cref="RecursoNoEncontradoException">El Id no existe.</exception>
+    /// <exception cref="ReglaNegocioException">
+    /// Tipo de archivo no permitido, tamaño excedido, o error tecnico al guardarlo.
+    /// </exception>
     Task<ActivoDigitalDTO> SubirArchivoAsync(
         int id, Stream contenido, string nombreArchivoOriginal, string contentType, long tamanioBytes);
 
-    // Devuelve la ruta en disco y el nombre original del archivo adjunto de un
-    // ActivoDigital, para que el titular (o, ya liberado el bien, su heredero
-    // aceptado) pueda descargarlo. La verificacion de QUIEN tiene permiso para
-    // pedirlo vive en el controller (ActivosDigitalesController), no aca: este
-    // metodo solo resuelve "donde esta guardado el archivo de este activo".
-    // Puede lanzar RecursoNoEncontradoException si el Id no existe.
+    /// <summary>
+    /// Devuelve la ruta en disco y el nombre original del archivo adjunto de un ActivoDigital.
+    /// La verificacion de quien puede pedirlo vive en el controller, no aca: este metodo solo
+    /// resuelve donde esta guardado el archivo.
+    /// </summary>
+    /// <exception cref="RecursoNoEncontradoException">El Id no existe.</exception>
     Task<(string RutaArchivo, string NombreArchivoOriginal)> ObtenerArchivoAsync(int id);
 }

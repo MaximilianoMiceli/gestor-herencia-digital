@@ -1,30 +1,22 @@
 namespace Herencia.Business.Interfaces;
 
-// IAlmacenamientoArchivosService abstrae DONDE y COMO se guarda fisicamente
-// un archivo subido (hoy, unicamente los certificados de defuncion). Recibe
-// un Stream + nombre original en vez de "Microsoft.AspNetCore.Http.IFormFile"
-// a proposito: IFormFile es un tipo del FRAMEWORK WEB (vive en el paquete
-// compartido de ASP.NET Core), y Herencia.Business es una libreria de
-// clases "pura" que no referencia ese framework (ver Herencia.Business.csproj:
-// Sdk="Microsoft.NET.Sdk", no "Microsoft.NET.Sdk.Web"). Acoplar la capa de
-// negocio a un tipo de la capa Api rompería la misma separacion de capas
-// que el resto del proyecto respeta para AppDbContext/EF Core. El
-// controller (Herencia.Api, que SI conoce IFormFile) es quien abre el
-// Stream y extrae el nombre original antes de llamar al servicio de
-// Business (ver CertificadosDefuncionController.Subir).
+/// <summary>
+/// Abstrae donde y como se guarda fisicamente un archivo subido. Recibe un Stream +
+/// nombre original en vez de <c>IFormFile</c> a proposito: ese tipo vive en el framework
+/// web y Herencia.Business es una libreria de clases pura que no lo referencia (misma
+/// separacion de capas que ya respeta el resto del proyecto para AppDbContext/EF Core).
+/// El controller (que si conoce IFormFile) abre el Stream antes de llamar al servicio.
+/// </summary>
 public interface IAlmacenamientoArchivosService
 {
-    // Guarda "contenido" de forma permanente y devuelve la RUTA/CLAVE con la
-    // que quedo guardado (nunca el nombre original: ver
-    // AlmacenamientoLocalService para el motivo).
-    //
-    // "subcarpeta" (opcional) permite a cada llamador (CertificadoDefuncionService,
-    // ActivoDigitalService, y cualquier otro que se agregue a futuro) separar
-    // sus propios archivos en una carpeta distinta dentro del mismo almacen
-    // fisico, sin necesitar una implementacion ni una interfaz nueva por cada
-    // tipo de archivo. Un string vacio (valor por defecto) preserva el
-    // comportamiento HISTORICO: guardar directo en la carpeta base
-    // configurada (asi es como ya quedaron guardados los certificados de
-    // defuncion existentes antes de que esta opcion existiera).
+    /// <summary>
+    /// Guarda "contenido" de forma permanente y devuelve la ruta/clave con la que quedo
+    /// guardado (nunca el nombre original).
+    /// </summary>
+    /// <param name="subcarpeta">
+    /// Permite a cada llamador separar sus archivos dentro del mismo almacen fisico sin
+    /// necesitar una implementacion nueva por tipo de archivo. Vacio (default) preserva el
+    /// comportamiento historico de guardar directo en la carpeta base configurada.
+    /// </param>
     Task<string> GuardarArchivoAsync(Stream contenido, string nombreArchivoOriginal, string subcarpeta = "");
 }

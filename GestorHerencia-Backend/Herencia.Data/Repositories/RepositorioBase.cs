@@ -2,99 +2,57 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Herencia.Data.Repositories;
 
-// RepositorioBase<T> es la IMPLEMENTACION concreta del contrato IRepositorioBase<T>.
-// Aqui es donde realmente "tocamos" Entity Framework Core: la capa Business jamas
-// hace referencia a AppDbContext ni a DbSet<T> directamente, solo conoce la interfaz.
-// Esto mantiene la arquitectura en 3 capas (Api -> Business -> Data) bien separada:
-// si el dia de manana cambiamos SQLite por SQL Server, o incluso EF Core por Dapper,
-// solo se modifica esta clase (y otras dentro de Data); el resto de la aplicacion
-// no se entera del cambio porque sigue programando contra la misma interfaz.
+/// <summary>
+/// Implementación concreta de <see cref="IRepositorioBase{T}"/> sobre EF Core.
+/// Es la única clase que conoce <see cref="AppDbContext"/> directamente; el resto de la
+/// aplicación depende solo de la interfaz, lo que mantiene aislada la capa Data.
+/// </summary>
 public class RepositorioBase<T> : IRepositorioBase<T> where T : class
 {
-    // El AppDbContext es la puerta de entrada a la base de datos (DbSet's, tracking,
-    // transacciones, etc). Lo guardamos en un campo "protected" (no private) para que
-    // las clases hijas (ej: UsuarioRepository) puedan reutilizarlo directamente y
-    // acceder a otros DbSet's cuando necesiten hacer Include() entre entidades
-    // relacionadas (ej: Usuario -> Beneficiarios).
+    // Campo protected (no private) para que las clases hijas puedan reutilizarlo
+    // y acceder a otros DbSet's cuando necesiten Include() entre entidades relacionadas.
     protected readonly AppDbContext _contexto;
 
-    // Inyeccion de Dependencias: el AppDbContext NO se crea con "new" dentro del
-    // repositorio. Es el contenedor de DI configurado en la capa Api (Program.cs)
-    // el que se encarga de construir e inyectar la instancia correcta (con su
-    // cadena de conexion, ciclo de vida "Scoped", etc). Esto desacopla al
-    // repositorio de los detalles de configuracion de la base de datos y facilita
-    // muchisimo el testing (se puede inyectar un DbContext en memoria para pruebas).
+    /// <summary>Recibe el <see cref="AppDbContext"/> vía inyección de dependencias (ciclo de vida Scoped).</summary>
     public RepositorioBase(AppDbContext contexto)
     {
         _contexto = contexto;
     }
 
-    // ObtenerTodosAsync: trae todos los registros de la tabla T.
+    /// <inheritdoc />
     public async Task<IEnumerable<T>> ObtenerTodosAsync()
     {
-        // Set<T>() obtiene el DbSet<T> correspondiente (ej: DbSet<Usuario>) de forma
-        // generica, sin tener que exponer cada DbSet especifico del AppDbContext.
-        // ToListAsync() (en vez de ToList()) es el metodo asincrono provisto por EF Core:
-        // libera el hilo mientras el motor de base de datos ejecuta el SELECT y
-        // materializa los resultados, en lugar de bloquear el hilo esperando la
-        // respuesta de forma sincronica. Esto es clave en una API web, donde cada
-        // hilo bloqueado es un hilo menos disponible para atender a otros usuarios.
         return await _contexto.Set<T>().ToListAsync();
     }
 
-    // ObtenerPorIdAsync: busca un unico registro por su clave primaria.
+    /// <inheritdoc />
     public async Task<T?> ObtenerPorIdAsync(int id)
     {
-        // FindAsync es el metodo de EF Core optimizado para buscar por PK:
-        // primero revisa si la entidad ya esta siendo trackeada en memoria
-        // (Change Tracker) antes de ir a la base de datos, evitando un viaje
-        // innecesario si la entidad ya fue cargada previamente en este mismo
-        // AppDbContext. Tambien es asincrono por el mismo motivo que ToListAsync:
-        // evitar bloquear el hilo durante la espera de I/O.
+        // FindAsync revisa primero el Change Tracker antes de ir a la base de datos.
         return await _contexto.Set<T>().FindAsync(id);
     }
 
-    // AgregarAsync: inserta una nueva entidad.
+    /// <inheritdoc />
     public async Task AgregarAsync(T entidad)
     {
-        // AddAsync marca la entidad con el estado "Added" en el Change Tracker de
-        // EF Core. Se usa la variante asincrona (en vez de Add) por convencion y
-        // porque, en proveedores que usan generacion de valores del lado del
-        // servidor (ej: secuencias), puede requerir una consulta asincrona interna.
         await _contexto.Set<T>().AddAsync(entidad);
-
-        // SaveChangesAsync es el que efectivamente traduce los cambios pendientes
-        // del Change Tracker a sentencias SQL (INSERT/UPDATE/DELETE) y las ejecuta
-        // contra la base de datos dentro de una transaccion implicita. Sin este
-        // llamado, "AddAsync" solo modificaria el estado en memoria y NUNCA se
-        // persistiria nada en la base de datos real.
         await _contexto.SaveChangesAsync();
     }
 
-    // ActualizarAsync: persiste cambios sobre una entidad existente.
+    /// <inheritdoc />
     public async Task ActualizarAsync(T entidad)
     {
-        // Update() marca TODA la entidad como "Modified" en el Change Tracker,
-        // es decir, le dice a EF Core que genere un UPDATE con todas sus columnas
-        // (a diferencia de rastrear cambio por cambio propiedad por propiedad).
-        // Es una operacion sincrona en si misma (solo cambia el estado en memoria),
-        // por eso no existe un "UpdateAsync" en EF Core: lo asincrono ocurre recien
-        // al llamar a SaveChangesAsync, que es cuando se dispara el I/O real.
+        // Update() marca toda la entidad como "Modified" (UPDATE con todas sus columnas).
         _contexto.Set<T>().Update(entidad);
         await _contexto.SaveChangesAsync();
     }
 
-    // EliminarAsync: borra un registro a partir de su Id.
+    /// <inheritdoc />
     public async Task EliminarAsync(int id)
     {
-        // Primero buscamos la entidad (de forma asincrona) porque EF Core necesita
-        // una instancia trackeada para poder marcarla como "Deleted"; no se puede
-        // borrar "a ciegas" solo con un numero de Id sin antes tener el objeto.
         var entidad = await _contexto.Set<T>().FindAsync(id);
 
-        // Si no existe ningun registro con ese Id, no hacemos nada: no tiene
-        // sentido lanzar una excepcion por intentar borrar algo que ya no esta,
-        // la capa Business decidira como comunicar este caso (ej: devolver 404).
+        // Borrar un Id inexistente no es un error: la capa Business decide cómo comunicarlo (ej: 404).
         if (entidad is not null)
         {
             _contexto.Set<T>().Remove(entidad);
@@ -102,56 +60,23 @@ public class RepositorioBase<T> : IRepositorioBase<T> where T : class
         }
     }
 
-    // EjecutarEnTransaccionAsync: implementacion real del manejo de
-    // transacciones explicitas descripto en la interfaz.
+    /// <inheritdoc />
     public async Task EjecutarEnTransaccionAsync(Func<Task> operacion)
     {
-        // Database.BeginTransactionAsync() abre una TRANSACCION a nivel de
-        // la conexion de base de datos subyacente (no es un concepto de EF
-        // Core en memoria: es una transaccion SQL real, del motor SQLite).
-        // Mientras esta transaccion este ABIERTA, cualquier SaveChangesAsync()
-        // que se ejecute sobre ESTE MISMO AppDbContext (sin importar si se
-        // llama desde este repositorio o desde OTRO repositorio que comparta
-        // la misma instancia Scoped del contexto, como pasa dentro de una
-        // misma request HTTP) queda ENCOLADO dentro de esta transaccion, en
-        // vez de confirmarse individualmente contra el archivo de base de
-        // datos.
-        //
-        // "await using" asegura que, pase lo que pase (exito, excepcion, lo
-        // que sea), el objeto "transaccion" se libere correctamente al salir
-        // de este metodo (llama automaticamente a DisposeAsync).
+        // Transacción real a nivel de conexión: mientras está abierta, cualquier SaveChangesAsync()
+        // sobre este mismo AppDbContext (desde este repositorio u otro que comparta la instancia
+        // Scoped dentro de la misma request) queda encolado en ella en vez de confirmarse solo.
         await using var transaccion = await _contexto.Database.BeginTransactionAsync();
 
         try
         {
-            // Se ejecuta la operacion recibida (tipicamente, varios pasos de
-            // negocio con sus propios AgregarAsync/ActualizarAsync/etc.).
             await operacion();
-
-            // Si llegamos hasta aca sin excepciones, TODOS los pasos
-            // intentados dentro de "operacion" salieron bien: se confirma la
-            // transaccion, y recien AHI los cambios quedan escritos de forma
-            // permanente en el archivo de base de datos.
             await transaccion.CommitAsync();
         }
         catch
         {
-            // Si CUALQUIER paso dentro de "operacion" lanzo una excepcion
-            // (una regla de negocio violada, un recurso no encontrado, un
-            // error tecnico de EF Core, etc.), revertimos TODO lo que se
-            // haya intentado guardar dentro de esta transaccion, sin
-            // importar en que paso especifico fallo. Esto es exactamente lo
-            // que evita el escenario "guardamos 2 de 5 registros y despues
-            // fallamos": o se guardan los 5, o no se guarda NINGUNO.
+            // Revierte todo lo intentado dentro de "operacion", sin importar en qué paso falló.
             await transaccion.RollbackAsync();
-
-            // "throw;" (sin argumento) relanza la excepcion ORIGINAL tal
-            // cual, preservando su tipo real (ej: ReglaNegocioException,
-            // RecursoNoEncontradoException) y su StackTrace completo, para
-            // que la capa Business (que fue quien paso la funcion
-            // "operacion") pueda seguir distinguiendo estos casos en su
-            // propio catch, exactamente igual que si la transaccion no
-            // hubiera existido.
             throw;
         }
     }

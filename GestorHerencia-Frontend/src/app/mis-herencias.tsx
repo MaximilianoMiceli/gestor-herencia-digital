@@ -1,14 +1,8 @@
 /**
  * @file mis-herencias.tsx
- * @description Pantalla que lista las herencias asignadas al usuario actual (Frame 24).
- *
- * Antes solo mostraba un conteo agrupado por titular con un badge "Disponible/No
- * disponible", sin exponer el ESTADO real de cada asignación (Pendiente/Aceptado/
- * Rechazado) ni forma de actuar sobre él. El backend ya expone
- * PATCH /api/asignaciones/{id}/estado para que el BENEFICIARIO acepte o rechace una
- * herencia pendiente; esta pantalla ahora lo consume: cada activo pendiente muestra
- * botones "Aceptar"/"Rechazar" en vez de quedar mudo hasta que alguien reclame el link
- * de invitación original (que además es efímero: solo se imprime una vez por consola).
+ * @description Lista las herencias asignadas al usuario actual, agrupadas por titular.
+ * Cada asignación pendiente puede aceptarse o rechazarse individualmente
+ * (PATCH /api/asignaciones/{id}/estado) en vez de depender del link de invitación original.
  */
 
 import React, { useState, useCallback } from 'react';
@@ -56,12 +50,11 @@ export default function MisHerenciasScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [herencias, setHerencias] = useState<MiHerenciaDTO[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  // Id de la asignación que tiene una acción (Aceptar/Rechazar) en curso, para
-  // deshabilitar SOLO esos botones puntuales y no toda la pantalla mientras responde.
+  // Id de la asignación con una acción (Aceptar/Rechazar) en curso: deshabilita solo esos
+  // botones, no toda la pantalla.
   const [procesandoId, setProcesandoId] = useState<number | null>(null);
-  // Activo cuya "información" (instrucciones/credenciales reales) se está mostrando en
-  // el modal de detalle: solo se puede abrir cuando la asignación ya está disponible
-  // (ver el comentario de MiHerenciaDTO.descripcion en assets.service.ts).
+  // Activo mostrado en el modal de detalle; solo tiene contenido real una vez liberado
+  // (ver MiHerenciaDTO.descripcion en assets.service.ts).
   const [activoAVer, setActivoAVer] = useState<MiHerenciaDTO | null>(null);
   const [descargandoArchivo, setDescargandoArchivo] = useState(false);
 
@@ -80,8 +73,7 @@ export default function MisHerenciasScreen() {
     }
   }, [token]);
 
-  // Recarga cada vez que la pantalla entra en foco (por ejemplo, al volver de aceptar
-  // una invitación desde el link público en otra pantalla).
+  // Recarga al volver a foco (p. ej. tras aceptar una invitación desde otra pantalla).
   useFocusEffect(
     useCallback(() => {
       fetchHerencias();
@@ -101,8 +93,8 @@ export default function MisHerenciasScreen() {
   const obtenerHerenciasAgrupadas = (): HerenciaAgrupada[] => {
     const agrupado: { [key: string]: HerenciaAgrupada } = {};
 
-    // Filtro local por titular o nombre de activo (mismo criterio que activos.tsx): no
-    // hace falta un endpoint de búsqueda propio, ya se trae la lista completa.
+    // Filtro local por titular o activo (mismo criterio que activos.tsx): no hace falta
+    // endpoint de búsqueda propio, ya se trae la lista completa.
     const query = searchQuery.trim().toLowerCase();
     const herenciasFiltradas = query.length === 0
       ? herencias
@@ -131,9 +123,8 @@ export default function MisHerenciasScreen() {
     setProcesandoId(asignacionId);
     try {
       await AssetsService.actualizarEstadoAsignacion(asignacionId, nuevoEstado);
-      // Actualiza el estado localmente en vez de esperar un refetch completo: la
-      // transición ya se confirmó en el servidor (si hubiera fallado, el catch de abajo
-      // ni siquiera llegaría a este punto).
+      // Actualiza el estado local en vez de refetchear: la transición ya está confirmada
+      // en el servidor.
       setHerencias((prev) =>
         prev.map((h) =>
           h.asignacionId === asignacionId
@@ -323,9 +314,8 @@ export default function MisHerenciasScreen() {
                       </View>
                     )}
 
-                    {/* Solo aparece cuando el bien ya está realmente liberado: antes de
-                        eso el backend ni siquiera manda la descripción (ver
-                        MiHerenciaDTO.descripcion), así que no habría nada que mostrar. */}
+                    {/* Solo aparece si el bien ya está liberado: antes, el backend ni
+                        siquiera manda la descripción (ver MiHerenciaDTO.descripcion). */}
                     {asig.estado === 'Aceptado' && asig.disponible && (
                       <TouchableOpacity style={styles.viewInfoButton} onPress={() => setActivoAVer(asig)}>
                         <Text style={styles.viewInfoButtonText}>Ver información</Text>
@@ -345,8 +335,8 @@ export default function MisHerenciasScreen() {
           />
         )}
 
-        {/* Acceso al flujo de certificado de defunción: solo tiene sentido si ya
-            aceptaste al menos una herencia (regla que valida subir-certificado.tsx). */}
+        {/* Solo tiene sentido si ya se aceptó al menos una herencia (validado en
+            subir-certificado.tsx). */}
         <TouchableOpacity
           style={styles.uploadCertButton}
           onPress={() => router.push('/subir-certificado')}
@@ -355,10 +345,7 @@ export default function MisHerenciasScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* MODAL: información real del activo ya liberado (instrucciones, credenciales,
-          archivo adjunto si tiene). Antes de esto, un heredero que ya había aceptado la
-          herencia no tenía ninguna forma de ver el contenido, aunque figurara
-          "Disponible". */}
+      {/* Info real del activo ya liberado: instrucciones, credenciales, archivo adjunto. */}
       <Modal
         visible={activoAVer !== null}
         transparent

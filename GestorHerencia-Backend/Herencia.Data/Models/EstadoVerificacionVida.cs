@@ -1,39 +1,27 @@
 namespace Herencia.Data.Models;
 
-// EstadoVerificacionVida representa en que punto de la "maquina de estados"
-// del monitoreo de actividad se encuentra el titular (ConfiguracionVerificacionVida.Estado).
-// Mismo criterio que EstadoBeneficiario: enum (no bool ni string libre) para
-// que el compilador impida un estado inexistente, y arranca en 1 (nunca en
-// el 0 por defecto de C#) para poder detectar una fila mal migrada/insertada
-// a mano que quedo en el entero crudo "0".
+/// <summary>
+/// Estado de la maquina de estados del monitoreo de actividad de un titular
+/// (ConfiguracionVerificacionVida.Estado). Mismo criterio que EstadoBeneficiario:
+/// enum arrancando en 1, persistido como INTEGER.
+/// </summary>
 public enum EstadoVerificacionVida
 {
-    // El titular respondio dentro del plazo (o todavia no vencio su plazo
-    // actual). Estado inicial al activar el monitoreo.
+    /// <summary>El titular respondio a tiempo, o su plazo actual todavia no vencio.</summary>
     Activo = 1,
 
-    // El plazo (FrecuenciaMeses desde UltimoCheckIn) ya vencio y el sistema
-    // ya envio al menos uno de los recordatorios configurados
-    // (VerificacionVida:CantidadRecordatorios), pero todavia no se agotaron
-    // todos ni el plazo final posterior al ultimo.
+    /// <summary>El plazo vencio y ya se envio al menos un recordatorio, pero no se agotaron todos.</summary>
     RecordatorioEnviado = 2,
 
-    // Se agotaron los recordatorios Y el plazo final posterior al ultimo
-    // (VerificacionVida:DiasPlazoFinalTrasUltimoRecordatorio) sin que el
-    // titular haya vuelto a confirmar actividad: el "protocolo" esta
-    // activo, y se les solicito a los herederos aceptados que suban el
-    // certificado de defuncion.
+    /// <summary>Se agotaron los recordatorios y el plazo final: se pidio a los herederos el certificado.</summary>
     EsperandoCertificado = 3,
 
-    // Al menos un heredero ya subio un CertificadoDefuncion y esta
-    // pendiente de revision por un Administrador.
+    /// <summary>Un heredero subio un certificado, pendiente de revision por un Administrador.</summary>
     CertificadoEnRevision = 4,
 
-    // Un Administrador aprobo el certificado: el fallecimiento del titular
-    // queda confirmado formalmente.
+    /// <summary>Un Administrador aprobo el certificado: el fallecimiento queda confirmado.</summary>
     FallecimientoConfirmado = 5,
 
-    // Se ejecuto la liberacion de bienes hacia todos los herederos
-    // aceptados del titular (ver CertificadoDefuncionService.AprobarAsync).
+    /// <summary>Se liberaron los bienes hacia todos los herederos aceptados.</summary>
     HerenciaLiberada = 6
 }

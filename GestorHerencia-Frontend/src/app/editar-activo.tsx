@@ -1,10 +1,10 @@
 /**
  * @file editar-activo.tsx
- * @description Pantalla para la edición y eliminación de un activo digital (Frames 7, 19 y 5).
- * 
- * Permite modificar el nombre, instrucciones del activo, nivel de prioridad y beneficiario asignado,
- * actualizando el activo y recreando su asignación de herencia transaccionalmente en el backend.
- * Incluye el modal de confirmación de eliminación (Frame 19) que redirecciona al listado con un banner de éxito.
+ * @description Pantalla de edición y eliminación de un activo digital.
+ *
+ * Permite modificar el nombre, instrucciones, prioridad y beneficiario asignado,
+ * actualizando el activo y recreando su asignación de herencia en el backend.
+ * Incluye el modal de confirmación de eliminación, que redirecciona al listado con un banner de éxito.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -51,7 +51,6 @@ export default function EditarActivoScreen() {
 
   const activoId = Number(id);
 
-  // Estados del formulario
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -73,8 +72,8 @@ export default function EditarActivoScreen() {
   const [asignacionesExistentes, setAsignacionesExistentes] = useState<AsignacionDTO[]>([]);
 
   // Campos estructurados por tipo de activo (mismos que nuevo-activo.tsx): se rellenan
-  // parseando la "descripcion" guardada al cargar el activo (ver cargarDatos) y se
-  // vuelven a serializar al mismo formato al guardar (ver handleGuardarCambios).
+  // parseando la "descripcion" guardada al cargar el activo (cargarDatos) y se
+  // vuelven a serializar al mismo formato al guardar (handleGuardarCambios).
   const [blockchain, setBlockchain] = useState('');
   const [wallet, setWallet] = useState('');
   const [clavePrivada, setClavePrivada] = useState('');
@@ -88,7 +87,6 @@ export default function EditarActivoScreen() {
   const [proveedorCorreo, setProveedorCorreo] = useState('');
   const [direccionCorreo, setDireccionCorreo] = useState('');
 
-  // Control de dropdowns personalizados inline
   const [showPrioridadDropdown, setShowPrioridadDropdown] = useState(false);
 
   useEffect(() => {
@@ -97,9 +95,13 @@ export default function EditarActivoScreen() {
       return;
     }
 
+    /**
+     * Carga el activo a editar y sus asignaciones de herencia existentes.
+     * No existe un endpoint de "obtener activo por ID": se reutiliza el listado
+     * paginado del usuario y se filtra localmente por `activoId`.
+     */
     const cargarDatos = async () => {
       try {
-        // 1. Obtener los activos para rellenar los datos (usamos la lista paginada filtrando por ID)
         const assets = await AssetsService.getAssets();
         const activo = assets.find(a => a.id === activoId);
 
@@ -113,11 +115,9 @@ export default function EditarActivoScreen() {
         setTipoVal(activo.tipo);
         setNombreArchivoActual(activo.nombreArchivoOriginal);
 
-        // Parsear la descripción guardada para separar los campos estructurados del
-        // texto libre de instrucciones. Si no matchea el formato esperado (ej: un activo
-        // viejo o de datos semilla, con una descripción en texto plano), se deja todo
-        // el contenido en "instrucciones" y los campos estructurados quedan vacíos:
-        // se completan recién en el próximo guardado, sin perder lo que ya había.
+        // Si la descripción no matchea el formato estructurado esperado (activos viejos
+        // o de datos semilla en texto plano), se deja todo en "instrucciones" y los campos
+        // estructurados quedan vacíos, sin perder el contenido original.
         const raw = activo.descripcion || '';
         switch (activo.tipo) {
           case 2: { // Cripto
@@ -176,7 +176,6 @@ export default function EditarActivoScreen() {
             setDescripcion(raw);
         }
 
-        // 2. Obtener asignaciones existentes para este activo
         const asigs = await AssetsService.getAssignmentsForAsset(activoId);
         setAsignacionesExistentes(asigs);
 
@@ -184,7 +183,7 @@ export default function EditarActivoScreen() {
           const primerAsig = asigs[0];
           setBeneficiarioEmail(primerAsig.emailInvitado);
 
-          // Parsear prioridad guardada en condicionLiberacion (ej: "Prioridad: Alta")
+          // La prioridad se guarda codificada dentro de condicionLiberacion (ej: "Prioridad: Alta")
           const cond = primerAsig.condicionLiberacion || '';
           if (cond.includes('Alta')) setPrioridad('Alta');
           else if (cond.includes('Baja')) setPrioridad('Baja');
@@ -245,20 +244,14 @@ export default function EditarActivoScreen() {
   };
 
   /**
-   * Guarda las modificaciones del activo y recrea las asignaciones de herencia.
-   * 
-   * ¿Por qué recreamos las asignaciones en lugar de actualizarlas?:
-   * El backend expone endpoints separados para actualizar los datos base del activo (Nombre, Tipo, 
-   * Descripcion en PUT /api/activosdigitales/{id}) y para gestionar las asignaciones (POST 
-   * /api/activosdigitales/{id}/asignaciones y DELETE /api/asignaciones/{asigId}).
-   * Dado que la aplicación móvil simplifica el modelo de herencia asignando el 100% de un activo 
-   * a un único beneficiario, la forma más limpia y transaccional de re-asignar un activo sin alterar 
-   * el backend es:
-   * 1. Actualizar los datos del activo.
-   * 2. Eliminar todas las asignaciones previas asociadas a su ID.
-   * 3. Crear una nueva asignación limpia vinculando al beneficiario seleccionado.
-   * Esto previene colisiones con la validación de negocio del backend que prohíbe superar el 100% 
-   * acumulado de herencia para un mismo activo.
+   * Guarda las modificaciones del activo y recrea sus asignaciones de herencia.
+   *
+   * El backend no tiene un endpoint para "reasignar" un beneficiario: los datos del activo
+   * (PUT /activosdigitales/{id}) y las asignaciones (POST .../asignaciones, DELETE /asignaciones/{id})
+   * se gestionan por separado. Como la app simplifica el modelo asignando el 100% a un único
+   * beneficiario, se elimina la asignación previa y se crea una limpia en su lugar, en vez de
+   * intentar "actualizarla": esto evita chocar con la validación del backend que rechaza superar
+   * el 100% acumulado de herencia sobre un mismo activo.
    */
   const handleGuardarCambios = async () => {
     if (!token) return;
@@ -279,9 +272,8 @@ export default function EditarActivoScreen() {
 
     setSaving(true);
     try {
-      // Reconstruye la descripción en el MISMO formato con el que nuevo-activo.tsx la
-      // serializa originalmente, ahora con los campos estructurados que se acaban de
-      // editar (en vez de reenviar el blob de texto plano tal cual llegó).
+      // Reconstruye la descripción en el mismo formato serializado por nuevo-activo.tsx,
+      // con los campos estructurados recién editados (no se reenvía el blob tal cual llegó).
       let descripcionFinal = descripcion.trim();
       if (tipoVal === 2) {
         descripcionFinal = `[CRIPTO] Blockchain: ${blockchain} | Wallet: ${wallet} | Clave Privada: ${clavePrivada}\n\nInstrucciones:\n${descripcion}`;
@@ -346,7 +338,7 @@ export default function EditarActivoScreen() {
       await AssetsService.deleteAsset(activoId);
       setShowDeleteModal(false);
       
-      // Redireccionar al listado inyectando deleted=true para ver el banner (Frame 33 style)
+      // deleted=true dispara el banner de éxito en el listado
       router.replace({
         pathname: '/(tabs)/activos',
         params: { deleted: 'true' },
@@ -370,7 +362,7 @@ export default function EditarActivoScreen() {
 
   return (
     <View style={styles.container}>
-      {/* HEADER DE ALTA FIDELIDAD CON BOTÓN ELIMINAR */}
+      {/* Header con botón de eliminar */}
       <LinearGradient
         colors={['#23856C', '#022739']}
         start={{ x: 0, y: 0 }}
@@ -407,7 +399,7 @@ export default function EditarActivoScreen() {
             />
           </View>
 
-          {/* CAMPO: TIPO DE ACTIVO (LECTURA / DESHABILITADO - Frame 7) */}
+          {/* El tipo no es editable: cambiarlo invalidaría los campos estructurados ya guardados */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Tipo de activo</Text>
             <View style={styles.disabledInput}>
@@ -415,9 +407,8 @@ export default function EditarActivoScreen() {
             </View>
           </View>
 
-          {/* INFORMACIÓN ESTRUCTURADA DEL ACTIVO (mismos campos que nuevo-activo.tsx,
-              parseados de la descripción guardada): antes esto solo se podía editar como
-              un único bloque de texto libre, perdiendo la estructura original. */}
+          {/* Campos estructurados (mismos que nuevo-activo.tsx), parseados de la descripción
+              guardada: evita editar todo como un único bloque de texto libre. */}
           {tipoVal === 2 && (
             <View style={styles.dynamicInfoWrapper}>
               <Text style={styles.sectionHeader}>INFORMACIÓN DEL ACTIVO</Text>
@@ -624,7 +615,7 @@ export default function EditarActivoScreen() {
         </View>
       </ScrollView>
 
-      {/* MODAL DE CONFIRMACIÓN DE BORRADO (Frame 19) */}
+      {/* Modal de confirmación de borrado */}
       <Modal
         visible={showDeleteModal}
         transparent
@@ -669,7 +660,7 @@ export default function EditarActivoScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#DAF8BD', // Fondo verde claro pastel
+    backgroundColor: '#DAF8BD',
   },
   loadingContainer: {
     flex: 1,
@@ -704,7 +695,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   deleteHeaderButton: {
-    backgroundColor: '#D32F2F', // Fondo rojo botón Eliminar header (Frame 7)
+    backgroundColor: '#D32F2F',
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 16,
@@ -737,7 +728,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#C1E3A4', // Borde verde claro suave
+    borderColor: '#C1E3A4',
     height: 48,
     paddingHorizontal: 16,
     color: '#1a2e2e',
@@ -845,7 +836,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   disabledInput: {
-    backgroundColor: '#CCD3CE', // Fondo gris de input deshabilitado (Frame 7)
+    backgroundColor: '#CCD3CE',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#BCC2BE',
@@ -888,9 +879,9 @@ const styles = StyleSheet.create({
   },
   dropdownButton: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12, // Menos redondeado (rectangular suave)
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#C1E3A4', // Borde verde claro suave
+    borderColor: '#C1E3A4',
     height: 48,
     paddingHorizontal: 16,
     flexDirection: 'row',
@@ -898,7 +889,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   dropdownButtonActive: {
-    borderColor: '#2E7D32', // Borde verde oscuro activo
+    borderColor: '#2E7D32',
     borderWidth: 1.5,
   },
   dropdownButtonText: {
@@ -907,13 +898,13 @@ const styles = StyleSheet.create({
     color: '#000000',
   },
   dropdownButtonTextActive: {
-    color: '#2E7D32', // Texto verde oscuro activo
+    color: '#2E7D32',
   },
   dropdownInlineList: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12, // Menos redondeado
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#C1E3A4', // Borde verde claro suave
+    borderColor: '#C1E3A4',
     padding: 10,
     marginTop: 6,
     gap: 2,
@@ -922,10 +913,10 @@ const styles = StyleSheet.create({
   dropdownInlineOption: {
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 8, // Esquinas más suaves para selección interna
+    borderRadius: 8,
   },
   dropdownInlineOptionSelected: {
-    backgroundColor: '#DAF8BD', // Fondo verde claro pastel de selección
+    backgroundColor: '#DAF8BD',
   },
   dropdownInlineOptionText: {
     fontFamily: 'MPLUS2-Regular',
@@ -934,10 +925,10 @@ const styles = StyleSheet.create({
   },
   dropdownInlineOptionTextSelected: {
     fontFamily: 'MPLUS2-Bold',
-    color: '#2E7D32', // Texto verde oscuro para la opción seleccionada
+    color: '#2E7D32',
   },
   saveButton: {
-    backgroundColor: '#39C55C', // Verde guardar cambios mockup (Frame 7)
+    backgroundColor: '#39C55C',
     borderRadius: 12,
     height: 48,
     alignItems: 'center',
@@ -950,10 +941,9 @@ const styles = StyleSheet.create({
     fontFamily: 'MPLUS2-Bold',
     fontSize: 16,
   },
-  // Confirmación de Borrado Modal (Frame 19)
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(26, 46, 46, 0.6)', // Fondo oscuro translúcido
+    backgroundColor: 'rgba(26, 46, 46, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -1015,7 +1005,7 @@ const styles = StyleSheet.create({
   },
   modalConfirmButton: {
     flex: 1,
-    backgroundColor: '#D32F2F', // Fondo rojo sólido (Frame 19)
+    backgroundColor: '#D32F2F',
     borderRadius: 12,
     height: 48,
     alignItems: 'center',

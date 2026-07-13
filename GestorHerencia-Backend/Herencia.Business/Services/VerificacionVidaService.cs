@@ -7,13 +7,13 @@ using Microsoft.Extensions.Configuration;
 
 namespace Herencia.Business.Services;
 
-// VerificacionVidaService implementa la logica de negocio del monitoreo de
-// actividad: configuracion, check-in, y la maquina de estados que dispara
-// recordatorios y escalamiento (EjecutarEscaneoAsync).
+/// <summary>
+/// Implementación de <see cref="IVerificacionVidaService"/>: configuración del monitoreo
+/// de actividad, check-in, y la máquina de estados que dispara recordatorios y escalamiento.
+/// </summary>
 public class VerificacionVidaService : IVerificacionVidaService
 {
-    // Las frecuencias validas de chequeo, identicas a "opcionesFrecuencia"
-    // en verificacion-vida.tsx del frontend.
+    // Debe coincidir con "opcionesFrecuencia" en verificacion-vida.tsx del frontend.
     private static readonly int[] FrecuenciasValidas = [3, 6, 12];
 
     private readonly IConfiguracionVerificacionVidaRepository _configuracionRepository;
@@ -39,18 +39,18 @@ public class VerificacionVidaService : IVerificacionVidaService
         _configuration = configuration;
     }
 
+    /// <summary>
+    /// Devuelve la configuración de verificación de vida de un usuario, o valores por
+    /// defecto (sin persistir) si todavía no configuró nada.
+    /// </summary>
     public async Task<ConfiguracionVerificacionVidaDTO> ObtenerConfiguracionAsync(int usuarioId)
     {
         try
         {
             var configuracion = await _configuracionRepository.ObtenerPorUsuarioIdAsync(usuarioId);
 
-            // A diferencia del resto del proyecto, "todavia no existe
-            // configuracion" NO es un 404: es, literalmente, el estado
-            // inicial de cualquier titular que nunca abrio esta pantalla.
-            // Se devuelve un DTO con valores por defecto (sin persistir
-            // nada) para que el cliente pueda renderizar el formulario
-            // vacio sin tener que distinguir "error" de "no configurado".
+            // A diferencia del resto del proyecto, "todavía no existe configuración" no es
+            // un 404: es el estado inicial de cualquier titular que nunca abrió esta pantalla.
             if (configuracion is null)
             {
                 return new ConfiguracionVerificacionVidaDTO
@@ -72,10 +72,12 @@ public class VerificacionVidaService : IVerificacionVidaService
         }
     }
 
+    /// <summary>
+    /// Crea o actualiza la configuración de verificación de vida de un usuario.
+    /// </summary>
     public async Task<ConfiguracionVerificacionVidaDTO> GuardarConfiguracionAsync(
         int usuarioId, ConfiguracionVerificacionVidaActualizacionDTO configuracionDTO)
     {
-        // --- Paso 1: validacion de formato, antes de tocar la base de datos ---
         if (!FrecuenciasValidas.Contains(configuracionDTO.FrecuenciaMeses))
         {
             throw new ReglaNegocioException("La frecuencia de chequeo debe ser 3, 6 o 12 meses.");
@@ -83,13 +85,9 @@ public class VerificacionVidaService : IVerificacionVidaService
 
         try
         {
-            // --- Paso 2: si se pide ACTIVAR el monitoreo, el contacto de
-            // confianza es obligatorio y debe ser un beneficiario ya
-            // ACEPTADO de algun activo de ESTE titular (misma regla que ya
-            // aplica verificacion-vida.tsx del lado del cliente; se repite
-            // aca porque el cliente NO es una fuente confiable: cualquiera
-            // podria llamar a este endpoint saltandose la validacion de la
-            // app). ---
+            // Si se activa el monitoreo, el contacto de confianza es obligatorio y debe ser
+            // un beneficiario ya ACEPTADO de algún activo de este titular. Se revalida aquí
+            // (y no solo en el cliente) porque cualquiera podría llamar a este endpoint directamente.
             if (configuracionDTO.Activo)
             {
                 if (configuracionDTO.ContactoConfianzaId is null)
@@ -116,7 +114,6 @@ public class VerificacionVidaService : IVerificacionVidaService
                 }
             }
 
-            // --- Paso 3: crear o actualizar ---
             var configuracion = await _configuracionRepository.ObtenerPorUsuarioIdAsync(usuarioId);
             var ahora = DateTime.UtcNow;
 
@@ -129,9 +126,8 @@ public class VerificacionVidaService : IVerificacionVidaService
                     FrecuenciaMeses = configuracionDTO.FrecuenciaMeses,
                     Metodo = configuracionDTO.Metodo,
                     ContactoConfianzaId = configuracionDTO.ContactoConfianzaId,
-                    // Alta = primer check-in implicito: no tendria sentido
-                    // que, apenas configurado, el titular ya aparezca
-                    // "vencido" por una fecha en blanco.
+                    // El alta cuenta como primer check-in implícito, para que el titular no
+                    // aparezca "vencido" apenas configurado.
                     UltimoCheckIn = ahora,
                     Estado = EstadoVerificacionVida.Activo,
                     FechaCreacion = ahora,
@@ -142,12 +138,9 @@ public class VerificacionVidaService : IVerificacionVidaService
             }
             else
             {
-                // --- Reactivacion: reiniciar el reloj ---
-                // Si el monitoreo estaba desactivado y esta edicion lo
-                // vuelve a activar, se trata como un check-in nuevo: de lo
-                // contrario, un titular que reactiva el monitoreo despues
-                // de mucho tiempo inactivo apareceria "vencido" desde el
-                // primer escaneo, sin haber tenido chance de responder.
+                // Reactivación: si el monitoreo estaba desactivado y se vuelve a activar,
+                // se trata como un check-in nuevo para no aparecer "vencido" desde el
+                // primer escaneo sin haber tenido chance de responder.
                 var seEstaReactivando = !configuracion.Activo && configuracionDTO.Activo;
 
                 configuracion.Activo = configuracionDTO.Activo;
@@ -186,6 +179,10 @@ public class VerificacionVidaService : IVerificacionVidaService
         }
     }
 
+    /// <summary>
+    /// Registra un check-in de actividad del titular, reiniciando el reloj de vencimiento
+    /// y cancelando cualquier certificado de defunción pendiente subido por error.
+    /// </summary>
     public async Task<ConfiguracionVerificacionVidaDTO> RegistrarCheckInAsync(int usuarioId)
     {
         try
@@ -210,13 +207,9 @@ public class VerificacionVidaService : IVerificacionVidaService
 
             await _configuracionRepository.ActualizarAsync(configuracion);
 
-            // --- Cancelacion automatica de un pedido de certificado en curso ---
-            // Si el titular vuelve a confirmar actividad mientras algun
-            // heredero ya habia subido un certificado (Pendiente de
-            // revision), ese pedido queda invalidado: se marca
-            // CanceladoPorActividad (NUNCA se borra la fila, para dejar
-            // registro de que existio un pedido que resulto ser una falsa
-            // alarma).
+            // Si el titular confirma actividad mientras un heredero ya había subido un
+            // certificado pendiente, ese pedido queda invalidado: se marca
+            // CanceladoPorActividad (nunca se borra, para dejar registro de la falsa alarma).
             var certificadosPendientes = await _certificadoDefuncionRepository.ObtenerPendientesPorTitularAsync(usuarioId);
 
             foreach (var certificado in certificadosPendientes)
@@ -242,17 +235,16 @@ public class VerificacionVidaService : IVerificacionVidaService
         }
     }
 
+    /// <summary>
+    /// Recorre las configuraciones activas y avanza la máquina de estados de cada una:
+    /// envía recordatorios ante inactividad y, agotado el plazo, activa el protocolo de
+    /// escalamiento notificando a los herederos.
+    /// </summary>
     public async Task EjecutarEscaneoAsync()
     {
-        // --- Umbrales configurables (VerificacionVida:* en appsettings.json) ---
-        // Con los valores por defecto acordados: 3 recordatorios espaciados
-        // cada 7 dias tras el vencimiento, y un plazo final de 30 dias
-        // contados desde el ULTIMO recordatorio antes de activar el
-        // protocolo.
-        // Se lee con el indexador plano de IConfiguration (no GetValue<T>,
-        // que exige el paquete Microsoft.Extensions.Configuration.Binder
-        // que este proyecto no referencia) y se parsea a mano, igual
-        // criterio que ya usa TokenService para "AppSettings:Token".
+        // Umbrales configurables (VerificacionVida:* en appsettings.json), con default de
+        // 3 recordatorios espaciados cada 7 días, y un plazo final de 30 días desde el
+        // último recordatorio antes de activar el protocolo.
         var diasEntreRecordatorios = LeerEnteroDeConfiguracion("VerificacionVida:DiasEntreRecordatorios", 7);
         var cantidadRecordatorios = LeerEnteroDeConfiguracion("VerificacionVida:CantidadRecordatorios", 3);
         var diasPlazoFinal = LeerEnteroDeConfiguracion("VerificacionVida:DiasPlazoFinalTrasUltimoRecordatorio", 30);
@@ -264,8 +256,6 @@ public class VerificacionVidaService : IVerificacionVidaService
         {
             var vencimiento = configuracion.UltimoCheckIn.AddMonths(configuracion.FrecuenciaMeses);
 
-            // Todavia no vencio el plazo: nada que hacer con este titular
-            // en este tick.
             if (ahora < vencimiento)
             {
                 continue;
@@ -273,9 +263,8 @@ public class VerificacionVidaService : IVerificacionVidaService
 
             if (configuracion.RecordatoriosEnviados < cantidadRecordatorios)
             {
-                // El PRIMER recordatorio se dispara apenas vence el plazo;
-                // los siguientes, cada "diasEntreRecordatorios" desde el
-                // ULTIMO enviado.
+                // El primer recordatorio se dispara apenas vence el plazo; los siguientes,
+                // cada "diasEntreRecordatorios" desde el último enviado.
                 var tocaEnviarRecordatorio = configuracion.RecordatoriosEnviados == 0
                     || ahora >= configuracion.FechaUltimoRecordatorio!.Value.AddDays(diasEntreRecordatorios);
 
@@ -299,11 +288,8 @@ public class VerificacionVidaService : IVerificacionVidaService
 
                 await _configuracionRepository.ActualizarAsync(configuracion);
 
-                // --- Aviso al contacto de confianza en el PRIMER recordatorio ---
-                // Cumple lo que ya le promete verificacion-vida.tsx al
-                // titular ("tu contacto de confianza sera notificado antes
-                // de activar la herencia"): se avisa apenas se detecta la
-                // falta de respuesta, no recien al activarse el protocolo.
+                // Se avisa al contacto de confianza en el primer recordatorio, apenas se
+                // detecta la falta de respuesta (no recién al activarse el protocolo).
                 if (configuracion.RecordatoriosEnviados == 1 && configuracion.ContactoConfianza is not null)
                 {
                     await _notificationService.EnviarNotificacionAsync(
@@ -317,8 +303,6 @@ public class VerificacionVidaService : IVerificacionVidaService
                 continue;
             }
 
-            // Ya se agotaron los recordatorios: falta evaluar el plazo
-            // final de "diasPlazoFinal" contado desde el ULTIMO recordatorio.
             var seCumplioElPlazoFinal = ahora >= configuracion.FechaUltimoRecordatorio!.Value.AddDays(diasPlazoFinal);
 
             if (!seCumplioElPlazoFinal || configuracion.Estado == EstadoVerificacionVida.EsperandoCertificado)
@@ -326,7 +310,6 @@ public class VerificacionVidaService : IVerificacionVidaService
                 continue;
             }
 
-            // --- Activacion del protocolo ---
             configuracion.Estado = EstadoVerificacionVida.EsperandoCertificado;
             configuracion.FechaProtocoloActivado = ahora;
             configuracion.FechaModificacion = ahora;

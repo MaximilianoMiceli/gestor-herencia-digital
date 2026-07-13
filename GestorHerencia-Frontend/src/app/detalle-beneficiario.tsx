@@ -1,11 +1,9 @@
 /**
  * @file detalle-beneficiario.tsx
- * @description Pantalla de detalle y gestión de beneficiarios (Frames 9, 28 y 33).
- *
- * Muestra el email del beneficiario (identificador real, ya que el backend no expone un
- * "nombre" ni un Id propio para esta persona) y la lista de activos que tiene asignados.
- * Al eliminarlo, se borran TODAS las asignaciones de herencia que lo vinculan con mis activos
- * (no hay una entidad "Beneficiario" separada que borrar).
+ * @description Detalle y gestión de un beneficiario: su email (identificador real, ya que
+ * el backend no expone nombre ni Id propio para esta persona) y los activos que tiene
+ * asignados. Eliminarlo borra todas las asignaciones que lo vinculan con mis activos, ya
+ * que no existe una entidad "Beneficiario" separada.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -68,9 +66,6 @@ export default function DetalleBeneficiarioScreen() {
     loadDatos();
   }, [token, email]);
 
-  /**
-   * Mapea el número del enum TipoActivoDigital a un String descriptivo.
-   */
   const mapearTipoActivo = (tipoVal: number): string => {
     switch (tipoVal) {
       case 0: return 'Cuenta Bancaria';
@@ -81,14 +76,13 @@ export default function DetalleBeneficiarioScreen() {
     }
   };
 
-  /**
-   * Genera las iniciales a partir del email del beneficiario (no hay nombre disponible).
-   */
+  /** El backend no expone un nombre para el beneficiario, así que las iniciales salen del email. */
   const obtenerIniciales = (correo: string) => correo.substring(0, 2).toUpperCase();
 
   /**
-   * Determina el estado del beneficiario según su primera asignación
-   * (1 = Pendiente, 2 = Verificado/Aceptado, 3 = Rechazado).
+   * Badge de estado: 2 = Verificado (aceptó la invitación), 3 = Rechazado, cualquier otro
+   * valor (1 = Pendiente) queda como "Pendiente". Se basa en el estado de la primera
+   * asignación encontrada, usado como representativo de todo el beneficiario.
    */
   const obtenerEstadoBeneficiario = (item: BeneficiarioResumen): 'Verificado' | 'Pendiente' | 'Rechazado' => {
     if (item.estado === 2) return 'Verificado';
@@ -110,7 +104,7 @@ export default function DetalleBeneficiarioScreen() {
       );
       setShowConfirmModal(false);
 
-      // Redirigir al listado inyectando parámetro de éxito para el banner (Frame 33)
+      // Parámetro que dispara el banner de éxito en el listado.
       router.replace({
         pathname: '/(tabs)/beneficiarios',
         params: { deleted: 'true' },
@@ -144,7 +138,6 @@ export default function DetalleBeneficiarioScreen() {
 
   return (
     <View style={styles.container}>
-      {/* HEADER DE ALTA FIDELIDAD */}
       <LinearGradient
         colors={['#23856C', '#022739']}
         start={{ x: 0, y: 0 }}
@@ -163,7 +156,6 @@ export default function DetalleBeneficiarioScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.centeredWrapper}>
 
-          {/* TARJETA DE PERFIL (Frame 9) */}
           <View style={styles.profileCard}>
             <View style={styles.avatarCircle}>
               <Text style={styles.avatarText}>{obtenerIniciales(beneficiario.email)}</Text>
@@ -194,7 +186,6 @@ export default function DetalleBeneficiarioScreen() {
             </View>
           </View>
 
-          {/* SECCIÓN ACTIVOS ASIGNADOS */}
           <Text style={styles.sectionTitle}>ACTIVOS ASIGNADOS</Text>
 
           {beneficiario.asignaciones.length === 0 ? (
@@ -225,7 +216,6 @@ export default function DetalleBeneficiarioScreen() {
             </View>
           )}
 
-          {/* BOTÓN ELIMINAR BENEFICIARIO (Frame 9) */}
           <TouchableOpacity
             style={styles.deleteButton}
             onPress={() => setShowConfirmModal(true)}
@@ -235,7 +225,6 @@ export default function DetalleBeneficiarioScreen() {
         </View>
       </ScrollView>
 
-      {/* MODAL DE CONFIRMACIÓN DE BORRADO (Frame 28) */}
       <Modal
         visible={showConfirmModal}
         transparent

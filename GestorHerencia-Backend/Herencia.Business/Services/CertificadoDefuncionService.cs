@@ -7,14 +7,15 @@ using Microsoft.Extensions.Configuration;
 
 namespace Herencia.Business.Services;
 
-// CertificadoDefuncionService implementa la logica de negocio de subida y
-// revision de certificados de defuncion, incluida la liberacion de bienes
-// que dispara una aprobacion.
+/// <summary>
+/// Implementación de <see cref="ICertificadoDefuncionService"/>: gestiona la subida y
+/// revisión de certificados de defunción, incluida la liberación de bienes que dispara
+/// una aprobación.
+/// </summary>
 public class CertificadoDefuncionService : ICertificadoDefuncionService
 {
-    // Tipos de archivo aceptados: documento (PDF) o foto/escaneo del acta
-    // (JPG/PNG). Se valida el ContentType reportado por el cliente, no la
-    // extension del nombre del archivo (que es trivial de falsificar).
+    // Se valida el ContentType reportado por el cliente, no la extensión del archivo
+    // (trivial de falsificar).
     private static readonly string[] TiposPermitidos =
     [
         "application/pdf",
@@ -48,6 +49,10 @@ public class CertificadoDefuncionService : ICertificadoDefuncionService
         _configuration = configuration;
     }
 
+    /// <summary>
+    /// Registra la subida de un certificado de defunción de un titular, hecha por uno
+    /// de sus herederos ya aceptados.
+    /// </summary>
     public async Task<CertificadoDefuncionDTO> SubirCertificadoAsync(
         int usuarioTitularId,
         int subidoPorUsuarioId,
@@ -56,16 +61,13 @@ public class CertificadoDefuncionService : ICertificadoDefuncionService
         string contentType,
         long tamanioBytes)
     {
-        // --- Paso 1: validaciones de formato, antes de tocar disco o base de datos ---
         if (!TiposPermitidos.Contains(contentType))
         {
             throw new ReglaNegocioException("Solo se aceptan archivos PDF, JPG o PNG.");
         }
 
-        // Se lee con el indexador plano de IConfiguration (no GetValue<T>,
-        // que exige el paquete Microsoft.Extensions.Configuration.Binder
-        // que este proyecto no referencia) y se parsea a mano, igual
-        // criterio que ya usa TokenService para "AppSettings:Token".
+        // Indexador plano de IConfiguration (no GetValue<T>, que exige un paquete no
+        // referenciado por este proyecto), con un default de 10 MB si no está configurado.
         var tamanioMaximoBytes = long.TryParse(
             _configuration["VerificacionVida:TamanioMaximoCertificadoBytes"], out var valorConfigurado)
             ? valorConfigurado
@@ -86,22 +88,17 @@ public class CertificadoDefuncionService : ICertificadoDefuncionService
                 throw new RecursoNoEncontradoException($"No se encontro el usuario con Id {usuarioTitularId}.");
             }
 
-            // --- El fallecimiento de este titular ya fue confirmado antes: no se acepta otro ---
-            // Sin este chequeo, cualquier heredero aceptado podia seguir subiendo
-            // certificados indefinidamente para la misma persona, incluso despues
-            // de que un Administrador ya hubiera aprobado uno y liberado los bienes.
+            // Evita que se sigan subiendo certificados para un titular cuyo fallecimiento
+            // ya fue confirmado y cuyos bienes ya fueron liberados.
             if (await _certificadoDefuncionRepository.ExisteCertificadoAprobadoAsync(usuarioTitularId))
             {
                 throw new ReglaNegocioException(
                     "El fallecimiento de este titular ya fue confirmado anteriormente; no se puede subir otro certificado.");
             }
 
-            // --- Regla de negocio central: solo un heredero ACEPTADO puede subir esto ---
-            // Cubre las DOS vias posibles de llegar aca (subida proactiva, o
-            // subida pedida tras el escalamiento de VerificacionVidaService):
-            // en ambos casos, quien sube el documento tiene que ser
-            // efectivamente uno de los herederos de este titular, nunca un
-            // tercero sin relacion con el.
+            // Solo un heredero ya ACEPTADO de este titular puede subir el certificado
+            // (cubre tanto la subida proactiva como la pedida tras el escalamiento de
+            // VerificacionVidaService); nunca un tercero sin relación con él.
             var herederosAceptados = await _asignacionHerenciaRepository.ObtenerAceptadasPorOtorganteAsync(usuarioTitularId);
             var heredero = herederosAceptados.FirstOrDefault(a => a.UsuarioId == subidoPorUsuarioId);
 
@@ -127,10 +124,8 @@ public class CertificadoDefuncionService : ICertificadoDefuncionService
 
             await _certificadoDefuncionRepository.AgregarAsync(certificado);
 
-            // Si el titular tenia monitoreo configurado, se refleja el
-            // nuevo estado "hay un certificado en revision" (salvo que el
-            // fallecimiento ya estuviera confirmado por otro certificado
-            // previo, caso en el que no corresponde retroceder el estado).
+            // Refleja "hay un certificado en revisión" salvo que el fallecimiento ya
+            // estuviera confirmado por otro certificado previo.
             var configuracion = await _configuracionRepository.ObtenerPorUsuarioIdAsync(usuarioTitularId);
 
             if (configuracion is not null
@@ -169,6 +164,9 @@ public class CertificadoDefuncionService : ICertificadoDefuncionService
         }
     }
 
+    /// <summary>
+    /// Devuelve los certificados de defunción pendientes de revisión.
+    /// </summary>
     public async Task<IEnumerable<CertificadoDefuncionDTO>> ObtenerPendientesAsync()
     {
         try
@@ -183,6 +181,10 @@ public class CertificadoDefuncionService : ICertificadoDefuncionService
         }
     }
 
+    /// <summary>
+    /// Aprueba un certificado de defunción pendiente y libera, en la misma transacción,
+    /// todos los bienes ya aceptados del titular.
+    /// </summary>
     public async Task<CertificadoDefuncionDTO> AprobarAsync(int certificadoId, int adminUsuarioId)
     {
         try
@@ -194,10 +196,8 @@ public class CertificadoDefuncionService : ICertificadoDefuncionService
                 throw new RecursoNoEncontradoException($"No se encontro el certificado de defuncion con Id {certificadoId}.");
             }
 
-            // Misma regla "una vez decidido, decidido" que
-            // AsignacionHerenciaService.CambiarEstadoInternoAsync aplica
-            // sobre EstadoBeneficiario: un certificado ya revisado no puede
-            // volver a aprobarse ni rechazarse.
+            // Misma regla "una vez decidido, decidido" que AsignacionHerenciaService aplica
+            // sobre EstadoBeneficiario: un certificado ya revisado no puede volver a decidirse.
             if (certificado.Estado != EstadoCertificadoDefuncion.Pendiente)
             {
                 throw new ReglaNegocioException("Este certificado ya fue revisado y no puede modificarse.");
@@ -206,11 +206,9 @@ public class CertificadoDefuncionService : ICertificadoDefuncionService
             var ahora = DateTime.UtcNow;
             var herederosLiberados = Enumerable.Empty<AsignacionHerencia>();
 
-            // --- Transaccion: aprobar el certificado + liberar TODOS los
-            // bienes del titular deben confirmarse (o revertirse) juntos ---
-            // Un fallo a mitad de camino (ej: al liberar la tercera de
-            // cinco AsignacionHerencia) no puede dejar al certificado
-            // marcado "Aprobado" con solo una liberacion parcial aplicada.
+            // Aprobar el certificado y liberar todos los bienes del titular deben
+            // confirmarse (o revertirse) juntos: un fallo a mitad de camino no puede dejar
+            // el certificado "Aprobado" con solo una liberación parcial aplicada.
             await _certificadoDefuncionRepository.EjecutarEnTransaccionAsync(async () =>
             {
                 certificado.Estado = EstadoCertificadoDefuncion.Aprobado;
@@ -241,10 +239,8 @@ public class CertificadoDefuncionService : ICertificadoDefuncionService
                 }
             });
 
-            // --- Notificaciones, DESPUES de confirmada la transaccion ---
-            // Si el envio de una notificacion fallara, no tiene sentido
-            // revertir la liberacion de bienes ya confirmada: por eso vive
-            // fuera del bloque transaccional.
+            // Las notificaciones van después de confirmada la transacción: si el envío
+            // fallara, no tiene sentido revertir una liberación de bienes ya confirmada.
             foreach (var herencia in herederosLiberados)
             {
                 if (herencia.Usuario is null)
@@ -275,6 +271,9 @@ public class CertificadoDefuncionService : ICertificadoDefuncionService
         }
     }
 
+    /// <summary>
+    /// Rechaza un certificado de defunción pendiente, dejando constancia del motivo.
+    /// </summary>
     public async Task<CertificadoDefuncionDTO> RechazarAsync(int certificadoId, int adminUsuarioId, string motivo)
     {
         if (string.IsNullOrWhiteSpace(motivo))
@@ -303,10 +302,8 @@ public class CertificadoDefuncionService : ICertificadoDefuncionService
             certificado.FechaModificacion = DateTime.UtcNow;
             certificado.UsuarioModificacion = "sistema";
 
-            // Deliberadamente NO se toca ConfiguracionVerificacionVida.Estado
-            // aca: un rechazo no confirma nada, asi que otro heredero
-            // (o el mismo) puede volver a subir un certificado distinto sin
-            // que el sistema quede en un estado inconsistente.
+            // No se toca ConfiguracionVerificacionVida.Estado: un rechazo no confirma nada,
+            // así que otro heredero (o el mismo) puede volver a subir un certificado distinto.
             await _certificadoDefuncionRepository.ActualizarAsync(certificado);
 
             return MapearADTO(certificado);
@@ -325,6 +322,9 @@ public class CertificadoDefuncionService : ICertificadoDefuncionService
         }
     }
 
+    /// <summary>
+    /// Devuelve la ruta física y el nombre original del archivo de un certificado.
+    /// </summary>
     public async Task<(string RutaArchivo, string NombreArchivoOriginal)> ObtenerArchivoAsync(int certificadoId)
     {
         var certificado = await _certificadoDefuncionRepository.ObtenerConUsuariosAsync(certificadoId);

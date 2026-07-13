@@ -1,13 +1,8 @@
 /**
  * @file invitacion.tsx
- * @description Pantalla pública de invitación de heredero (Frames 21 y 22).
- * 
- * Permite a los usuarios visualizar una invitación a recibir una herencia digital
- * enviada por otro usuario titular. Posibilita la aceptación o rechazo de la misma.
- * 
- * Si el usuario no posee una sesión activa y pulsa "Aceptar", se despliega un
- * modal translúcido idéntico al mockup preguntando "¿Ya tenes cuenta?", guiándolo
- * a iniciar sesión o registrarse según corresponda.
+ * @description Pantalla pública de invitación de heredero: muestra la invitación y permite
+ * aceptarla o rechazarla. Si quien la abre no tiene sesión activa, "Aceptar" primero pide
+ * iniciar sesión o registrarse (con el email de la invitación precargado) antes de procesarla.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -37,7 +32,6 @@ export default function InvitacionScreen() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [processing, setProcessing] = useState(false);
 
-  // Obtener los detalles de la invitación pública al cargar la pantalla
   useEffect(() => {
     if (!id) {
       Alert.alert('Error', 'ID de invitación no provisto en el enlace.');

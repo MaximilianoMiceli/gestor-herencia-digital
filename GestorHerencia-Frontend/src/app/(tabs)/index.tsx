@@ -30,7 +30,6 @@ export default function HomeScreen() {
   const [is2FAActive, setIs2FAActive] = useState(false);
   const [pendingHerenciasCount, setPendingHerenciasCount] = useState(0);
 
-  // Función para obtener los conteos desde los servicios
   const fetchCounts = async () => {
     if (!token) return;
     try {

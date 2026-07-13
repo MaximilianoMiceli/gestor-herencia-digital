@@ -76,7 +76,6 @@ interface AuthContextData {
   signOut: () => Promise<void>;
 }
 
-/** Creación del contexto inicial */
 const AuthContext = createContext<AuthContextData>({} as AuthContextData);
 
 /**
@@ -118,7 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loadToken();
   }, []);
 
-  // Extrae y actualiza reactivamente el nombre del usuario a partir del token actual
+  // Deriva userName/userEmail/userId/userRole del token en cada cambio de sesión.
   useEffect(() => {
     if (token) {
       const payload = decodeJwtPayload(token);

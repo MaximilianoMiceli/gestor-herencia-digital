@@ -1,9 +1,8 @@
 /**
  * @file invitaciones.service.ts
  * @description Servicio HTTP del flujo PÚBLICO de invitaciones (aceptar/rechazar una
- * herencia sin necesitar sesión iniciada). Antes esta lógica vivía duplicada, con
- * `fetch` directo, tanto en invitacion.tsx como en login.tsx (para el auto-aceptar tras
- * loguearse desde una invitación); ahora ambas pantallas llaman a este único servicio.
+ * herencia sin necesitar sesión iniciada). Compartido entre invitacion.tsx y login.tsx
+ * (auto-aceptar tras loguearse desde una invitación).
  */
 
 import { api } from './api';
