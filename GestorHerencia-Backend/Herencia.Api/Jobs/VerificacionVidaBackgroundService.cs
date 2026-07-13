@@ -7,13 +7,8 @@ namespace Herencia.Api.Jobs;
 /// detectar titulares vencidos y disparar recordatorios/escalamiento sin depender de que
 /// alguien abra la app.
 /// </summary>
-/// <remarks>
-/// Se inyecta IServiceScopeFactory (no IVerificacionVidaService directo) porque un
-/// BackgroundService es Singleton, mientras que IVerificacionVidaService (y, transitivamente,
-/// AppDbContext) es Scoped: inyectar un servicio Scoped en un Singleton es una "captive
-/// dependency" que el contenedor de DI rechaza en tiempo de ejecucion. Por eso se abre un
-/// scope nuevo, de corta vida, en cada tick.
-/// </remarks>
+// Se inyecta IServiceScopeFactory (no el servicio directo) porque este BackgroundService es
+// Singleton y el servicio es Scoped: se abre un scope nuevo en cada tick para evitar una "captive dependency".
 public class VerificacionVidaBackgroundService : BackgroundService
 {
     private static readonly TimeSpan IntervaloEntreEscaneos = TimeSpan.FromHours(24);

@@ -1,100 +1,63 @@
-/**
- * @file assets.service.ts
- * @description Servicio HTTP de gestión de activos digitales y asignaciones de herencia.
- *
- * El backend no tiene una entidad "Beneficiario" propia: invitar a alguien y asignarle un
- * activo son la misma operación (POST /activosdigitales/{id}/asignaciones con su email).
- * Por eso "BeneficiarioResumen" (más abajo) es un agregado armado en el cliente a partir
- * de las asignaciones existentes, no un recurso que exista tal cual en el servidor.
- */
-
+// El backend no tiene una entidad "Beneficiario" propia: invitar a alguien y asignarle un
+// activo son la misma operación. "BeneficiarioResumen" (más abajo) es un agregado armado
+// en el cliente a partir de las asignaciones existentes, no un recurso real del servidor.
 import { api } from './api';
 
-/**
- * DTO para la creación de un nuevo activo digital.
- * Mapea directamente con el modelo de entrada 'ActivoDigitalCreacionDTO' del backend.
- */
 export interface ActivoDigitalCreacionDTO {
-  /** Nombre representativo del activo (ej: "Cuenta Banco Galicia", "Ethereum Wallet") */
   nombre: string;
-  /** Tipo de activo digital según el enumerador TipoActivoDigital del backend */
+  /** Tipo de activo digital según el enumerador TipoActivoDigital del backend. */
   tipo: number;
-  /** Detalles e instrucciones específicas del activo, serializados en texto legible o JSON */
   descripcion: string;
 }
 
-/**
- * DTO para la creación de una asignación de herencia.
- * Mapea directamente con 'AsignacionHerenciaCreacionDTO' del backend: el beneficiario se
- * identifica por email (no por un Id propio), ya que puede no tener cuenta todavía.
- */
 export interface AsignacionHerenciaCreacionDTO {
-  /** Email de la persona invitada como beneficiaria del activo */
   emailBeneficiario: string;
-  /** Porcentaje de herencia asignado (actualmente fijado al 100% para el único beneficiario) */
+  /** Actualmente fijado al 100% para el único beneficiario. */
   porcentajeAsignado: number;
-  /** Nivel de prioridad u otras condiciones bajo las cuales se liberará el activo en el futuro */
   condicionLiberacion: string;
 }
 
-/**
- * DTO que representa una asignación de herencia devuelta por el backend.
- * Mapea directamente con 'AsignacionHerenciaDTO' (ver Herencia.Business/Dtos).
- */
 export interface AsignacionDTO {
   id: number;
   activoDigitalId: number;
-  /** Id del Usuario beneficiario, o null si todavía no reclamó la invitación con una cuenta */
+  /** Null si todavía no reclamó la invitación con una cuenta propia. */
   usuarioBeneficiarioId: number | null;
-  /** Email con el que se invitó a esta persona, exista o no cuenta todavía */
   emailInvitado: string;
   porcentajeAsignado: number;
   condicionLiberacion: string;
-  /** 1 = Pendiente, 2 = Aceptado, 3 = Rechazado (EstadoBeneficiario del backend) */
+  /** 1 = Pendiente, 2 = Aceptado, 3 = Rechazado (EstadoBeneficiario del backend). */
   estado: number;
   usuarioOtorganteId: number;
   tokenInvitacion: string;
 }
 
-/**
- * Una asignación puntual, enriquecida con los datos del activo al que pertenece.
- * Se arma en el cliente combinando AsignacionDTO con el activo que la originó.
- */
 export interface AsignacionConActivo extends AsignacionDTO {
   activoNombre: string;
   activoTipo: number;
 }
 
-/**
- * Resumen de un beneficiario agrupado por email, construido en el cliente a partir de
- * todas las asignaciones (posiblemente sobre varios activos distintos) que comparten el
- * mismo 'emailInvitado'. No existe como recurso propio en el backend.
- */
+// Agrupado por email en el cliente a partir de todas las asignaciones que comparten
+// "emailInvitado". No existe como recurso propio en el backend.
 export interface BeneficiarioResumen {
   email: string;
   usuarioBeneficiarioId: number | null;
-  /** Estado de la primera asignación encontrada; se usa como estado representativo del beneficiario */
+  /** Estado de la primera asignación encontrada, usado como representativo del beneficiario. */
   estado: number;
   asignaciones: AsignacionConActivo[];
 }
 
-/**
- * DTO de un activo digital devuelto por el backend (ver ActivoDigitalDTO.cs).
- */
 export interface ActivoDigitalDTO {
   id: number;
   nombre: string;
   tipo: number;
   descripcion: string;
   usuarioId: number;
-  /** Nombre de exhibición del archivo adjunto, o null si no tiene ninguno */
   nombreArchivoOriginal: string | null;
 }
 
-/** DTO que representa una herencia recibida (ver InvitacionesController.MiHerenciaDTO). */
 export interface MiHerenciaDTO {
   asignacionId: number;
-  /** Id del activo en sí: necesario para pedir GET /api/activosdigitales/{id}/archivo. */
+  /** Necesario para pedir GET /api/activosdigitales/{id}/archivo. */
   activoDigitalId: number;
   titularId: number;
   titularNombre: string;
@@ -102,39 +65,27 @@ export interface MiHerenciaDTO {
   activoTipo: number;
   porcentaje: number;
   condicionLiberacion: string;
-  /** true solo cuando se aprobó el certificado de defunción del titular (FechaLiberacion != null). */
+  /** true solo cuando se aprobó el certificado de defunción del titular. */
   disponible: boolean;
-  /** El backend lo serializa como el NOMBRE del enum EstadoBeneficiario: "Pendiente" | "Aceptado" | "Rechazado". */
+  /** Nombre del enum EstadoBeneficiario del backend: "Pendiente" | "Aceptado" | "Rechazado". */
   estado: string;
-  /** Instrucciones/datos reales del activo (CBU, wallet, credenciales, etc.). El backend
-   *  SOLO los completa cuando "disponible" es true: antes de que se confirme el
-   *  fallecimiento del titular, viajan como null aunque ya hayas aceptado la herencia. */
+  // El backend solo completa descripcion/nombreArchivoOriginal cuando "disponible" es
+  // true: antes de confirmarse el fallecimiento, viajan null aunque ya hayas aceptado.
   descripcion: string | null;
-  /** Nombre del archivo adjunto del activo (si tiene uno), con la misma restricción de
-   *  "disponible" que descripcion. */
   nombreArchivoOriginal: string | null;
 }
 
 export class AssetsService {
-  /**
-   * Registra un nuevo activo digital y, si se provee el email de un beneficiario, realiza
-   * inmediatamente la asignación de herencia del 100% al mismo mediante una llamada
-   * transaccional encadenada.
-   *
-   * Llama a:
-   * 1. POST /api/activosdigitales (Crea el activo)
-   * 2. POST /api/activosdigitales/{id}/asignaciones (Invita y asigna al beneficiario por email)
-   */
+  // Crea el activo (POST /api/activosdigitales) y, si se provee email, encadena la
+  // asignación de herencia del 100% (POST /api/activosdigitales/{id}/asignaciones).
   static async createAsset(
     asset: ActivoDigitalCreacionDTO,
     emailBeneficiario?: string,
     prioridad?: string
   ): Promise<ActivoDigitalDTO> {
-    // 1. Crear el activo digital principal.
     const assetResponse = await api.post<ActivoDigitalDTO>('/activosdigitales', asset);
     const createdAsset = assetResponse.data;
 
-    // 2. Si se invitó a un beneficiario por email, crear la asignación en la tabla intermedia.
     if (emailBeneficiario) {
       const asignacionBody: AsignacionHerenciaCreacionDTO[] = [
         {
@@ -199,35 +150,24 @@ export class AssetsService {
     return response.data;
   }
 
-  /**
-   * PATCH /api/asignaciones/{id}/estado — el BENEFICIARIO acepta o rechaza una herencia
-   * pendiente. "nuevoEstado" usa los mismos valores numéricos que el enum EstadoBeneficiario
-   * del backend: 2 = Aceptado, 3 = Rechazado (1 = Pendiente no es una transición válida,
-   * el backend la rechaza con 400 si se intenta volver atrás).
-   */
+  /** Llama a: PATCH /api/asignaciones/{id}/estado. 2 = Aceptado, 3 = Rechazado; el backend
+   *  rechaza con 400 cualquier intento de volver a 1 = Pendiente. */
   static async actualizarEstadoAsignacion(id: number, nuevoEstado: 2 | 3): Promise<AsignacionDTO> {
     const response = await api.patch<AsignacionDTO>(`/asignaciones/${id}/estado`, { nuevoEstado });
     return response.data;
   }
 
-  /**
-   * Adjunta (o reemplaza) el archivo de un activo digital ya creado.
-   * Llama a: POST /api/activosdigitales/{id}/archivo
-   *
-   * React Native no tiene un `File`/`Blob` nativo: `expo-document-picker` devuelve un
-   * objeto plano `{ uri, name, mimeType }`, y ese es el formato que FormData espera para
-   * que el motor nativo lea el archivo del disco al armar el body real. El "as any" es
-   * necesario porque los tipos de FormData en RN no contemplan esta forma (pensados
-   * mirando la spec web).
-   */
+  // Llama a: POST /api/activosdigitales/{id}/archivo. RN no tiene File/Blob nativo:
+  // expo-document-picker da { uri, name, mimeType }, que es lo que FormData necesita
+  // para leer el archivo del disco. El "as any" cubre que los tipos de FormData en RN
+  // no contemplan esta forma (pensados para la spec web).
   static async subirArchivoActivo(
     id: number,
     archivo: { uri: string; name: string; mimeType: string }
   ): Promise<ActivoDigitalDTO> {
     const formData = new FormData();
 
-    // El nombre de campo "archivo" debe coincidir con `[FromForm] IFormFile archivo` del
-    // controller: ASP.NET Core arma el binding a partir del nombre de campo, no del archivo.
+    // El nombre de campo "archivo" debe coincidir con [FromForm] IFormFile archivo del controller.
     formData.append('archivo', {
       uri: archivo.uri,
       name: archivo.name,
@@ -238,15 +178,8 @@ export class AssetsService {
     return response.data;
   }
 
-  /**
-   * Arma el listado de "mis beneficiarios" agregando, en el cliente, todas las asignaciones
-   * de todos mis activos y agrupándolas por email invitado.
-   *
-   * No existe un endpoint "/api/beneficiarios": un beneficiario es, en el modelo real del
-   * backend, simplemente la persona (identificada por email) a la que le asigné uno o más
-   * de mis activos. Por eso se arma recorriendo GET /api/activos y, para cada uno,
-   * GET /api/activosdigitales/{id}/asignaciones.
-   */
+  // No existe un endpoint "/api/beneficiarios": se arma en el cliente recorriendo
+  // GET /api/activos y, para cada uno, GET /api/activosdigitales/{id}/asignaciones.
   static async getMisBeneficiarios(): Promise<BeneficiarioResumen[]> {
     const activos = await this.getAssets();
 
@@ -280,11 +213,7 @@ export class AssetsService {
     return Array.from(mapaPorEmail.values());
   }
 
-  /**
-   * "Elimina" a un beneficiario eliminando todas sus asignaciones de herencia.
-   * Como el beneficiario no es una entidad propia del backend, quitarlo del todo equivale
-   * a borrar cada AsignacionHerencia que lo vincula con alguno de mis activos.
-   */
+  // No es una entidad propia del backend: "eliminarlo" es borrar cada asignación que lo vincula.
   static async eliminarBeneficiario(asignacionIds: number[]): Promise<void> {
     await Promise.all(asignacionIds.map((id) => this.deleteAssignment(id)));
   }

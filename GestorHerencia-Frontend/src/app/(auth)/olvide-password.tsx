@@ -1,19 +1,3 @@
-/**
- * @file olvide-password.tsx
- * @description Primer paso del flujo real de "olvidé mi contraseña".
- *
- * Antes el link "¿Olvidaste tu contraseña?" de login.tsx era puramente decorativo (sin
- * `onPress`). Esta pantalla le da vida llamando a POST /api/auth/olvide-password: el
- * backend genera un token de reseteo de un solo uso (válido 1 hora) y lo "envía"
- * (simulado, impreso por consola del lado del SERVIDOR, igual que el resto de los
- * flujos de email de este proyecto) al email ingresado.
- *
- * El backend SIEMPRE responde el mismo mensaje de éxito genérico, exista o no una
- * cuenta con ese email (para no permitir que alguien use este formulario para
- * "adivinar" qué emails están registrados): por eso acá tampoco se distingue el caso,
- * simplemente se muestra el mensaje que el propio backend devuelve.
- */
-
 import React, { useState } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -29,11 +13,6 @@ export default function OlvidePasswordScreen() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
-  /**
-   * Dispara el pedido de reseteo de contraseña. No hay nada que validar además de
-   * "no vacío": el formato del email y si corresponde o no a una cuenta lo resuelve
-   * el backend, que además responde siempre igual (ver comentario del encabezado).
-   */
   const handleEnviar = async () => {
     if (!email.trim()) {
       Alert.alert('Error', 'Ingresá tu email para poder enviarte el enlace de recuperación.');
@@ -42,8 +21,8 @@ export default function OlvidePasswordScreen() {
 
     setLoading(true);
     try {
-      // La respuesta de este endpoint es SIEMPRE el mismo mensaje genérico (ver el
-      // comentario de arriba): no hay ningún dato adicional que distinguir acá.
+      // El backend responde siempre el mismo mensaje genérico exista o no la cuenta,
+      // para no permitir "adivinar" emails registrados.
       const { mensaje } = await AuthService.olvidePassword(email.trim());
 
       Alert.alert('Listo', mensaje, [

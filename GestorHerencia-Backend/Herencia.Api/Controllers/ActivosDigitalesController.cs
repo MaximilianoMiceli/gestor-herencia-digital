@@ -13,12 +13,6 @@ namespace Herencia.Api.Controllers;
 /// (sin paginar) vive como ruta anidada en <see cref="UsuariosController"/>
 /// ("GET api/usuarios/{id}/activos").
 /// </summary>
-/// <remarks>
-/// Un ActivoDigital es informacion personal y sensible (cuentas bancarias, billeteras
-/// cripto, redes sociales), por lo que se protege con [Authorize] a nivel de CLASE
-/// ("secure by default"): protege todos los actions, incluidos los que se agreguen a
-/// futuro, salvo que se marquen explicitamente con [AllowAnonymous].
-/// </remarks>
 [ApiController]
 [Authorize]
 [Route("api/activosdigitales")]
@@ -26,9 +20,7 @@ public class ActivosDigitalesController : ControllerBase
 {
     private readonly IActivoDigitalService _activoDigitalService;
 
-    // Se inyecta ademas IAsignacionHerenciaService para exponer, anidada bajo este mismo
-    // recurso, la relacion maestro-detalle ActivoDigital -> AsignacionHerencia (ver
-    // ObtenerAsignaciones/CrearAsignaciones mas abajo).
+    // Expone, anidada bajo este recurso, la relacion ActivoDigital -> AsignacionHerencia.
     private readonly IAsignacionHerenciaService _asignacionHerenciaService;
 
     private readonly ILogger<ActivosDigitalesController> _logger;
@@ -43,10 +35,7 @@ public class ActivosDigitalesController : ControllerBase
         _logger = logger;
     }
 
-    // Extrae el Id del usuario autenticado del Claim ClaimTypes.NameIdentifier que
-    // TokenService.CrearToken empaqueto en el JWT. Es un valor no falsificable sin
-    // invalidar la firma del token: la base de todas las verificaciones de ownership
-    // de este controller.
+    // Id del usuario autenticado segun el JWT (no falsificable sin invalidar la firma).
     private int? ObtenerUsuarioIdAutenticado()
     {
         var claim = User.FindFirst(ClaimTypes.NameIdentifier);
@@ -57,11 +46,7 @@ public class ActivosDigitalesController : ControllerBase
     /// Lista, paginados y opcionalmente filtrados por tipo/nombre, los activos digitales
     /// del usuario autenticado.
     /// </summary>
-    /// <remarks>
-    /// Ruta absoluta "~/api/activos" (ignora el prefijo del controller, requerida por la
-    /// consigna). No recibe ningun Id de usuario: siempre opera sobre el usuario del
-    /// token, para que sea imposible pedir los activos de otro usuario.
-    /// </remarks>
+    // Ruta absoluta "~/api/activos": siempre opera sobre el usuario del token, nunca sobre un Id recibido.
     [HttpGet("~/api/activos")]
     public async Task<ActionResult<ResultadoPaginadoDTO<ActivoDigitalDTO>>> ObtenerMisActivosPaginado(
         [FromQuery] int pagina = 1,
@@ -104,9 +89,7 @@ public class ActivosDigitalesController : ControllerBase
         {
             var activoDigital = await _activoDigitalService.ObtenerActivoDigitalPorIdAsync(id);
 
-            // Verificacion de ownership (IDOR): [Authorize] solo garantiza un token valido de
-            // ALGUN usuario, no que sea el dueño de ESTE activo puntual. Sin este chequeo,
-            // cualquier usuario autenticado podria enumerar Ids y leer activos ajenos.
+            // Ownership: [Authorize] solo garantiza un token valido, no que sea el dueño de este activo.
             var usuarioAutenticadoId = ObtenerUsuarioIdAutenticado();
 
             if (usuarioAutenticadoId is null)
@@ -116,8 +99,6 @@ public class ActivosDigitalesController : ControllerBase
 
             if (activoDigital.UsuarioId != usuarioAutenticadoId)
             {
-                // 403: token valido, pero sin permiso sobre este recurso puntual. No se revela
-                // informacion adicional sobre el activo ajeno.
                 return StatusCode(StatusCodes.Status403Forbidden,
                     new { mensaje = "No tenes permiso para acceder a este activo digital." });
             }
@@ -152,8 +133,7 @@ public class ActivosDigitalesController : ControllerBase
             return Unauthorized(new { mensaje = "El token no contiene un identificador de usuario valido." });
         }
 
-        // Nunca confiar en el UsuarioId del body: se sobreescribe con el del token para que
-        // sea imposible crear un activo a nombre de otro usuario (IDOR en creacion).
+        // Nunca confiar en el UsuarioId del body: se sobreescribe con el del token.
         activoDigitalCreacionDTO.UsuarioId = usuarioAutenticadoId.Value;
 
         try
@@ -306,10 +286,6 @@ public class ActivosDigitalesController : ControllerBase
     /// Crea, en una unica operacion atomica, un lote de asignaciones que reparte el activo
     /// "{id}" entre uno o mas beneficiarios invitados por email.
     /// </summary>
-    /// <remarks>
-    /// CrearAsignacionesAsync procesa todo el lote en una unica transaccion: si cualquier
-    /// elemento resulta invalido, se revierte completo y ninguna asignacion queda persistida.
-    /// </remarks>
     [HttpPost("{id:int}/asignaciones")]
     public async Task<ActionResult<IEnumerable<AsignacionHerenciaDTO>>> CrearAsignaciones(
         int id,
@@ -339,10 +315,7 @@ public class ActivosDigitalesController : ControllerBase
 
             var asignacionesCreadas = (await _asignacionHerenciaService.CrearAsignacionesAsync(id, asignacionesCreacionDTO)).ToList();
 
-            // Notificacion simulada por consola (no hay proveedor de email real integrado):
-            // si el beneficiario todavia no tiene cuenta se le "envia" un link de invitacion
-            // con el TokenInvitacion (no el Id secuencial, para que no sea enumerable); si ya
-            // tiene cuenta, se simula una notificacion in-app.
+            // Notificacion simulada por consola: usa TokenInvitacion (no el Id) para que no sea enumerable.
             foreach (var asignacion in asignacionesCreadas)
             {
                 Console.ForegroundColor = ConsoleColor.Magenta;
@@ -367,8 +340,7 @@ public class ActivosDigitalesController : ControllerBase
                 Console.ResetColor();
             }
 
-            // No hay un unico Id "principal" al crear varias filas a la vez: el Location
-            // apunta al listado de asignaciones del activo.
+            // No hay un unico Id "principal": el Location apunta al listado de asignaciones del activo.
             return CreatedAtAction(
                 nameof(ObtenerAsignaciones),
                 new { id },
@@ -380,7 +352,6 @@ public class ActivosDigitalesController : ControllerBase
         }
         catch (ReglaNegocioException ex)
         {
-            // Porcentaje invalido, suma superior al 100%, o auto-asignacion.
             return BadRequest(new { mensaje = ex.Message });
         }
         catch (Exception ex)
@@ -391,14 +362,7 @@ public class ActivosDigitalesController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Adjunta (o reemplaza) el archivo (PDF/JPG/PNG) de un activo digital existente.
-    /// </summary>
-    /// <remarks>
-    /// El archivo anterior queda huerfano en disco en vez de sobreescribirse (el nombre en
-    /// disco siempre es nuevo, ver AlmacenamientoLocalService): aceptable para el alcance de
-    /// este proyecto.
-    /// </remarks>
+    /// <summary>Adjunta (o reemplaza) el archivo (PDF/JPG/PNG) de un activo digital existente.</summary>
     [HttpPost("{id:int}/archivo")]
     public async Task<ActionResult<ActivoDigitalDTO>> SubirArchivo(int id, [FromForm] IFormFile archivo)
     {
@@ -448,13 +412,8 @@ public class ActivosDigitalesController : ControllerBase
     }
 
     /// <summary>Descarga el archivo adjunto de un activo digital.</summary>
-    /// <remarks>
-    /// A diferencia del resto del controller, aca hay dos formas legitimas de acceso: ser el
-    /// titular del activo, o ser un heredero cuya asignacion sobre este activo ya esta
-    /// Aceptada y liberada (FechaLiberacion != null, confirmado el fallecimiento del
-    /// titular). Un heredero que solo acepto la invitacion pero cuyo otorgante sigue con
-    /// vida no puede descargarlo.
-    /// </remarks>
+    // Dos formas legitimas de acceso: ser el titular, o ser un heredero con asignacion
+    // Aceptada y ya liberada (FechaLiberacion != null, fallecimiento confirmado).
     [HttpGet("{id:int}/archivo")]
     public async Task<IActionResult> ObtenerArchivo(int id)
     {
@@ -510,9 +469,7 @@ public class ActivosDigitalesController : ControllerBase
         }
     }
 
-    // Infiere el Content-Type a partir de la extension del nombre ORIGINAL guardado (nunca
-    // la del archivo en disco, que es un Guid sin extension), ya que SubirArchivoAsync ya
-    // restringio de antemano los tipos posibles a PDF/JPG/PNG.
+    // Infiere el Content-Type a partir de la extension del nombre ORIGINAL (el archivo en disco es un Guid sin extension).
     private static string ObtenerContentType(string nombreArchivoOriginal)
     {
         var extension = Path.GetExtension(nombreArchivoOriginal).ToLowerInvariant();

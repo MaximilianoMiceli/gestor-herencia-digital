@@ -1,16 +1,3 @@
-/**
- * @file resetear-password.tsx
- * @description Segundo y último paso del flujo de "olvidé mi contraseña".
- *
- * El backend "envía" (simulado, impreso por consola del SERVIDOR) un link con la forma
- * "http://localhost:8081/resetear-password?token=<64 caracteres hex>". Como este
- * proyecto no tiene un servidor de correo real, no hay forma de que ese link abra
- * automáticamente esta pantalla en un dispositivo físico: por eso el token también se
- * puede PEGAR a mano acá (quien lo generó puede leerlo directamente de la consola del
- * backend). Si la pantalla se abre a través del link real (mismo origen), el parámetro
- * de query "token" la precarga igual.
- */
-
 import React, { useState } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -23,9 +10,8 @@ import { AuthService } from '../../services/auth.service';
 
 export default function ResetearPasswordScreen() {
   const router = useRouter();
-  // Precarga el token si la pantalla se abrió desde el link real (?token=...); si el
-  // usuario llegó acá manualmente (botón "Ya tengo un código" de olvide-password.tsx),
-  // el campo arranca vacío y lo completa pegando el valor a mano.
+  // Precarga el token si la pantalla se abrió desde el link (?token=...); si no, el
+  // usuario lo pega a mano.
   const { token: tokenDeLaUrl } = useLocalSearchParams<{ token?: string }>();
 
   const [token, setToken] = useState(tokenDeLaUrl ?? '');
@@ -33,11 +19,6 @@ export default function ResetearPasswordScreen() {
   const [confirmarPassword, setConfirmarPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  /**
-   * Valida los campos localmente (token y contraseñas presentes, contraseñas
-   * coincidentes) y recién ahí llama al backend, que es quien realmente valida
-   * que el token exista, no haya expirado y no haya sido usado antes.
-   */
   const handleResetear = async () => {
     if (!token.trim() || !passwordNueva || !confirmarPassword) {
       Alert.alert('Error', 'Completá el código y la nueva contraseña en ambos campos.');
@@ -55,7 +36,6 @@ export default function ResetearPasswordScreen() {
         { text: 'Iniciar sesión', onPress: () => router.replace('/(auth)/login') },
       ]);
     } catch (error: any) {
-      // El backend responde acá, por ejemplo, "El token de reseteo es invalido o ya expiro."
       Alert.alert('Error', error.message);
     } finally {
       setLoading(false);

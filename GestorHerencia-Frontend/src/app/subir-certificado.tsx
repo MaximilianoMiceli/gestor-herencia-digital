@@ -1,10 +1,3 @@
-/**
- * @file subir-certificado.tsx
- * @description Pantalla para que un heredero suba el certificado de defunción de un titular
- * que ya lo designó como beneficiario y cuya invitación ya aceptó. El backend exige esa misma
- * condición (CertificadoDefuncionService.SubirCertificadoAsync la valida server-side).
- */
-
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -27,7 +20,7 @@ import { CertificadosService } from '../services/certificados.service';
 const TIPOS_MIME_PERMITIDOS = ['application/pdf', 'image/jpeg', 'image/png'];
 type ArchivoSeleccionado = { uri: string; name: string; mimeType: string };
 
-/** Un titular único (deduplicado), a partir de las herencias YA aceptadas por el usuario. */
+// Titular único (deduplicado) a partir de las herencias ya aceptadas por el usuario.
 interface TitularElegible {
   titularId: number;
   titularNombre: string;
@@ -41,9 +34,8 @@ export default function SubirCertificadoScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [titularesElegibles, setTitularesElegibles] = useState<TitularElegible[]>([]);
-  // Distingue "no aceptaste ninguna herencia todavía" de "ya aceptaste, pero a todos esos
-  // titulares ya se les confirmó el fallecimiento": son dos mensajes distintos para el
-  // usuario, aunque en ambos casos el selector termine vacío.
+  // Distingue "no aceptaste ninguna herencia" de "ya se confirmó el fallecimiento de
+  // todos tus titulares": son dos mensajes distintos aunque el selector quede vacío.
   const [hayAceptadasSinTitularesElegibles, setHayAceptadasSinTitularesElegibles] = useState(false);
   const [titularSeleccionado, setTitularSeleccionado] = useState<TitularElegible | null>(null);
   const [showTitularDropdown, setShowTitularDropdown] = useState(false);
@@ -59,12 +51,8 @@ export default function SubirCertificadoScreen() {
       try {
         const herencias: MiHerenciaDTO[] = await AssetsService.getMisHerencias();
 
-        // Solo se puede subir el certificado de un titular cuya invitación YA fue
-        // aceptada (misma regla de negocio que aplica el backend) Y cuyo fallecimiento
-        // todavía NO fue confirmado antes (si "disponible" ya es true, un certificado de
-        // este titular ya fue aprobado: el backend rechaza cualquier otro con
-        // ReglaNegocioException, así que ni se lo ofrecemos en el selector). Se deduplica
-        // por titularId porque un mismo titular puede haberme asignado varios activos.
+        // Solo titulares con invitación aceptada y sin fallecimiento confirmado aún
+        // ("disponible" ya en true = certificado ya aprobado, el backend rechazaría otro).
         const todasAceptadas = herencias.filter((h) => h.estado === 'Aceptado');
         const aceptadasSinConfirmar = todasAceptadas.filter((h) => !h.disponible);
         const mapa = new Map<number, TitularElegible>();
@@ -177,7 +165,6 @@ export default function SubirCertificadoScreen() {
             </View>
           ) : (
             <>
-              {/* SELECCIONAR TITULAR */}
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>¿De quién es el certificado?</Text>
                 <TouchableOpacity
@@ -220,7 +207,6 @@ export default function SubirCertificadoScreen() {
                 )}
               </View>
 
-              {/* ADJUNTAR ARCHIVO */}
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Certificado de defunción</Text>
                 <View style={styles.fileBoxBorder}>

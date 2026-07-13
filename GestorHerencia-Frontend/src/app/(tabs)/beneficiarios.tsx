@@ -1,14 +1,5 @@
-/**
- * @file beneficiarios.tsx
- * @description Pantalla que lista los beneficiarios del usuario autenticado (Frame 8).
- *
- * El backend no tiene ninguna entidad "Beneficiario" propia: una persona es beneficiaria
- * porque tiene una o más AsignacionHerencia sobre mis activos. Por eso el listado se arma
- * agregando, por email, todas mis asignaciones (ver AssetsService.getMisBeneficiarios).
- * Agregar un beneficiario nuevo se hace, en consecuencia, desde "Nuevo activo" (ahí es donde
- * el backend realmente invita/asigna a alguien).
- */
-
+// No existe una entidad "Beneficiario" propia en el backend: una persona lo es porque
+// tiene AsignacionHerencia sobre mis activos, y el listado se arma agregando por email.
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -59,7 +50,6 @@ export default function BeneficiariosScreen() {
     }
   };
 
-  // Recargar la lista automáticamente cada vez que el usuario enfoca esta pestaña
   useFocusEffect(
     useCallback(() => {
       fetchBeneficiarios();
@@ -72,39 +62,28 @@ export default function BeneficiariosScreen() {
     setRefreshing(false);
   };
 
-  // Filtro local por email (mismo criterio que activos.tsx): no hace falta un endpoint
-  // de búsqueda propio, ya se trae la lista completa de "mis beneficiarios".
   const beneficiariosFiltrados = searchQuery.trim().length > 0
     ? beneficiarios.filter((b) => b.email.toLowerCase().includes(searchQuery.trim().toLowerCase()))
     : beneficiarios;
 
-  // Controlar la visualización del banner de éxito al eliminar (Frame 33)
   useEffect(() => {
     if (deleted === 'true') {
       setShowSuccessBanner(true);
       const timer = setTimeout(() => {
         setShowSuccessBanner(false);
-        // Limpiamos los params de búsqueda reemplazando la ruta
         router.setParams({ deleted: undefined });
       }, 4000);
       return () => clearTimeout(timer);
     }
   }, [deleted]);
 
-  /**
-   * Determina si un beneficiario está verificado, pendiente o rechazado a partir del
-   * estado real de su primera asignación (1 = Pendiente, 2 = Aceptado/Verificado, 3 = Rechazado).
-   */
+  // estado: 1 = Pendiente, 2 = Aceptado/Verificado, 3 = Rechazado.
   const obtenerEstadoBeneficiario = (item: BeneficiarioResumen): 'Verificado' | 'Pendiente' | 'Rechazado' => {
     if (item.estado === 2) return 'Verificado';
     if (item.estado === 3) return 'Rechazado';
     return 'Pendiente';
   };
 
-  /**
-   * Navega a la pantalla de detalle del beneficiario (Frame 9), identificado por su email
-   * (no hay un Id propio de beneficiario en el backend).
-   */
   const handleVerDetalles = (item: BeneficiarioResumen) => {
     router.push({
       pathname: '/detalle-beneficiario',
@@ -234,7 +213,7 @@ export default function BeneficiariosScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#DAF8BD', // Fondo verde claro pastel
+    backgroundColor: '#DAF8BD',
   },
   loadingContainer: {
     flex: 1,
@@ -339,16 +318,16 @@ const styles = StyleSheet.create({
     fontFamily: 'MPLUS2-Bold',
   },
   statusVerified: {
-    color: '#2E7D32', // Verde
+    color: '#2E7D32',
   },
   statusPending: {
-    color: '#E2A53C', // Naranja/Amarillo
+    color: '#E2A53C',
   },
   statusRejected: {
-    color: '#D32F2F', // Rojo
+    color: '#D32F2F',
   },
   detailsButton: {
-    backgroundColor: '#7EA49E', // Color verde-gris opaco del mockup
+    backgroundColor: '#7EA49E',
     borderRadius: 12,
     height: 48,
     flexDirection: 'row',
@@ -365,7 +344,7 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   addBeneficiaryButton: {
-    backgroundColor: '#FFFFFF', // Botón blanco con borde verde oscuro (Frame 8)
+    backgroundColor: '#FFFFFF',
     height: 52,
     borderRadius: 16,
     borderWidth: 1.5,
@@ -381,7 +360,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'MPLUS2-Bold',
   },
-  // Banner de éxito (Frame 33)
   successBanner: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
@@ -407,7 +385,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#1a2e2e',
   },
-  // Vacío / Empty State
   emptyStateCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,

@@ -1,12 +1,3 @@
-/**
- * @file editar-activo.tsx
- * @description Pantalla de edición y eliminación de un activo digital.
- *
- * Permite modificar el nombre, instrucciones, prioridad y beneficiario asignado,
- * actualizando el activo y recreando su asignación de herencia en el backend.
- * Incluye el modal de confirmación de eliminación, que redirecciona al listado con un banner de éxito.
- */
-
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -33,10 +24,8 @@ const TIPOS_MIME_PERMITIDOS = ['application/pdf', 'image/jpeg', 'image/png'];
 type ArchivoSeleccionado = { uri: string; name: string; mimeType: string };
 const TIPO_CUENTAS = ['Caja de ahorro', 'Cuenta corriente'];
 
-// Mismos formatos de texto que nuevo-activo.tsx usa para serializar la "descripcion":
-// se parsean acá para poder mostrar y editar los campos estructurados por separado, en
-// vez de exponer el blob completo (ej: "[CRIPTO] Blockchain: X | Wallet: Y...") como un
-// único TextInput de texto libre.
+// Mismos formatos que nuevo-activo.tsx usa para serializar "descripcion": se parsean
+// acá para editar los campos estructurados por separado en vez de un blob de texto libre.
 const REGEX_CRIPTO = /^\[CRIPTO\] Blockchain: (.*?) \| Wallet: (.*?) \| Clave Privada: (.*?)\n\nInstrucciones:\n([\s\S]*)$/;
 const REGEX_BANCO = /^\[BANCO\] Banco: (.*?) \| Cuenta: (.*?) \| CBU\/Alias: (.*?) \| Tipo: (.*?)\n\nInstrucciones:\n([\s\S]*)$/;
 const REGEX_RED_SOCIAL = /^\[RED SOCIAL\] Plataforma: (.*?) \| Usuario: (.*?)\n\nInstrucciones:\n([\s\S]*)$/;
@@ -63,17 +52,15 @@ export default function EditarActivoScreen() {
   const [beneficiarioEmail, setBeneficiarioEmail] = useState('');
   const [emailError, setEmailError] = useState(false);
 
-  // Nombre del archivo YA adjunto al activo (llega del backend), y el archivo NUEVO
-  // que el usuario eventualmente elige para reemplazarlo (todavía no subido).
+  // Archivo ya adjunto (viene del backend) vs. el nuevo elegido para reemplazarlo (aún no subido).
   const [nombreArchivoActual, setNombreArchivoActual] = useState<string | null>(null);
   const [archivoSeleccionado, setArchivoSeleccionado] = useState<ArchivoSeleccionado | null>(null);
   const [loadingArchivo, setLoadingArchivo] = useState(false);
 
   const [asignacionesExistentes, setAsignacionesExistentes] = useState<AsignacionDTO[]>([]);
 
-  // Campos estructurados por tipo de activo (mismos que nuevo-activo.tsx): se rellenan
-  // parseando la "descripcion" guardada al cargar el activo (cargarDatos) y se
-  // vuelven a serializar al mismo formato al guardar (handleGuardarCambios).
+  // Campos estructurados por tipo de activo: se parsean de "descripcion" al cargar y se
+  // vuelven a serializar al mismo formato al guardar.
   const [blockchain, setBlockchain] = useState('');
   const [wallet, setWallet] = useState('');
   const [clavePrivada, setClavePrivada] = useState('');
@@ -95,11 +82,8 @@ export default function EditarActivoScreen() {
       return;
     }
 
-    /**
-     * Carga el activo a editar y sus asignaciones de herencia existentes.
-     * No existe un endpoint de "obtener activo por ID": se reutiliza el listado
-     * paginado del usuario y se filtra localmente por `activoId`.
-     */
+    // No existe un endpoint de "obtener activo por ID": se reutiliza el listado del
+    // usuario y se filtra localmente por activoId.
     const cargarDatos = async () => {
       try {
         const assets = await AssetsService.getAssets();
@@ -115,9 +99,8 @@ export default function EditarActivoScreen() {
         setTipoVal(activo.tipo);
         setNombreArchivoActual(activo.nombreArchivoOriginal);
 
-        // Si la descripción no matchea el formato estructurado esperado (activos viejos
-        // o de datos semilla en texto plano), se deja todo en "instrucciones" y los campos
-        // estructurados quedan vacíos, sin perder el contenido original.
+        // Si no matchea el formato estructurado (activos viejos en texto plano), se deja
+        // todo en "instrucciones" sin perder el contenido original.
         const raw = activo.descripcion || '';
         switch (activo.tipo) {
           case 2: { // Cripto
@@ -183,7 +166,7 @@ export default function EditarActivoScreen() {
           const primerAsig = asigs[0];
           setBeneficiarioEmail(primerAsig.emailInvitado);
 
-          // La prioridad se guarda codificada dentro de condicionLiberacion (ej: "Prioridad: Alta")
+          // La prioridad se guarda codificada dentro de condicionLiberacion (ej: "Prioridad: Alta").
           const cond = primerAsig.condicionLiberacion || '';
           if (cond.includes('Alta')) setPrioridad('Alta');
           else if (cond.includes('Baja')) setPrioridad('Baja');
@@ -202,11 +185,7 @@ export default function EditarActivoScreen() {
     cargarDatos();
   }, [token, id]);
 
-  /**
-   * Abre el selector de archivos nativo para reemplazar el archivo adjunto del
-   * activo (mismo flujo que "Nuevo activo"). El archivo elegido recién se sube al
-   * confirmar "Guardar cambios" (ver handleGuardarCambios).
-   */
+  // El archivo elegido recién se sube al confirmar "Guardar cambios".
   const handleAttachFile = async () => {
     setLoadingArchivo(true);
     try {
@@ -243,16 +222,8 @@ export default function EditarActivoScreen() {
     }
   };
 
-  /**
-   * Guarda las modificaciones del activo y recrea sus asignaciones de herencia.
-   *
-   * El backend no tiene un endpoint para "reasignar" un beneficiario: los datos del activo
-   * (PUT /activosdigitales/{id}) y las asignaciones (POST .../asignaciones, DELETE /asignaciones/{id})
-   * se gestionan por separado. Como la app simplifica el modelo asignando el 100% a un único
-   * beneficiario, se elimina la asignación previa y se crea una limpia en su lugar, en vez de
-   * intentar "actualizarla": esto evita chocar con la validación del backend que rechaza superar
-   * el 100% acumulado de herencia sobre un mismo activo.
-   */
+  // No existe endpoint para "reasignar": se elimina la asignación previa y se crea una
+  // limpia, evitando chocar con la validación de no superar el 100% acumulado.
   const handleGuardarCambios = async () => {
     if (!token) return;
     setEmailError(false);
@@ -272,8 +243,6 @@ export default function EditarActivoScreen() {
 
     setSaving(true);
     try {
-      // Reconstruye la descripción en el mismo formato serializado por nuevo-activo.tsx,
-      // con los campos estructurados recién editados (no se reenvía el blob tal cual llegó).
       let descripcionFinal = descripcion.trim();
       if (tipoVal === 2) {
         descripcionFinal = `[CRIPTO] Blockchain: ${blockchain} | Wallet: ${wallet} | Clave Privada: ${clavePrivada}\n\nInstrucciones:\n${descripcion}`;
@@ -288,20 +257,17 @@ export default function EditarActivoScreen() {
         descripcionFinal = `[ARCHIVO] Adjunto: ${nombreArchivo}\n\nInstrucciones:\n${descripcion}`;
       }
 
-      // 1. Actualizar el activo principal (PUT)
       await AssetsService.updateAsset(activoId, {
         nombre: nombre.trim(),
         tipo: tipoVal,
         descripcion: descripcionFinal,
       });
 
-      // 2. Eliminar las asignaciones de herencia viejas del activo
       const deletePromises = asignacionesExistentes.map(asig =>
         AssetsService.deleteAssignment(asig.id)
       );
       await Promise.all(deletePromises);
 
-      // 3. Crear la nueva asignación para el beneficiario indicado
       await AssetsService.createAssignments(activoId, [
         {
           emailBeneficiario: beneficiarioEmail.trim().toLowerCase(),
@@ -310,7 +276,6 @@ export default function EditarActivoScreen() {
         }
       ]);
 
-      // 4. Si se eligió un archivo nuevo, reemplaza el adjunto existente (si había uno).
       if (archivoSeleccionado) {
         await AssetsService.subirArchivoActivo(activoId, archivoSeleccionado);
       }
@@ -327,9 +292,6 @@ export default function EditarActivoScreen() {
     }
   };
 
-  /**
-   * Elimina el activo permanentemente de la base de datos
-   */
   const handleEliminarActivo = async () => {
     if (!token) return;
 
@@ -337,8 +299,8 @@ export default function EditarActivoScreen() {
     try {
       await AssetsService.deleteAsset(activoId);
       setShowDeleteModal(false);
-      
-      // deleted=true dispara el banner de éxito en el listado
+
+      // deleted=true dispara el banner de éxito en el listado.
       router.replace({
         pathname: '/(tabs)/activos',
         params: { deleted: 'true' },
@@ -362,7 +324,6 @@ export default function EditarActivoScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header con botón de eliminar */}
       <LinearGradient
         colors={['#23856C', '#022739']}
         start={{ x: 0, y: 0 }}
@@ -386,8 +347,7 @@ export default function EditarActivoScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.centeredWrapper}>
-          
-          {/* CAMPO: NOMBRE DEL ACTIVO */}
+
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Nombre del activo</Text>
             <TextInput
@@ -399,7 +359,7 @@ export default function EditarActivoScreen() {
             />
           </View>
 
-          {/* El tipo no es editable: cambiarlo invalidaría los campos estructurados ya guardados */}
+          {/* El tipo no es editable: cambiarlo invalidaría los campos estructurados ya guardados. */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Tipo de activo</Text>
             <View style={styles.disabledInput}>
@@ -407,8 +367,6 @@ export default function EditarActivoScreen() {
             </View>
           </View>
 
-          {/* Campos estructurados (mismos que nuevo-activo.tsx), parseados de la descripción
-              guardada: evita editar todo como un único bloque de texto libre. */}
           {tipoVal === 2 && (
             <View style={styles.dynamicInfoWrapper}>
               <Text style={styles.sectionHeader}>INFORMACIÓN DEL ACTIVO</Text>
@@ -485,7 +443,6 @@ export default function EditarActivoScreen() {
             </View>
           )}
 
-          {/* CAMPO: INSTRUCCIONES / DESCRIPCIÓN */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Instrucciones para el beneficiario</Text>
             <TextInput
@@ -499,7 +456,6 @@ export default function EditarActivoScreen() {
             />
           </View>
 
-          {/* CAMPO: ARCHIVO ADJUNTO (solo si el activo es de tipo "Archivo") */}
           {tipoVal === 4 && (
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Archivo adjunto</Text>
@@ -527,7 +483,6 @@ export default function EditarActivoScreen() {
             </View>
           )}
 
-          {/* CAMPO: NIVEL DE PRIORIDAD (DROPDOWN INLINE) */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Nivel de prioridad</Text>
             <TouchableOpacity
@@ -577,9 +532,7 @@ export default function EditarActivoScreen() {
             )}
           </View>
 
-          {/* CAMPO: EMAIL DEL BENEFICIARIO */}
-          {/* El backend invita y asigna en la misma operación (POST .../asignaciones con un
-              email): no hay una lista de "beneficiarios" separada de la que elegir. */}
+          {/* El backend invita y asigna en la misma operación: no hay lista de beneficiarios previa. */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Email del beneficiario</Text>
             <TextInput
@@ -599,7 +552,6 @@ export default function EditarActivoScreen() {
             )}
           </View>
 
-          {/* BOTÓN GUARDAR CAMBIOS */}
           <TouchableOpacity
             style={styles.saveButton}
             onPress={handleGuardarCambios}
@@ -615,7 +567,6 @@ export default function EditarActivoScreen() {
         </View>
       </ScrollView>
 
-      {/* Modal de confirmación de borrado */}
       <Modal
         visible={showDeleteModal}
         transparent

@@ -1,9 +1,8 @@
 namespace Herencia.Business.Exceptions;
 
 /// <summary>
-/// Excepción para cuando se pide un recurso (usuario, activo digital, etc.) por Id y no
-/// existe. Permite distinguir este caso (típicamente HTTP 404) de errores genéricos
-/// mediante <c>catch (RecursoNoEncontradoException)</c>, en vez de inspeccionar mensajes.
+/// Excepción para cuando se pide un recurso por Id y no existe (típicamente HTTP 404),
+/// distinguible mediante <c>catch (RecursoNoEncontradoException)</c>.
 /// </summary>
 public class RecursoNoEncontradoException : Exception
 {
@@ -11,8 +10,6 @@ public class RecursoNoEncontradoException : Exception
     {
     }
 
-    // La excepción técnica original se preserva solo en InnerException, para diagnóstico
-    // interno, nunca expuesta al cliente de la API.
     public RecursoNoEncontradoException(string mensaje, Exception innerException)
         : base(mensaje, innerException)
     {

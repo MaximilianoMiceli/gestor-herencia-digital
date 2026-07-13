@@ -13,9 +13,8 @@ namespace Herencia.Business.Services;
 /// </summary>
 public class AsignacionHerenciaService : IAsignacionHerenciaService
 {
-    // Depende de los tres repositorios porque sus reglas de negocio involucran a las tres
-    // entidades: para repartir un activo hay que conocerlo, resolver por email si el
-    // beneficiario ya tiene cuenta, y persistir la asignación.
+    // Los tres repositorios son necesarios: conocer el activo, resolver el beneficiario
+    // por email y persistir la asignación.
     private readonly IAsignacionHerenciaRepository _asignacionHerenciaRepository;
     private readonly IActivoDigitalRepository _activoDigitalRepository;
     private readonly IUsuarioRepository _usuarioRepository;
@@ -152,16 +151,15 @@ public class AsignacionHerenciaService : IAsignacionHerenciaService
                 throw new RecursoNoEncontradoException($"No se encontro el activo digital con Id {activoDigitalId}.");
             }
 
-            // Se parte del porcentaje ya comprometido por asignaciones previas para validar
-            // el acumulado total (viejas + nuevas) contra el límite de 100%.
+            // Se parte del porcentaje ya comprometido para validar el acumulado (viejas +
+            // nuevas) contra el límite de 100%.
             var asignacionesExistentes = await _asignacionHerenciaRepository.ObtenerPorActivoDigitalAsync(activoDigitalId);
             var porcentajeAcumulado = asignacionesExistentes.Sum(a => a.PorcentajeAsignado);
 
             var asignacionesCreadas = new List<AsignacionHerencia>();
 
-            // Todo el lote se procesa dentro de una única transacción: si una asignación
-            // resulta inválida, las anteriores ya insertadas en este mismo lote se
-            // revierten también, sin dejar rastro parcial en la base de datos.
+            // Todo el lote se procesa en una única transacción: si una asignación es
+            // inválida, las anteriores del mismo lote también se revierten.
             await _asignacionHerenciaRepository.EjecutarEnTransaccionAsync(async () =>
             {
                 foreach (var itemDto in lote)
@@ -171,10 +169,7 @@ public class AsignacionHerenciaService : IAsignacionHerenciaService
                     // El beneficiario se resuelve por email: puede o no corresponder ya a una cuenta.
                     var usuarioBeneficiario = await _usuarioRepository.ObtenerPorEmailAsync(emailNormalizado);
 
-                    // No se permite auto-asignación: además de no tener sentido de negocio,
-                    // evita que las dos rutas de cascada de AppDbContext (Usuario ->
-                    // ActivoDigital -> AsignacionHerencia, y Usuario -> AsignacionHerencia)
-                    // converjan sobre la misma fila si otorgante y beneficiario coincidieran.
+                    // No se permite auto-asignación (otorgante y beneficiario no pueden coincidir).
                     if (usuarioBeneficiario is not null && usuarioBeneficiario.Id == activoDigital.UsuarioId)
                     {
                         throw new ReglaNegocioException(
@@ -192,8 +187,7 @@ public class AsignacionHerenciaService : IAsignacionHerenciaService
                     var asignacion = new AsignacionHerencia
                     {
                         ActivoDigitalId = activoDigitalId,
-                        // Si ya existe una cuenta con este email se vincula de una; si no,
-                        // queda en null hasta que esa persona se registre.
+                        // Si ya existe cuenta con este email se vincula; si no, queda null hasta el registro.
                         UsuarioId = usuarioBeneficiario?.Id,
                         EmailInvitado = emailNormalizado,
                         PorcentajeAsignado = itemDto.PorcentajeAsignado,
@@ -366,10 +360,7 @@ public class AsignacionHerenciaService : IAsignacionHerenciaService
 
         try
         {
-            // Una vez "Aceptada" o "Rechazada", el estado es definitivo: no se permite
-            // ninguna transición posterior, ni para "corregir" un error, evitando que
-            // alguien revierta una decisión después de que el otorgante ya avanzó
-            // asumiendo que estaba confirmada.
+            // Una vez "Aceptada" o "Rechazada" el estado es definitivo, ni para corregir errores.
             if (asignacion.Estado != EstadoBeneficiario.Pendiente)
             {
                 throw new ReglaNegocioException(

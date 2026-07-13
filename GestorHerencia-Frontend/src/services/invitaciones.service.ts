@@ -1,13 +1,5 @@
-/**
- * @file invitaciones.service.ts
- * @description Servicio HTTP del flujo PÚBLICO de invitaciones (aceptar/rechazar una
- * herencia sin necesitar sesión iniciada). Compartido entre invitacion.tsx y login.tsx
- * (auto-aceptar tras loguearse desde una invitación).
- */
-
 import { api } from './api';
 
-/** DTO devuelto por GET /api/invitaciones/{token} (ver InvitacionDTO en InvitacionesController.cs). */
 export interface InvitacionDTO {
   token: string;
   emisorNombre: string;
@@ -23,10 +15,7 @@ export class InvitacionesService {
     return response.data;
   }
 
-  /**
-   * Llama a: POST /api/invitaciones/{token}/procesar (público: si hay sesión iniciada,
-   * el interceptor de request igual adjunta el Bearer token, pero el backend no lo exige).
-   */
+  /** Llama a: POST /api/invitaciones/{token}/procesar (público, no requiere sesión). */
   static async procesar(token: string, accion: 'aceptar' | 'rechazar'): Promise<{ mensaje: string }> {
     const response = await api.post<{ mensaje: string }>(`/invitaciones/${token}/procesar`, { accion });
     return response.data;

@@ -1,13 +1,3 @@
-/**
- * @file login.tsx
- * @description Pantalla pública de inicio de sesión (Login Screen).
- * 
- * Permite a los usuarios autenticarse mediante su correo electrónico y contraseña.
- * Tras un inicio de sesión exitoso, el JWT devuelto por el backend se persiste
- * en SecureStore a través del método `signIn` del AuthContext, lo que provoca
- * que el enrutador raíz cambie de flujo y cargue el Dashboard privado.
- */
-
 import React, { useState } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -31,9 +21,6 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  /**
-   * Procesa la solicitud de inicio de sesión interactuando con la API y el llavero.
-   */
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Error', 'Por favor ingresa tu email y contraseña.');
@@ -44,9 +31,8 @@ export default function LoginScreen() {
     try {
       const response = await AuthService.login({ email, password });
 
-      // Si el usuario tiene 2FA habilitado, el backend NO devuelve un token todavía
-      // (ver TokenRespuestaDTO): hay que navegar a la pantalla de "ingresar código" y
-      // completar el login recién cuando esa pantalla confirme el código correcto.
+      // Con 2FA habilitado el backend no devuelve token todavía; se completa el login
+      // recién cuando verificar-2fa confirme el código.
       if (response.requiereDobleFactor && response.usuarioId) {
         router.push({
           pathname: '/(auth)/verificar-2fa',
@@ -55,11 +41,10 @@ export default function LoginScreen() {
         return;
       }
 
-      // Se persiste el token ANTES de aceptar la invitación: el interceptor de Axios
-      // (ver api.ts) lo lee de SecureStore para adjuntar el header Authorization.
+      // El token se persiste antes de aceptar la invitación: el interceptor de Axios
+      // lo necesita en SecureStore para adjuntar el header Authorization.
       await signIn(response.token);
 
-      // Si el inicio de sesión fue disparado por una invitación, procesamos la aceptación.
       if (acceptInvitationId) {
         try {
           await InvitacionesService.procesar(acceptInvitationId, 'aceptar');
@@ -76,8 +61,6 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Si no hay pantalla previa en el stack (se entró directo a /login), cae a welcome
-          en vez de dejar el back button sin destino. */}
       <TouchableOpacity
         style={[styles.backButton, { top: insets.top + 12 }]}
         onPress={() => (router.canGoBack() ? router.back() : router.replace('/(auth)/welcome'))}

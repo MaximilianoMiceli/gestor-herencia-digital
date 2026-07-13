@@ -1,14 +1,3 @@
-/**
- * @file verificar-2fa.tsx
- * @description Segundo paso del login cuando el usuario tiene 2FA por email habilitado.
- *
- * login.tsx navega acá (en vez de completar la sesión directamente) cuando
- * POST /api/auth/login responde `requiereDobleFactor: true`. En ese punto el backend
- * YA generó un código de 6 dígitos y lo "envió" (simulado, impreso por consola del
- * SERVIDOR) al email del usuario; esta pantalla existe únicamente para juntar ese
- * código y completar el login llamando a POST /api/auth/verificar-doble-factor.
- */
-
 import React, { useState } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -24,11 +13,7 @@ import { InvitacionesService } from '../../services/invitaciones.service';
 export default function Verificar2FAScreen() {
   const router = useRouter();
   const { signIn } = useAuth();
-  // "usuarioId" identifica a quién pertenece el código pendiente (login.tsx lo pasa por
-  // parámetro porque todavía no hay sesión ni token con el que identificar al usuario).
-  // "acceptInvitationId" viaja igual que en login.tsx: si el usuario llegó a loguearse
-  // a partir de un link de invitación, se retoma acá para aceptarla automáticamente
-  // apenas termine este segundo paso.
+  // usuarioId identifica el código pendiente (aún no hay sesión ni token).
   const { usuarioId, acceptInvitationId } = useLocalSearchParams<{
     usuarioId?: string;
     acceptInvitationId?: string;
@@ -37,11 +22,6 @@ export default function Verificar2FAScreen() {
   const [codigo, setCodigo] = useState('');
   const [loading, setLoading] = useState(false);
 
-  /**
-   * Envía el código de 6 dígitos al backend para completar el login iniciado en
-   * login.tsx. Si falta el "usuarioId" (por ejemplo, se llegó a esta ruta directo,
-   * sin pasar por el login), no hay con qué verificar nada y se manda de vuelta.
-   */
   const handleVerificar = async () => {
     if (!usuarioId) {
       Alert.alert('Error', 'Faltan datos del login. Volvé a intentar iniciar sesión.');
@@ -57,22 +37,17 @@ export default function Verificar2FAScreen() {
     try {
       const response = await AuthService.verificarDobleFactor(Number(usuarioId), codigo.trim());
 
-      // Igual que en login.tsx: se persiste el token PRIMERO, para que el interceptor
-      // de Axios (ver api.ts) ya pueda adjuntarlo al aceptar la invitación pendiente.
       await signIn(response.token);
 
       if (acceptInvitationId) {
         try {
           await InvitacionesService.procesar(acceptInvitationId, 'aceptar');
         } catch (e) {
-          // No se interrumpe el login por esto: el usuario ya quedó autenticado y
-          // puede aceptar la invitación más tarde a mano desde "Mis herencias".
+          // No se interrumpe el login: el usuario puede aceptar la invitación después.
           console.error('Error al auto-aceptar la invitación:', e);
         }
       }
     } catch (error: any) {
-      // El backend responde acá, por ejemplo, si el código no coincide o si ya venció
-      // (recordar el límite de 10 minutos mencionado en el texto de ayuda de abajo).
       Alert.alert('Código incorrecto', error.message);
     } finally {
       setLoading(false);

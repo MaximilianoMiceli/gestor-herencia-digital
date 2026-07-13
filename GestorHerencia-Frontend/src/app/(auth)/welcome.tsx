@@ -1,10 +1,3 @@
-/**
- * @file welcome.tsx
- * @description Punto de entrada para usuarios sin sesión (el layout raíz redirige acá
- * cuando no hay token). No consulta al backend ni tiene estado propio: solo ofrece
- * accesos a "Iniciar sesión" y "Crear cuenta".
- */
-
 import React from 'react';
 import { View, StyleSheet, Text } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -28,8 +21,6 @@ export default function WelcomeScreen() {
         </View>
       </View>
 
-      {/* "push" (no "replace"): conserva esta pantalla en el stack para que el botón
-          "atrás" funcione desde login/register. */}
       <View style={styles.buttonContainer}>
         <AuthButton
           title="Iniciar sesión"

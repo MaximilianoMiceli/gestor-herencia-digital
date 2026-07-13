@@ -2,10 +2,8 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Herencia.Business.Dtos;
 
-// No incluye "ActivoDigitalId" (viaja en la URL de la ruta anidada). Se invita
-// por "EmailBeneficiario" y no por Id porque la persona invitada puede todavia
-// no tener cuenta; AsignacionHerenciaService resuelve si el email ya
-// pertenece a un Usuario o queda pendiente de reclamo.
+// No incluye "ActivoDigitalId" (viaja en la URL). Se invita por "EmailBeneficiario"
+// porque la persona invitada puede todavia no tener cuenta creada.
 public class AsignacionHerenciaCreacionDTO
 {
     [Required(ErrorMessage = "El email del beneficiario es obligatorio.")]

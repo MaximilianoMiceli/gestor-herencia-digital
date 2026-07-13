@@ -1,10 +1,3 @@
-/**
- * @file mis-herencias.tsx
- * @description Lista las herencias asignadas al usuario actual, agrupadas por titular.
- * Cada asignación pendiente puede aceptarse o rechazarse individualmente
- * (PATCH /api/asignaciones/{id}/estado) en vez de depender del link de invitación original.
- */
-
 import React, { useState, useCallback } from 'react';
 import {
   View,
@@ -24,8 +17,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { ArrowLeft, Info, HelpCircle, Search } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-// API "legacy" de expo-file-system (más estable que la nueva basada en File/Directory,
-// ver el mismo criterio en admin/certificados.tsx).
+// API "legacy": la nueva API basada en clases no expone el status HTTP real.
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as SecureStore from 'expo-secure-store';
@@ -86,15 +78,9 @@ export default function MisHerenciasScreen() {
     setRefreshing(false);
   };
 
-  /**
-   * Agrupa las asignaciones por titular emisor para consolidar la tarjeta del Frame 24,
-   * conservando cada ítem individual (con su propio estado) para poder actuar sobre él.
-   */
   const obtenerHerenciasAgrupadas = (): HerenciaAgrupada[] => {
     const agrupado: { [key: string]: HerenciaAgrupada } = {};
 
-    // Filtro local por titular o activo (mismo criterio que activos.tsx): no hace falta
-    // endpoint de búsqueda propio, ya se trae la lista completa.
     const query = searchQuery.trim().toLowerCase();
     const herenciasFiltradas = query.length === 0
       ? herencias
@@ -115,10 +101,7 @@ export default function MisHerenciasScreen() {
 
   const herenciasAgrupadas = obtenerHerenciasAgrupadas();
 
-  /**
-   * Acepta o rechaza una asignación puntual. "nuevoEstado" usa los mismos valores que
-   * el enum EstadoBeneficiario del backend: 2 = Aceptado, 3 = Rechazado.
-   */
+  // nuevoEstado usa los valores del enum EstadoBeneficiario del backend: 2 = Aceptado, 3 = Rechazado.
   const handleResponder = async (asignacionId: number, nuevoEstado: 2 | 3) => {
     setProcesandoId(asignacionId);
     try {
@@ -149,11 +132,7 @@ export default function MisHerenciasScreen() {
     }
   };
 
-  /**
-   * Descarga el archivo adjunto del activo heredado (con el JWT del beneficiario como
-   * header, ya que GET /{id}/archivo exige ser el titular o un heredero Aceptado con el
-   * bien ya liberado) y abre el selector nativo "Abrir con..." para visualizarlo.
-   */
+  // GET /{id}/archivo exige ser el titular o un heredero Aceptado con el bien ya liberado.
   const handleDescargarArchivo = async (activo: MiHerenciaDTO) => {
     if (!activo.nombreArchivoOriginal) return;
 
@@ -314,8 +293,7 @@ export default function MisHerenciasScreen() {
                       </View>
                     )}
 
-                    {/* Solo aparece si el bien ya está liberado: antes, el backend ni
-                        siquiera manda la descripción (ver MiHerenciaDTO.descripcion). */}
+                    {/* Solo aparece si el bien ya está liberado (ver MiHerenciaDTO.descripcion). */}
                     {asig.estado === 'Aceptado' && asig.disponible && (
                       <TouchableOpacity style={styles.viewInfoButton} onPress={() => setActivoAVer(asig)}>
                         <Text style={styles.viewInfoButtonText}>Ver información</Text>
@@ -393,7 +371,7 @@ export default function MisHerenciasScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#DAF8BD', // Fondo general verde pastel
+    backgroundColor: '#DAF8BD',
   },
   loadingContainer: {
     flex: 1,
@@ -662,7 +640,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   infoBox: {
-    backgroundColor: '#C5E2D0', // Fondo celeste/verde agua claro del mockup
+    backgroundColor: '#C5E2D0',
     borderRadius: 12,
     borderWidth: 1.2,
     borderColor: '#A1CBB2',
@@ -683,7 +661,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     paddingHorizontal: 8,
   },
-  // Vacío / Empty State
   emptyStateCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,

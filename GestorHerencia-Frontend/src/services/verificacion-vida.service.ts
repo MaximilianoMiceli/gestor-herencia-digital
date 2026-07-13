@@ -1,11 +1,3 @@
-/**
- * @file verificacion-vida.service.ts
- * @description Servicio HTTP del monitoreo de "verificación de vida" (check-ins
- * periódicos del titular). La configuración vive en el backend (no en SecureStore local):
- * es VerificacionVidaBackgroundService quien decide cuándo escalar recordatorios y
- * liberar la herencia, así que el cliente debe leer/escribir siempre contra la API.
- */
-
 import { api } from './api';
 
 /** 1 = Push, 2 = Email, 3 = Sms (MetodoNotificacion del backend). */
@@ -17,7 +9,6 @@ export type MetodoNotificacion = 1 | 2 | 3;
  */
 export type EstadoVerificacionVida = 1 | 2 | 3 | 4 | 5 | 6;
 
-/** DTO devuelto por GET/PUT (ver ConfiguracionVerificacionVidaDTO.cs). */
 export interface ConfiguracionVerificacionVidaDTO {
   usuarioId: number;
   activo: boolean;
@@ -35,7 +26,6 @@ export interface ConfiguracionVerificacionVidaDTO {
   fechaProtocoloActivado: string | null;
 }
 
-/** DTO de entrada para PUT (ver ConfiguracionVerificacionVidaActualizacionDTO.cs). */
 export interface ConfiguracionVerificacionVidaActualizacionDTO {
   activo: boolean;
   /** Solo se aceptan 3, 6 o 12 (validado también del lado del servidor). */
@@ -64,12 +54,8 @@ export class VerificacionVidaService {
     return response.data;
   }
 
-  /**
-   * Confirma actividad del titular ("todavía estoy vivo"): resetea el reloj de
-   * vencimiento y cancela cualquier certificado de defunción pendiente sobre esta
-   * cuenta (ver VerificacionVidaController.RegistrarCheckIn).
-   * Llama a: POST /api/verificacion-vida/check-in
-   */
+  /** Llama a: POST /api/verificacion-vida/check-in. Resetea el reloj de vencimiento y
+   *  cancela cualquier certificado de defunción pendiente sobre esta cuenta. */
   static async registrarCheckIn(): Promise<ConfiguracionVerificacionVidaDTO> {
     const response = await api.post<ConfiguracionVerificacionVidaDTO>('/verificacion-vida/check-in');
     return response.data;

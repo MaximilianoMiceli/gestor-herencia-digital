@@ -9,11 +9,8 @@ public interface IActivoDigitalRepository : IRepositorioBase<ActivoDigital>
     Task<IEnumerable<ActivoDigital>> ObtenerActivosPorUsuarioAsync(int usuarioId);
 
     /// <summary>
-    /// Versión paginada y filtrada (opcionalmente por <paramref name="tipo"/> y/o
-    /// <paramref name="nombre"/>) de <see cref="ObtenerActivosPorUsuarioAsync"/>. Devuelve además
-    /// el total de registros que matchean los filtros (sin paginar), necesario para calcular la
-    /// cantidad de páginas del lado del cliente. Se devuelve como tupla (Items, Total) para no
-    /// tener que consultar la base de datos dos veces por separado desde el llamador.
+    /// Version paginada y filtrada (por tipo y/o nombre) de <see cref="ObtenerActivosPorUsuarioAsync"/>.
+    /// Devuelve tambien el total sin paginar, para calcular la cantidad de paginas en el cliente.
     /// </summary>
     Task<(IEnumerable<ActivoDigital> Items, int Total)> ObtenerActivosPorUsuarioPaginadoAsync(
         int usuarioId, int pagina, int limite, TipoActivoDigital? tipo, string? nombre);

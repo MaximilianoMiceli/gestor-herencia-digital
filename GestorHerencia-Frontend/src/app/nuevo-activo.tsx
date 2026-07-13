@@ -1,12 +1,3 @@
-/**
- * @file nuevo-activo.tsx
- * @description Pantalla de creación y registro de nuevos activos digitales.
- *
- * Formulario con campos dinámicos según el TipoActivoDigital elegido (cripto, cuenta
- * bancaria, red social, correo o archivo) y asignación del 100% del activo a un único
- * beneficiario, que se invita por email en la misma operación de guardado.
- */
-
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -40,10 +31,9 @@ import { AssetsService } from '../services/assets.service';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** Tipos de archivo que el backend acepta para adjuntos (ver ActivoDigitalService.TiposPermitidos). */
+// Tipos que el backend acepta para adjuntos (ver ActivoDigitalService.TiposPermitidos).
 const TIPOS_MIME_PERMITIDOS = ['application/pdf', 'image/jpeg', 'image/png'];
 
-/** Forma en la que expo-document-picker entrega el archivo elegido por el usuario. */
 type ArchivoSeleccionado = { uri: string; name: string; mimeType: string };
 
 type AssetType = {
@@ -53,11 +43,8 @@ type AssetType = {
   icon: any;
 };
 
-// Los 5 valores del enum TipoActivoDigital del backend (Herencia.Data.Models):
-// 0=CuentaBancaria, 1=RedSocial, 2=BilleteraCripto, 3=CorreoElectronico, 4=Otro.
-// Antes solo se ofrecían 3 de los 5: Red Social y Correo Electrónico existían en el
-// enum y en el mapeo de lectura (activos.tsx, editar-activo.tsx) pero no eran
-// seleccionables acá, la única pantalla que realmente los crea.
+// Valores del enum TipoActivoDigital del backend: 0=CuentaBancaria, 1=RedSocial,
+// 2=BilleteraCripto, 3=CorreoElectronico, 4=Otro.
 const ASSET_TYPES: AssetType[] = [
   { id: 2, label: 'Cripto', description: 'Wallets, Bitcoin, Ethereum..', icon: Bitcoin },
   { id: 0, label: 'Cuenta bancaria', description: 'CBU, alias, numero de cu..', icon: Landmark },
@@ -74,58 +61,46 @@ export default function NuevoActivoScreen() {
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
 
-  // ESTADOS DEL FORMULARIO GENERAL
   const [nombre, setNombre] = useState('');
   const [tipo, setTipo] = useState<AssetType | null>(null);
   const [instrucciones, setInstrucciones] = useState('');
   const [prioridad, setPrioridad] = useState('Media');
   const [beneficiarioEmail, setBeneficiarioEmail] = useState('');
 
-  // ESTADOS DINÁMICOS POR TIPO DE ACTIVO
   const [blockchain, setBlockchain] = useState('');
   const [wallet, setWallet] = useState('');
   const [clavePrivada, setClavePrivada] = useState('');
 
-  // Cuenta bancaria:
   const [banco, setBanco] = useState('');
   const [numeroCuenta, setNumeroCuenta] = useState('');
   const [cbuAlias, setCbuAlias] = useState('');
   const [tipoCuenta, setTipoCuenta] = useState('Caja de ahorro');
   const [tipoCuentaExpanded, setTipoCuentaExpanded] = useState(false);
 
-  // Red social:
   const [plataformaRed, setPlataformaRed] = useState('');
   const [usuarioRed, setUsuarioRed] = useState('');
 
-  // Correo electrónico:
   const [proveedorCorreo, setProveedorCorreo] = useState('');
   const [direccionCorreo, setDireccionCorreo] = useState('');
 
-  // Archivo: se guarda el objeto completo que devuelve expo-document-picker (no solo
-  // el nombre), porque es lo que necesita FormData para poder leer el archivo real del
-  // disco al subirlo (ver AssetsService.subirArchivoActivo).
+  // Se guarda el objeto completo (no solo el nombre): FormData lo necesita para leer
+  // el archivo real del disco al subirlo.
   const [archivoSeleccionado, setArchivoSeleccionado] = useState<ArchivoSeleccionado | null>(null);
   const [loadingArchivo, setLoadingArchivo] = useState(false);
 
-  // AUXILIARES
   const [saving, setSaving] = useState(false);
 
-  // Control de expansión
   const [tipoExpanded, setTipoExpanded] = useState(false);
   const [prioridadExpanded, setPrioridadExpanded] = useState(false);
 
   const [showValidationError, setShowValidationError] = useState(false);
   const [emailError, setEmailError] = useState(false);
 
-  /** Abre el selector de archivos nativo (PDF, JPG o PNG) para el activo tipo "Archivo". */
   const handleAttachFile = async () => {
     setLoadingArchivo(true);
     try {
-      // Cancelar el diálogo resuelve la promesa con `canceled: true`, no la rechaza:
-      // no hay que tratarlo como error.
+      // Cancelar el diálogo resuelve la promesa con canceled: true, no la rechaza.
       const resultado = await DocumentPicker.getDocumentAsync({
-        // Mismos tipos que acepta el backend (ActivoDigitalService.TiposPermitidos),
-        // para no dejar elegir un archivo que el servidor rechazaría después.
         type: TIPOS_MIME_PERMITIDOS,
         copyToCacheDirectory: true,
       });
@@ -139,8 +114,6 @@ export default function NuevoActivoScreen() {
       setArchivoSeleccionado({
         uri: archivo.uri,
         name: archivo.name,
-        // mimeType puede venir undefined según la plataforma; se usa un valor genérico
-        // de respaldo (igual será rechazado por el backend si no es uno de los 3 permitidos).
         mimeType: archivo.mimeType ?? 'application/octet-stream',
       });
     } catch (err) {
@@ -151,10 +124,6 @@ export default function NuevoActivoScreen() {
     }
   };
 
-  /**
-   * Valida y crea el activo, con sus campos requeridos dependiendo del tipo elegido,
-   * y lo asigna 100% al beneficiario indicado (invitándolo por email si no existe).
-   */
   const handleSave = async () => {
     setEmailError(false);
 
@@ -168,8 +137,6 @@ export default function NuevoActivoScreen() {
       return;
     }
 
-    // Cada tipo de activo tiene su propio set de campos obligatorios (ver el bloque
-    // "INFORMACIÓN DINÁMICA DEL ACTIVO" más abajo, donde se renderizan)
     if (tipo.label === 'Cripto' && (!blockchain || !wallet || !clavePrivada)) {
       setShowValidationError(true);
       return;
@@ -197,10 +164,8 @@ export default function NuevoActivoScreen() {
     try {
       if (!token) throw new Error('Usuario no autenticado.');
 
-      // Los campos estructurados se serializan dentro de "descripcion" con un formato fijo
-      // por tipo (el backend no tiene columnas propias para ellos). editar-activo.tsx
-      // parsea este mismo formato con regex para poder editarlos por separado: si se
-      // cambia el formato acá, hay que actualizar esas regex también.
+      // Formato serializado dentro de "descripcion" (el backend no tiene columnas propias):
+      // si se cambia acá, actualizar también las regex de editar-activo.tsx.
       let descripcionFinal = '';
       if (tipo.label === 'Cripto') {
         descripcionFinal = `[CRIPTO] Blockchain: ${blockchain} | Wallet: ${wallet} | Clave Privada: ${clavePrivada}\n\nInstrucciones:\n${instrucciones}`;
@@ -224,8 +189,8 @@ export default function NuevoActivoScreen() {
         prioridad
       );
 
-      // El archivo se sube recién después de crear el activo: el endpoint de subida
-      // necesita el Id que la base de datos le asigna, inexistente hasta este punto.
+      // El archivo se sube recién después de crear el activo: la subida necesita el Id
+      // que la base de datos le asigna.
       if (tipo.label === 'Archivo' && archivoSeleccionado) {
         await AssetsService.subirArchivoActivo(activoCreado.id, archivoSeleccionado);
       }
@@ -245,7 +210,6 @@ export default function NuevoActivoScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header con gradiente */}
       <LinearGradient
         colors={['#23856C', '#022739']}
         start={{ x: 0, y: 0 }}
@@ -271,8 +235,7 @@ export default function NuevoActivoScreen() {
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.form}>
-            
-            {/* NOMBRE */}
+
             <Text style={styles.fieldLabel}>Nombre del activo</Text>
             <TextInput
               style={styles.input}
@@ -285,7 +248,6 @@ export default function NuevoActivoScreen() {
               }}
             />
 
-            {/* TIPO DE ACTIVO SELECT */}
             <Text style={styles.fieldLabel}>Tipo de activo</Text>
             <View style={styles.dropdownContainer}>
               <TouchableOpacity
@@ -348,7 +310,6 @@ export default function NuevoActivoScreen() {
               )}
             </View>
 
-            {/* INFORMACIÓN DINÁMICA DEL ACTIVO */}
             {tipo && (
               <View style={styles.dynamicInfoWrapper}>
                 <Text style={styles.sectionHeader}>INFORMACIÓN DEL ACTIVO</Text>
@@ -537,7 +498,6 @@ export default function NuevoActivoScreen() {
               </View>
             )}
 
-            {/* INSTRUCCIONES PARA EL BENEFICIARIO */}
             <Text style={styles.fieldLabel}>Instrucciones para el beneficiario</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
@@ -553,7 +513,6 @@ export default function NuevoActivoScreen() {
               }}
             />
 
-            {/* PRIORIDAD SELECT */}
             <Text style={styles.fieldLabel}>Nivel de prioridad</Text>
             <View style={styles.dropdownContainer}>
               <TouchableOpacity
@@ -605,9 +564,7 @@ export default function NuevoActivoScreen() {
               )}
             </View>
 
-            {/* BENEFICIARIO: EMAIL DE INVITACIÓN */}
-            {/* El backend invita y asigna en la misma operación (POST .../asignaciones con un
-                email): no existe una lista de "beneficiarios registrados" de la que elegir. */}
+            {/* El backend invita y asigna en la misma operación: no hay lista de beneficiarios previa. */}
             <Text style={styles.fieldLabel}>Email del beneficiario</Text>
             <TextInput
               style={[styles.input, emailError && styles.inputError]}
@@ -626,7 +583,6 @@ export default function NuevoActivoScreen() {
               <Text style={styles.emailErrorText}>Ingresá un email válido.</Text>
             )}
 
-            {/* ERROR DE VALIDACIÓN */}
             {showValidationError && (
               <View style={styles.validationBox}>
                 <AlertTriangle color="#A83232" size={20} style={styles.validationIcon} />
@@ -634,7 +590,6 @@ export default function NuevoActivoScreen() {
               </View>
             )}
 
-            {/* BOTÓN GUARDAR */}
             <TouchableOpacity
               style={styles.saveButton}
               onPress={handleSave}

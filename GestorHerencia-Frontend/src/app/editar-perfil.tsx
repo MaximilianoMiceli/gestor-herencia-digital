@@ -1,14 +1,3 @@
-/**
- * @file editar-perfil.tsx
- * @description Pantalla de "Editar Perfil / Seguridad" de la cuenta.
- *
- * Antes no existía ninguna pantalla para esto, pese a que el backend ya exponía
- * PUT /api/usuarios/{id} (editar nombre/email) y PUT /api/usuarios/{id}/password
- * (cambiar contraseña). Ahora también incluye el toggle real de 2FA por email
- * (PUT /api/usuarios/{id}/doble-factor), reemplazando la fila puramente decorativa
- * que mostraba el Dashboard.
- */
-
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -38,28 +27,22 @@ export default function EditarPerfilScreen() {
   const { userId } = useAuth();
   const { focus } = useLocalSearchParams<{ focus?: string }>();
 
-  // Referencia para poder saltar directo a la sección de 2FA cuando se llega acá desde
-  // el Dashboard con "?focus=2fa" (ver dashboard.tsx): sin esto, el usuario aterrizaba
-  // siempre arriba de todo y tenía que scrollear a mano pasando "Datos personales" y
-  // "Cambiar contraseña" para encontrar el toggle real de 2FA.
+  // Permite saltar a la sección de 2FA cuando se llega con "?focus=2fa" (ver dashboard.tsx).
   const scrollRef = useRef<ScrollView>(null);
 
   const [loading, setLoading] = useState(true);
 
-  // Sección 1: datos de perfil
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [dni, setDni] = useState('');
   const [fechaNacimientoTexto, setFechaNacimientoTexto] = useState('');
   const [savingPerfil, setSavingPerfil] = useState(false);
 
-  // Sección 2: cambio de contraseña
   const [passwordActual, setPasswordActual] = useState('');
   const [passwordNueva, setPasswordNueva] = useState('');
   const [confirmarPassword, setConfirmarPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
 
-  // Sección 3: 2FA
   const [dobleFactorHabilitado, setDobleFactorHabilitado] = useState(false);
   const [savingDobleFactor, setSavingDobleFactor] = useState(false);
 
@@ -94,8 +77,6 @@ export default function EditarPerfilScreen() {
       return;
     }
 
-    // Mismas reglas que register.tsx y que UsuarioService.ActualizarUsuarioAsync en el
-    // backend: se valida acá también para dar feedback inmediato sin esperar la red.
     if (!DNI_REGEX.test(dni.trim())) {
       Alert.alert('Error', 'El DNI debe tener 7 u 8 dígitos numéricos.');
       return;
@@ -111,9 +92,7 @@ export default function EditarPerfilScreen() {
       return;
     }
 
-    // Se arma el ISO "AAAA-MM-DD" a mano (no con toISOString(), que convierte a UTC
-    // primero y puede correr la fecha un día: ver el comentario detallado en
-    // register.tsx, donde se resolvió el mismo problema).
+    // Se arma el ISO a mano: toISOString() convierte a UTC y puede correr la fecha un día.
     const anio = fechaNacimiento.getFullYear();
     const mes = String(fechaNacimiento.getMonth() + 1).padStart(2, '0');
     const dia = String(fechaNacimiento.getDate()).padStart(2, '0');
@@ -142,14 +121,12 @@ export default function EditarPerfilScreen() {
 
     setSavingPassword(true);
     try {
-      // 204 No Content en éxito: no hay body que leer, solo confirmar que no lanzó.
       await UsuariosService.cambiarPassword(userId, passwordActual, passwordNueva);
       Alert.alert('Contraseña actualizada', 'Tu contraseña se cambió con éxito.');
       setPasswordActual('');
       setPasswordNueva('');
       setConfirmarPassword('');
     } catch (err: any) {
-      // El backend responde acá, por ejemplo, "La contraseña actual ingresada es incorrecta."
       Alert.alert('Error', err.message || 'No se pudo cambiar la contraseña.');
     } finally {
       setSavingPassword(false);
@@ -199,7 +176,6 @@ export default function EditarPerfilScreen() {
       <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.centeredWrapper}>
 
-          {/* SECCIÓN: DATOS DE PERFIL */}
           <Text style={styles.sectionTitle}>DATOS PERSONALES</Text>
           <View style={styles.card}>
             <View style={styles.inputGroup}>
@@ -246,7 +222,6 @@ export default function EditarPerfilScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* SECCIÓN: CAMBIAR CONTRASEÑA */}
           <Text style={styles.sectionTitle}>CAMBIAR CONTRASEÑA</Text>
           <View style={styles.card}>
             <View style={styles.inputGroup}>
@@ -285,9 +260,7 @@ export default function EditarPerfilScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* SECCIÓN: VERIFICACIÓN EN DOS PASOS (2FA). El "onLayout" mide en qué posición
-              Y quedó esta sección dentro del ScrollView para poder saltar directo acá
-              cuando se llega con "?focus=2fa" desde el Dashboard (ver más abajo). */}
+          {/* onLayout mide la posición Y de esta sección para poder saltar acá con "?focus=2fa". */}
           <View
             onLayout={(e: LayoutChangeEvent) => {
               if (focus === '2fa') {

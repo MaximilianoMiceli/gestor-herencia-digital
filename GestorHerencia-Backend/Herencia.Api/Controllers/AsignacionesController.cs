@@ -8,10 +8,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace Herencia.Api.Controllers;
 
 /// <summary>
-/// Expone las operaciones sobre una AsignacionHerencia puntual, identificada por su propio
-/// Id (PUT/PATCH/DELETE). La creacion en lote y el listado por activo viven, en cambio,
-/// anidados bajo <see cref="ActivosDigitalesController"/> por ser operaciones sobre el
-/// "detalle" de un "maestro" especifico.
+/// Expone las operaciones sobre una AsignacionHerencia puntual por su Id (PUT/PATCH/DELETE).
+/// La creacion en lote y el listado por activo viven anidados bajo <see cref="ActivosDigitalesController"/>.
 /// </summary>
 [ApiController]
 [Authorize]
@@ -79,8 +77,7 @@ public class AsignacionesController : ControllerBase
                 return Unauthorized(new { mensaje = "El token no contiene un identificador de usuario valido." });
             }
 
-            // Se resuelve el ownership del otorgante consultando la asignacion (que ya trae
-            // el UsuarioOtorganteId de su activo relacionado), sin depender de un dato del cliente.
+            // Ownership del otorgante resuelto consultando la asignacion, nunca un dato del cliente.
             var asignacionExistente = await _asignacionHerenciaService.ObtenerAsignacionPorIdAsync(id);
 
             if (asignacionExistente.UsuarioOtorganteId != usuarioAutenticadoId)
@@ -110,13 +107,7 @@ public class AsignacionesController : ControllerBase
     }
 
     /// <summary>Acepta o rechaza una asignacion de herencia (transicion de estado).</summary>
-    /// <remarks>
-    /// PATCH (no PUT) porque es una modificacion parcial de un unico campo (NuevoEstado), y
-    /// porque la transicion es un evento de una sola vez: un segundo PATCH sobre un estado ya
-    /// procesado se rechaza con 400 en vez de comportarse como un no-op idempotente.
-    /// Ownership invertido respecto al resto del controller: quien decide es el BENEFICIARIO
-    /// (UsuarioBeneficiarioId), no el otorgante.
-    /// </remarks>
+    // Ownership invertido: decide el BENEFICIARIO, no el otorgante.
     [HttpPatch("{id:int}/estado")]
     public async Task<ActionResult<AsignacionHerenciaDTO>> CambiarEstado(int id, ActualizarEstadoAsignacionDTO actualizarEstadoDTO)
     {
@@ -152,8 +143,6 @@ public class AsignacionesController : ControllerBase
         }
         catch (ReglaNegocioException ex)
         {
-            // Se dispara, en particular, cuando se viola la regla de transicion de estados
-            // (ya estaba en Aceptado/Rechazado, o la invitacion aun no fue reclamada).
             return BadRequest(new { mensaje = ex.Message });
         }
         catch (Exception ex)

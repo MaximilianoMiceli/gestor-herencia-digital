@@ -29,9 +29,8 @@ public class TokenService : ITokenService
     {
         try
         {
-            // Se usan los ClaimTypes estándar de .NET (no strings arbitrarios) porque son
-            // los que ASP.NET Core reconoce automáticamente al popular User.Identity, y los
-            // que hacen funcionar [Authorize(Roles = "...")] sin configuración adicional.
+            // ClaimTypes estándar de .NET: son los que ASP.NET Core reconoce automáticamente
+            // y hacen funcionar [Authorize(Roles = "...")] sin configuración adicional.
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, usuario.Id.ToString()),
@@ -73,8 +72,7 @@ public class TokenService : ITokenService
         }
         catch (Exception ex)
         {
-            // Nunca se expone el mensaje técnico ni el StackTrace real al cliente: podría
-            // revelar detalles de la configuración de seguridad del servidor.
+            // No se expone el detalle técnico: podría revelar configuración de seguridad del servidor.
             throw new AutenticacionException("Ocurrio un error al generar el token de autenticacion.", ex);
         }
     }

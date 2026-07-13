@@ -66,12 +66,10 @@ public class CertificadoDefuncionService : ICertificadoDefuncionService
             throw new ReglaNegocioException("Solo se aceptan archivos PDF, JPG o PNG.");
         }
 
-        // Indexador plano de IConfiguration (no GetValue<T>, que exige un paquete no
-        // referenciado por este proyecto), con un default de 10 MB si no está configurado.
         var tamanioMaximoBytes = long.TryParse(
             _configuration["VerificacionVida:TamanioMaximoCertificadoBytes"], out var valorConfigurado)
             ? valorConfigurado
-            : 10 * 1024 * 1024; // 10 MB por defecto
+            : 10 * 1024 * 1024;
 
         if (tamanioBytes > tamanioMaximoBytes)
         {
@@ -96,9 +94,7 @@ public class CertificadoDefuncionService : ICertificadoDefuncionService
                     "El fallecimiento de este titular ya fue confirmado anteriormente; no se puede subir otro certificado.");
             }
 
-            // Solo un heredero ya ACEPTADO de este titular puede subir el certificado
-            // (cubre tanto la subida proactiva como la pedida tras el escalamiento de
-            // VerificacionVidaService); nunca un tercero sin relación con él.
+            // Solo un heredero ya ACEPTADO de este titular puede subir el certificado.
             var herederosAceptados = await _asignacionHerenciaRepository.ObtenerAceptadasPorOtorganteAsync(usuarioTitularId);
             var heredero = herederosAceptados.FirstOrDefault(a => a.UsuarioId == subidoPorUsuarioId);
 
@@ -196,8 +192,7 @@ public class CertificadoDefuncionService : ICertificadoDefuncionService
                 throw new RecursoNoEncontradoException($"No se encontro el certificado de defuncion con Id {certificadoId}.");
             }
 
-            // Misma regla "una vez decidido, decidido" que AsignacionHerenciaService aplica
-            // sobre EstadoBeneficiario: un certificado ya revisado no puede volver a decidirse.
+            // Un certificado ya revisado no puede volver a decidirse.
             if (certificado.Estado != EstadoCertificadoDefuncion.Pendiente)
             {
                 throw new ReglaNegocioException("Este certificado ya fue revisado y no puede modificarse.");
@@ -206,9 +201,7 @@ public class CertificadoDefuncionService : ICertificadoDefuncionService
             var ahora = DateTime.UtcNow;
             var herederosLiberados = Enumerable.Empty<AsignacionHerencia>();
 
-            // Aprobar el certificado y liberar todos los bienes del titular deben
-            // confirmarse (o revertirse) juntos: un fallo a mitad de camino no puede dejar
-            // el certificado "Aprobado" con solo una liberación parcial aplicada.
+            // Aprobar el certificado y liberar los bienes deben confirmarse (o revertirse) juntos.
             await _certificadoDefuncionRepository.EjecutarEnTransaccionAsync(async () =>
             {
                 certificado.Estado = EstadoCertificadoDefuncion.Aprobado;

@@ -11,11 +11,7 @@ namespace Herencia.Api.Controllers;
 /// Expone el monitoreo de actividad del titular autenticado: consultar/guardar su
 /// configuracion y confirmar actividad (check-in).
 /// </summary>
-/// <remarks>
-/// Todas las operaciones actuan siempre sobre el propio usuario del token, nunca sobre un Id
-/// recibido en la ruta o el body: no existe ningun escenario legitimo donde alguien deba
-/// poder tocar la configuracion de otro usuario desde este controller.
-/// </remarks>
+// Todas las operaciones actuan siempre sobre el propio usuario del token, nunca sobre un Id de ruta/body.
 [ApiController]
 [Authorize]
 [Route("api/verificacion-vida")]

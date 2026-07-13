@@ -1,9 +1,3 @@
-/**
- * @file _layout.tsx
- * @description Layout raíz: carga de fuentes, tema, AuthProvider y guardia de rutas
- * privadas/públicas según el token de sesión.
- */
-
 import { useEffect } from 'react';
 import { DarkTheme, DefaultTheme, ThemeProvider, Slot, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -13,13 +7,9 @@ import { useFonts, MPLUS2_400Regular, MPLUS2_700Bold } from '@expo-google-fonts/
 import { AnimatedSplashOverlay } from '../components/animated-icon';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 
-// Evitamos que la pantalla de inicio nativa del SO se oculte sola, delegando el cierre
-// al componente personalizado AnimatedSplashOverlay para lograr una transición fluida.
+// El cierre del splash nativo se delega a AnimatedSplashOverlay para una transición fluida.
 SplashScreen.preventAutoHideAsync();
 
-/**
- * Guardia de rutas: redirige según haya o no un token de sesión.
- */
 function InitialLayout() {
   const { token, isLoading } = useAuth();
   const segments = useSegments();
@@ -46,10 +36,6 @@ function InitialLayout() {
   return <Slot />;
 }
 
-/**
- * Layout raíz: carga fuentes, aplica el tema del sistema (oscuro/claro) e inyecta el
- * AuthProvider global.
- */
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
@@ -71,9 +57,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <AuthProvider>
-        {/* Overlay con logo animado elástico de la splash-screen */}
         <AnimatedSplashOverlay />
-        {/* Validador de rutas seguras basado en token */}
         <InitialLayout />
       </AuthProvider>
     </ThemeProvider>

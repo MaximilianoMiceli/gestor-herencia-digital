@@ -2,9 +2,8 @@ using Herencia.Data.Models;
 
 namespace Herencia.Business.Dtos;
 
-// CertificadoDefuncionDTO es el "contrato" de salida de un certificado de
-// defuncion subido: lo que ve un Administrador en su cola de revision, o el
-// heredero que lo subio al consultar su estado.
+// Contrato de salida de un certificado subido: lo ve el Administrador en su
+// cola de revision, o el heredero que lo subio al consultar su estado.
 public class CertificadoDefuncionDTO
 {
     public int Id { get; set; }

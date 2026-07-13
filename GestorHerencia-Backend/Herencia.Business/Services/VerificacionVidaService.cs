@@ -86,8 +86,7 @@ public class VerificacionVidaService : IVerificacionVidaService
         try
         {
             // Si se activa el monitoreo, el contacto de confianza es obligatorio y debe ser
-            // un beneficiario ya ACEPTADO de algún activo de este titular. Se revalida aquí
-            // (y no solo en el cliente) porque cualquiera podría llamar a este endpoint directamente.
+            // un beneficiario ya ACEPTADO de algún activo de este titular.
             if (configuracionDTO.Activo)
             {
                 if (configuracionDTO.ContactoConfianzaId is null)
@@ -138,9 +137,7 @@ public class VerificacionVidaService : IVerificacionVidaService
             }
             else
             {
-                // Reactivación: si el monitoreo estaba desactivado y se vuelve a activar,
-                // se trata como un check-in nuevo para no aparecer "vencido" desde el
-                // primer escaneo sin haber tenido chance de responder.
+                // Reactivación: se trata como check-in nuevo para no aparecer "vencido" de entrada.
                 var seEstaReactivando = !configuracion.Activo && configuracionDTO.Activo;
 
                 configuracion.Activo = configuracionDTO.Activo;
@@ -207,9 +204,8 @@ public class VerificacionVidaService : IVerificacionVidaService
 
             await _configuracionRepository.ActualizarAsync(configuracion);
 
-            // Si el titular confirma actividad mientras un heredero ya había subido un
-            // certificado pendiente, ese pedido queda invalidado: se marca
-            // CanceladoPorActividad (nunca se borra, para dejar registro de la falsa alarma).
+            // Un certificado pendiente subido por error queda invalidado (nunca se borra,
+            // se marca CanceladoPorActividad para dejar registro de la falsa alarma).
             var certificadosPendientes = await _certificadoDefuncionRepository.ObtenerPendientesPorTitularAsync(usuarioId);
 
             foreach (var certificado in certificadosPendientes)
@@ -242,9 +238,7 @@ public class VerificacionVidaService : IVerificacionVidaService
     /// </summary>
     public async Task EjecutarEscaneoAsync()
     {
-        // Umbrales configurables (VerificacionVida:* en appsettings.json), con default de
-        // 3 recordatorios espaciados cada 7 días, y un plazo final de 30 días desde el
-        // último recordatorio antes de activar el protocolo.
+        // Umbrales configurables (VerificacionVida:* en appsettings.json).
         var diasEntreRecordatorios = LeerEnteroDeConfiguracion("VerificacionVida:DiasEntreRecordatorios", 7);
         var cantidadRecordatorios = LeerEnteroDeConfiguracion("VerificacionVida:CantidadRecordatorios", 3);
         var diasPlazoFinal = LeerEnteroDeConfiguracion("VerificacionVida:DiasPlazoFinalTrasUltimoRecordatorio", 30);

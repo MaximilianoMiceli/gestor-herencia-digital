@@ -1,20 +1,11 @@
-/**
- * @file usuarios.service.ts
- * @description Servicio HTTP de gestión del perfil del usuario autenticado: editar
- * nombre/email, cambiar contraseña y activar/desactivar el segundo factor (2FA) por
- * email. Todas las rutas viven bajo /api/usuarios/{id}, y en TODAS ellas el backend
- * exige que "{id}" sea el propio usuario autenticado (ver el chequeo de "ownership"
- * en UsuariosController): pasar el Id de otro usuario devuelve 403 Forbidden.
- */
-
+// Todas las rutas viven bajo /api/usuarios/{id} y el backend exige que "{id}" sea el
+// propio usuario autenticado: pasar el Id de otro usuario devuelve 403 Forbidden.
 import { api } from './api';
 
-/** DTO de un usuario devuelto por el backend (ver UsuarioDTO.cs). */
 export interface UsuarioDTO {
   id: number;
   nombre: string;
   email: string;
-  /** Documento Nacional de Identidad: 7 u 8 dígitos. */
   dni: string;
   /** Fecha de nacimiento en formato ISO ("AAAA-MM-DDTHH:mm:ss"). */
   fechaNacimiento: string;
@@ -43,10 +34,7 @@ export class UsuariosService {
     return response.data;
   }
 
-  /**
-   * Llama a: PUT /api/usuarios/{id}/password
-   * El backend responde 204 No Content (sin body) cuando el cambio es exitoso.
-   */
+  /** Llama a: PUT /api/usuarios/{id}/password. Responde 204 No Content sin body. */
   static async cambiarPassword(id: number, passwordActual: string, passwordNueva: string): Promise<void> {
     await api.put(`/usuarios/${id}/password`, { passwordActual, passwordNueva });
   }

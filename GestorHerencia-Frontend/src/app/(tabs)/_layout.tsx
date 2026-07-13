@@ -5,27 +5,16 @@ import { Home, Archive, Users, Menu } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 
-/**
- * Propiedades del componente auxiliar TabIcon.
- */
 interface TabIconProps {
-  /** Componente del ícono de Lucide a renderizar. */
   IconComponent: any;
-  /** Color del ícono provisto por el Tab Navigator. */
   color: any;
-  /** Indica si la pestaña correspondiente está activa. */
   focused: boolean;
 }
 
-/**
- * Componente que envuelve e implementa micro-animaciones en los íconos del Tab Bar inferior.
- * Emplea react-native-reanimated para escalar de forma elástica el ícono cuando se selecciona.
- */
 function TabIcon({ IconComponent, color, focused }: TabIconProps) {
   const scale = useSharedValue(1);
 
   useEffect(() => {
-    // Aplica una física de resorte (spring bounce) al cambiar el estado de foco.
     scale.value = withSpring(focused ? 1.2 : 1.0, { damping: 12, stiffness: 200 });
   }, [focused, scale]);
 
@@ -51,10 +40,6 @@ function TabIcon({ IconComponent, color, focused }: TabIconProps) {
   );
 }
 
-/**
- * Menu de navegación inferior principal (Bottom Tabs) para plataformas nativas.
- * Integra las pantallas de Inicio, Activos, Beneficiarios y Seguridad con transiciones fluidas.
- */
 export default function AppTabs() {
   const insets = useSafeAreaInsets();
 
@@ -62,9 +47,8 @@ export default function AppTabs() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        animation: 'fade', // Hace que la transición entre pantallas sea un desvanecido suave (slide no está disponible en Tabs)
+        animation: 'fade',
         tabBarStyle: {
-          // Suma el inset inferior a la altura fija para no invadir el área de gestos del SO.
           height: Platform.OS === 'ios' ? 56 + insets.bottom : 64 + insets.bottom,
           backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
@@ -119,8 +103,6 @@ export default function AppTabs() {
       <Tabs.Screen
         name="seguridad"
         options={{
-          // Renombrado de "Seguridad" a "Más": esta pestaña agrupa perfil, contraseña,
-          // 2FA, panel de administrador y ayuda — no todo es estrictamente "seguridad".
           title: 'Más',
           tabBarIcon: ({ color, focused }) => (
             <TabIcon IconComponent={Menu} color={color} focused={focused} />

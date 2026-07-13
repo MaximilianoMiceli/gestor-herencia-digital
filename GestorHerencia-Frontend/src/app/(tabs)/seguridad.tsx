@@ -1,13 +1,3 @@
-/**
- * @file seguridad.tsx
- * @description Pantalla de la pestaña de Seguridad del Tab Navigator.
- *
- * Antes era un placeholder: un texto genérico y el botón de logout, sin ningún otro
- * contenido real. Ahora es el punto de entrada a "Editar perfil" (datos, contraseña,
- * 2FA) y, si el usuario autenticado tiene rol Administrador, también al panel de
- * revisión de certificados de defunción.
- */
-
 import React from 'react';
 import { StyleSheet, View, TouchableOpacity, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,21 +12,18 @@ export default function SeguridadScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Cabecera estilizada con degradado en concordancia con el diseño del Dashboard */}
       <LinearGradient
         colors={['#23856C', '#022739']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0.5 }}
         style={styles.header}
       >
-        {/* SafeAreaView previene solapamiento con la barra de estado superior (notches) */}
         <SafeAreaView edges={['top']} style={styles.headerSafeArea}>
           <Text style={styles.headerSubtitle}>Gestor de Herencia Digital</Text>
           <Text style={styles.headerTitle}>Más</Text>
         </SafeAreaView>
       </LinearGradient>
 
-      {/* Contenido principal */}
       <View style={styles.content}>
         <View style={styles.menuCard}>
           <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/editar-perfil')}>
@@ -47,7 +34,6 @@ export default function SeguridadScreen() {
             <ChevronRight size={20} color="#8A9E95" />
           </TouchableOpacity>
 
-          {/* Solo visible para el rol Administrador: revisión de certificados de defunción */}
           {userRole === 'Administrador' && (
             <TouchableOpacity
               style={styles.menuRow}
@@ -70,7 +56,6 @@ export default function SeguridadScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Botón de Cerrar Sesión: borra el token y redirige a welcome */}
         <TouchableOpacity style={styles.logoutButton} onPress={signOut}>
           <LogOut color="#A83232" size={20} style={{ marginRight: 8 }} />
           <Text style={styles.logoutText}>Cerrar sesión</Text>
@@ -83,7 +68,7 @@ export default function SeguridadScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#DAF8BD', // Fondo verde claro unificado de la app
+    backgroundColor: '#DAF8BD',
   },
   header: {
     paddingHorizontal: 20,
@@ -149,7 +134,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: '#A83232', // Borde rojo indicativo de acción destructiva
+    borderColor: '#A83232',
     borderRadius: 8,
     paddingVertical: 12,
     paddingHorizontal: 24,

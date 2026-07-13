@@ -9,13 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Herencia.Api.Controllers;
 
 /// <summary>Expone la subida y revision de certificados de defuncion.</summary>
-/// <remarks>
-/// Subir solo requiere [Authorize] simple: la propia regla de negocio
-/// (CertificadoDefuncionService.SubirCertificadoAsync exige que quien sube sea un heredero
-/// ya aceptado del titular indicado) ya impide subir a nombre de alguien sin relacion.
-/// Aprobar/Rechazar, en cambio, requieren el rol Administrador: un heredero no puede
-/// autoaprobar su propio certificado.
-/// </remarks>
+// Aprobar/Rechazar requieren rol Administrador: un heredero no puede autoaprobar su propio certificado.
 [ApiController]
 [Authorize]
 [Route("api/certificados-defuncion")]
@@ -56,8 +50,6 @@ public class CertificadosDefuncionController : ControllerBase
 
         try
         {
-            // El heredero que sube el documento es siempre el usuario autenticado, nunca un
-            // valor del body (mismo criterio que ActivosDigitalesController.Crear).
             await using var contenido = archivo.OpenReadStream();
 
             var certificado = await _certificadoDefuncionService.SubirCertificadoAsync(
@@ -170,9 +162,7 @@ public class CertificadosDefuncionController : ControllerBase
         }
     }
 
-    // Determina el Content-Type a partir de la extension del nombre original guardado (nunca
-    // la del archivo en disco, un Guid sin extension confiable): alcanza porque
-    // SubirCertificadoAsync ya restringio los tipos posibles a PDF/JPG/PNG.
+    // Content-Type segun la extension del nombre ORIGINAL (el archivo en disco es un Guid sin extension).
     private static string ObtenerContentType(string nombreArchivoOriginal)
     {
         var extension = Path.GetExtension(nombreArchivoOriginal).ToLowerInvariant();

@@ -1,10 +1,3 @@
-/**
- * @file ayuda.tsx
- * @description Pantalla de ayuda / acerca de la app, pensada para un usuario nuevo que
- * todavía no entiende para qué sirve cada sección. Es contenido estático (no llama a
- * ningún endpoint): una guía rápida de qué es "Gestor de Herencia Digital" y cómo se usa.
- */
-
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -12,15 +5,9 @@ import { ArrowLeft, Archive, Users, HeartPulse, FileCheck2, ShieldCheck } from '
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-/**
- * Estructura de cada bloque temático mostrado en la pantalla de ayuda.
- */
 interface Seccion {
-  /** Componente de ícono (lucide-react-native) que ilustra la sección. */
   icon: any;
-  /** Título corto del tema (ej. "Beneficiarios"). */
   titulo: string;
-  /** Texto explicativo en lenguaje simple, sin jerga técnica. */
   texto: string;
 }
 
@@ -57,10 +44,6 @@ const SECCIONES: Seccion[] = [
   },
 ];
 
-/**
- * Pantalla de ayuda: header con botón de volver y un listado de cards informativas
- * (una por cada entrada de SECCIONES) que explican el propósito de la app.
- */
 export default function AyudaScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();

@@ -10,7 +10,7 @@ public class CertificadoDefuncionRepository : RepositorioBase<CertificadoDefunci
     {
     }
 
-    /// <summary>Ver <see cref="ICertificadoDefuncionRepository.ObtenerPendientesPorTitularAsync"/>.</summary>
+    /// <inheritdoc />
     public async Task<IEnumerable<CertificadoDefuncion>> ObtenerPendientesPorTitularAsync(int usuarioTitularId)
     {
         return await _contexto.CertificadosDefuncion
@@ -18,11 +18,9 @@ public class CertificadoDefuncionRepository : RepositorioBase<CertificadoDefunci
             .ToListAsync();
     }
 
-    /// <summary>Ver <see cref="ICertificadoDefuncionRepository.ObtenerPendientesAsync"/>.</summary>
+    /// <inheritdoc />
     public async Task<IEnumerable<CertificadoDefuncion>> ObtenerPendientesAsync()
     {
-        // Include de UsuarioTitular y SubidoPor: el panel de Administrador necesita mostrar
-        // nombre/email de ambos sin consultas N+1 por cada fila.
         return await _contexto.CertificadosDefuncion
             .Include(c => c.UsuarioTitular)
             .Include(c => c.SubidoPor)
@@ -30,7 +28,7 @@ public class CertificadoDefuncionRepository : RepositorioBase<CertificadoDefunci
             .ToListAsync();
     }
 
-    /// <summary>Ver <see cref="ICertificadoDefuncionRepository.ObtenerConUsuariosAsync"/>.</summary>
+    /// <inheritdoc />
     public async Task<CertificadoDefuncion?> ObtenerConUsuariosAsync(int id)
     {
         return await _contexto.CertificadosDefuncion
@@ -39,7 +37,7 @@ public class CertificadoDefuncionRepository : RepositorioBase<CertificadoDefunci
             .FirstOrDefaultAsync(c => c.Id == id);
     }
 
-    /// <summary>Ver <see cref="ICertificadoDefuncionRepository.ExisteCertificadoAprobadoAsync"/>.</summary>
+    /// <inheritdoc />
     public async Task<bool> ExisteCertificadoAprobadoAsync(int usuarioTitularId)
     {
         return await _contexto.CertificadosDefuncion

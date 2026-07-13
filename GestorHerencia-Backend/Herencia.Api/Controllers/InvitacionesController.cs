@@ -10,8 +10,7 @@ namespace Herencia.Api.Controllers;
 /// <summary>DTO con los datos de una invitacion para la tarjeta de invitacion del cliente movil.</summary>
 public class InvitacionDTO
 {
-    // Se expone el TOKEN (no el Id entero interno) para que la app lo reutilice tal cual al
-    // llamar a POST /api/invitaciones/{token}/procesar.
+    // Se expone el TOKEN (no el Id interno): la app lo reutiliza en POST /api/invitaciones/{token}/procesar.
     public string Token { get; set; } = string.Empty;
     public string EmisorNombre { get; set; } = string.Empty;
     public string BeneficiarioNombre { get; set; } = string.Empty;
@@ -57,14 +56,8 @@ public class ProcesarInvitacionRequest
 /// <summary>
 /// Expone la consulta y confirmacion de invitaciones de herencia por token publico.
 /// </summary>
-/// <remarks>
-/// Con el modelo de doble rol, invitar a alguien por email y asignarle un activo puntual son
-/// la misma operacion (ver AsignacionHerenciaService.CrearAsignacionesAsync): el "Id" de una
-/// invitacion en este controller es el TokenInvitacion de esa AsignacionHerencia (identificador
-/// publico no adivinable), nunca su Id entero autoincremental. Los dos endpoints publicos de
-/// abajo no verifican ownership por JWT: la unica proteccion posible es que el token sea
-/// imposible de adivinar (ver AsignacionHerencia.TokenInvitacion).
-/// </remarks>
+// El "Id" aca es el TokenInvitacion (no adivinable), nunca el Id entero autoincremental:
+// los endpoints publicos no verifican ownership por JWT, solo que el token sea correcto.
 [ApiController]
 [Route("api/invitaciones")]
 public class InvitacionesController : ControllerBase
@@ -129,13 +122,8 @@ public class InvitacionesController : ControllerBase
     }
 
     /// <summary>Acepta o rechaza una invitacion identificada por su token.</summary>
-    /// <remarks>
-    /// Publico, deliberadamente: quien conoce el link/token (recibido en privado por email)
-    /// esta habilitado a decidir, igual que un link de confirmacion tradicional, sin verse
-    /// obligado a registrarse antes solo para poder rechazar. El endpoint equivalente para un
-    /// usuario ya autenticado, que ademas verifica ownership por JWT, es
-    /// PATCH api/asignaciones/{id}/estado (AsignacionesController).
-    /// </remarks>
+    // Publico deliberadamente (como un link de confirmacion por email). El equivalente
+    // autenticado, con ownership por JWT, es PATCH api/asignaciones/{id}/estado.
     [HttpPost("{token}/procesar")]
     public async Task<IActionResult> ProcesarInvitacion(string token, [FromBody] ProcesarInvitacionRequest request)
     {
@@ -156,9 +144,7 @@ public class InvitacionesController : ControllerBase
                 return BadRequest(new { mensaje = "Accion invalida. Utilice 'aceptar' o 'rechazar'." });
             }
 
-            // Se preserva la fila de AsignacionHerencia y solo se actualiza su Estado (incluso
-            // en un rechazo): el otorgante sigue necesitando saber que ese reparto fue
-            // rechazado, para poder reasignarlo a otra persona.
+            // Se preserva la fila y solo se actualiza su Estado (incluso en un rechazo).
             await _asignacionHerenciaService.CambiarEstadoPorTokenAsync(token, nuevoEstado);
 
             var mensaje = nuevoEstado == EstadoBeneficiario.Rechazado
@@ -173,7 +159,6 @@ public class InvitacionesController : ControllerBase
         }
         catch (ReglaNegocioException ex)
         {
-            // Por ejemplo, si la invitacion ya habia sido aceptada o rechazada antes.
             return BadRequest(new { mensaje = ex.Message });
         }
         catch (Exception ex)
@@ -202,10 +187,7 @@ public class InvitacionesController : ControllerBase
 
             var dtos = new List<MiHerenciaDTO>();
 
-            // N+1 deliberado: se resuelven Nombre del otorgante y Nombre/Tipo del activo por
-            // cada fila en vez de extender el DTO general. Dado el volumen de datos de este
-            // proyecto, el costo extra es insignificante frente a no acoplar el DTO general a
-            // un caso de uso puntual.
+            // N+1 deliberado: volumen bajo, se prefiere no acoplar el DTO general a este caso de uso.
             foreach (var herencia in herencias)
             {
                 var titular = await _usuarioService.ObtenerUsuarioPorIdAsync(herencia.UsuarioOtorganteId);

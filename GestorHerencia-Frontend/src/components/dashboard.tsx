@@ -19,35 +19,18 @@ import Animated, {
   SharedValue,
 } from 'react-native-reanimated';
 
-/**
- * Propiedades del componente Dashboard.
- */
 interface DashboardProps {
-  /** Nombre del usuario para mostrar el saludo personalizado en el Header. */
   userName?: string;
-  /** Cantidad de activos digitales registrados por el usuario. */
   assetsCount?: number;
-  /** Cantidad de beneficiarios asignados a los activos del usuario. */
   beneficiariosCount?: number;
-  /** Estado del sistema de verificación de vida del usuario (activo/inactivo). */
   isLifeVerificationActive?: boolean;
-  /** Estado del segundo factor de autenticación para protección de datos sensibles. */
   is2FAActive?: boolean;
-  /** Cantidad de herencias recibidas que están pendientes de aceptar/rechazar. */
   pendingHerenciasCount?: number;
-  /** Callback para la acción de agregar un nuevo activo. */
   onAddAsset?: () => void;
-  /** Callback para la navegación hacia otras pestañas principales. */
   onNavigateToTab?: (tabName: string) => void;
-  /** Indica si se debe mostrar la notificación de éxito tras guardar un activo. */
   showSuccessNotification?: boolean;
 }
 
-/**
- * Componente Dashboard principal. Presenta de manera resumida el estado general
- * del gestor de herencia, incluyendo estadísticas de activos, beneficiarios,
- * y configuraciones de seguridad críticas para el resguardo de la información.
- */
 export default function Dashboard({
   userName = '',
   assetsCount = 0,
@@ -62,9 +45,7 @@ export default function Dashboard({
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  // Escala compartida para animar la pulsación del botón principal.
   const addBtnScale = useSharedValue(1);
-  // Escala compartida para animar la pulsación del botón de herencias (azul).
   const inheritancesBtnScale = useSharedValue(1);
 
   const animatedAddBtnStyle = useAnimatedStyle(() => {
@@ -87,7 +68,7 @@ export default function Dashboard({
     scaleVar.value = withSpring(1, { damping: 10, stiffness: 300 });
   };
 
-  // Fallback para cuando el componente se usa sin conectar a la navegación real.
+  // Fallback si el componente se usa sin conectar a la navegación real.
   const defaultOnAddAsset = () => {
     if (onAddAsset) {
       onAddAsset();
@@ -119,7 +100,6 @@ export default function Dashboard({
               </Text>
             </View>
 
-            {/* Icono de perfil: lleva directo a "Editar perfil" (datos, contraseña y 2FA) */}
             <Pressable style={styles.profileContainer} onPress={() => router.push('/editar-perfil')}>
               <View style={styles.profileIconCircle}>
                 <User size={24} color="#ffffff" strokeWidth={2} />
@@ -134,8 +114,7 @@ export default function Dashboard({
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.centeredWrapper}>
-          {/* Banner persistente (no es una píldora que se autodesvanece): así alguien que ya
-              tenía una herencia esperándolo la ve de inmediato, sin buscar "Mis herencias". */}
+          {/* Persistente (no se autodesvanece): asegura que se note sin buscar "Mis herencias". */}
           {pendingHerenciasCount > 0 && (
             <Pressable style={styles.pendingBanner} onPress={() => router.push('/mis-herencias')}>
               <View style={styles.pendingBannerIconWrapper}>
@@ -224,8 +203,7 @@ export default function Dashboard({
               </Text>
             </Pressable>
 
-            {/* Navega directo a la sección 2FA de "Editar perfil" (donde vive el toggle real)
-                en vez de la pestaña Más, evitando un segundo toque + scroll para encontrarlo. */}
+            {/* focus: '2fa' hace que editar-perfil.tsx salte directo a esa sección. */}
             <Pressable
               style={[styles.cardRow, styles.lastRow]}
               onPress={() => router.push({ pathname: '/editar-perfil', params: { focus: '2fa' } })}
@@ -259,9 +237,7 @@ export default function Dashboard({
             </Pressable>
           </Animated.View>
 
-          {/* Azul en vez de naranja/amarillo: ese color ya se usa como aviso de "2FA Inactivo" y
-              verificación de vida pendiente (ver textOrange); reutilizarlo acá lo hacía leerse
-              como advertencia en vez de una acción normal de navegación. */}
+          {/* Azul en vez de naranja: ese color ya se usa como aviso (2FA/verificación pendiente). */}
           <Animated.View style={[animatedInheritancesBtnStyle, { marginTop: 16 }]}>
             <View style={styles.inheritancesBtnWrapper}>
               <Pressable
@@ -272,8 +248,6 @@ export default function Dashboard({
               >
                 <Text style={styles.addButtonBlueText}>Mis herencias</Text>
               </Pressable>
-              {/* Mismo dato que el banner de arriba (pendingHerenciasCount): un aviso visible
-                  sin necesidad de leer el banner completo. */}
               {pendingHerenciasCount > 0 && (
                 <View style={styles.inheritancesBtnDot} />
               )}
@@ -288,7 +262,7 @@ export default function Dashboard({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#DAF8BD', // Fondo general verde claro pastel
+    backgroundColor: '#DAF8BD',
   },
   centeredWrapper: {
     width: '100%',
@@ -348,7 +322,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 32,
-    paddingBottom: 24, // Reducido para quitar el espacio sobrante innecesario
+    paddingBottom: 24,
   },
   pendingBanner: {
     flexDirection: 'row',
@@ -392,9 +366,9 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   card: {
-    backgroundColor: '#EEFDE2', // Fondo ligeramente más claro que el general (#DAF8BD)
+    backgroundColor: '#EEFDE2',
     borderWidth: 1,
-    borderColor: '#C1E3A4', // Borde sutil gris/verde
+    borderColor: '#C1E3A4',
     borderRadius: 20,
     ...Platform.select({
       ios: {
@@ -447,9 +421,9 @@ const styles = StyleSheet.create({
   },
   addButtonGreen: {
     marginTop: 28,
-    backgroundColor: '#EEFDE2', // Fondo verde claro pastel
+    backgroundColor: '#EEFDE2',
     borderWidth: 1.5,
-    borderColor: '#2E7D32', // Borde verde oscuro
+    borderColor: '#2E7D32',
     borderRadius: 16,
     paddingVertical: 18,
     alignItems: 'center',
@@ -461,13 +435,13 @@ const styles = StyleSheet.create({
     color: '#2E7D32',
   },
   inheritancesBtnWrapper: {
-    // 'relative' para poder anclar el puntito de notificación en una esquina del botón.
+    // Permite anclar el puntito de notificación en una esquina del botón.
     position: 'relative',
   },
   addButtonBlue: {
-    backgroundColor: '#E7F1FA', // Fondo azul claro pastel (coherente con el degradé del header)
+    backgroundColor: '#E7F1FA',
     borderWidth: 1.5,
-    borderColor: '#2D6E9E', // Borde azul
+    borderColor: '#2D6E9E',
     borderRadius: 16,
     paddingVertical: 18,
     alignItems: 'center',
@@ -485,9 +459,9 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: '#D32F2F', // Rojo de notificación (mismo tono que usamos para "rechazado")
+    backgroundColor: '#D32F2F',
     borderWidth: 2,
-    borderColor: '#DAF8BD', // Borde del color de fondo general, para que el punto no se vea pegado al botón
+    borderColor: '#DAF8BD',
   },
   notificationPill: {
     position: 'absolute',

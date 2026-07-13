@@ -1,11 +1,8 @@
 namespace Herencia.Data.Models;
 
 /// <summary>
-/// Documento subido por un heredero para acreditar el fallecimiento de un titular.
-/// Puede llegar de forma proactiva (cualquier heredero aceptado lo sube en cualquier
-/// momento) o por escalamiento (tras agotar el monitoreo de VerificacionVidaService).
-/// Un Administrador debe revisarlo y aprobarlo antes de liberar bienes: la sola
-/// subida nunca libera nada por si misma.
+/// Documento subido por un heredero para acreditar el fallecimiento de un titular. Un
+/// Administrador debe revisarlo y aprobarlo antes de liberar bienes.
 /// </summary>
 public class CertificadoDefuncion : EntidadBaseAuditable
 {
@@ -16,19 +13,14 @@ public class CertificadoDefuncion : EntidadBaseAuditable
 
     public Usuario UsuarioTitular { get; set; } = null!;
 
-    /// <summary>
-    /// El heredero que subio el documento. Debe tener, al momento de la subida, al
-    /// menos una AsignacionHerencia Aceptada sobre un activo de UsuarioTitularId.
-    /// </summary>
+    /// <summary>El heredero que subio el documento (debe tener una AsignacionHerencia Aceptada sobre un activo del titular).</summary>
     public int SubidoPorUsuarioId { get; set; }
 
     public Usuario SubidoPor { get; set; } = null!;
 
-    // Ruta generada por IAlmacenamientoArchivosService, nunca el nombre original:
-    // evita colisiones y problemas de path traversal.
+    // Ruta generada por IAlmacenamientoArchivosService, nunca el nombre original: evita colisiones y path traversal.
     public string RutaArchivo { get; set; } = string.Empty;
 
-    /// <summary>Nombre original del archivo, guardado solo como metadato para el panel de revision.</summary>
     public string NombreArchivoOriginal { get; set; } = string.Empty;
 
     public EstadoCertificadoDefuncion Estado { get; set; } = EstadoCertificadoDefuncion.Pendiente;
@@ -40,9 +32,6 @@ public class CertificadoDefuncion : EntidadBaseAuditable
 
     public DateTime? FechaRevision { get; set; }
 
-    /// <summary>
-    /// Motivo de rechazo, o del cambio automatico a CanceladoPorActividad. Nullable
-    /// porque no aplica a los demas estados.
-    /// </summary>
+    /// <summary>Motivo de rechazo o de cancelacion automatica por actividad. Null para los demas estados.</summary>
     public string? MotivoRechazo { get; set; }
 }

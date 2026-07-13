@@ -16,12 +16,10 @@ public class UsuarioService : IUsuarioService
 {
     private readonly IUsuarioRepository _usuarioRepository;
 
-    // Encapsula el algoritmo criptográfico (HMACSHA512) de hash/verificación de
-    // contraseñas, para que esa lógica de seguridad viva en un único lugar (ver SeguridadService).
+    // Encapsula el hash/verificación de contraseñas (HMACSHA512) en un único lugar.
     private readonly ISeguridadService _seguridadService;
 
-    // Se usa únicamente en CrearUsuarioAsync, para reclamar invitaciones pendientes
-    // (AsignacionHerencia.UsuarioId == null) que ya nombraban a este email como beneficiario.
+    // Usado en CrearUsuarioAsync para reclamar invitaciones pendientes a este email.
     private readonly IAsignacionHerenciaRepository _asignacionHerenciaRepository;
 
     // Se usa únicamente para enviar el código de doble factor de autenticación.
@@ -50,8 +48,7 @@ public class UsuarioService : IUsuarioService
             throw new ReglaNegocioException("El nombre del usuario no puede estar vacio.");
         }
 
-        // Regex simple, no 100% RFC-compliant, pero suficiente para rechazar entradas
-        // claramente inválidas antes de persistirlas.
+        // Regex simple, no RFC-compliant, pero suficiente para rechazar entradas inválidas.
         if (string.IsNullOrWhiteSpace(usuarioCreacionDTO.Email) ||
             !Regex.IsMatch(usuarioCreacionDTO.Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
         {
@@ -63,8 +60,7 @@ public class UsuarioService : IUsuarioService
             throw new ReglaNegocioException("La contrasena debe tener al menos 6 caracteres.");
         }
 
-        // DNI argentino: solo se valida el formato estructural (7 u 8 dígitos), no la
-        // existencia real del documento (requeriría integrar con un organismo oficial).
+        // DNI argentino: solo se valida el formato (7-8 dígitos), no la existencia real.
         if (string.IsNullOrWhiteSpace(usuarioCreacionDTO.Dni) ||
             !Regex.IsMatch(usuarioCreacionDTO.Dni, @"^\d{7,8}$"))
         {
@@ -75,9 +71,8 @@ public class UsuarioService : IUsuarioService
 
         try
         {
-            // Se valida unicidad explícitamente en vez de esperar a que el índice único de
-            // la base de datos (ver AppDbContext.OnModelCreating) rechace el INSERT: así se
-            // puede informar al cliente cuál de los dos campos ya está en uso.
+            // Se valida unicidad acá (no solo en el índice único de BD) para poder decir
+            // al cliente cuál de los dos campos ya está en uso.
             var usuarioConMismoEmail = await _usuarioRepository.ObtenerPorEmailAsync(usuarioCreacionDTO.Email.Trim());
             if (usuarioConMismoEmail is not null)
             {
@@ -92,9 +87,8 @@ public class UsuarioService : IUsuarioService
 
             _seguridadService.CrearPasswordHash(usuarioCreacionDTO.Password, out var passwordHash, out var passwordSalt);
 
-            // El mapeo manual DTO -> Entidad impide que el cliente establezca un Id, un
-            // PasswordHash falso o una FechaCreacion arbitraria: esos campos ni siquiera
-            // existen en UsuarioCreacionDTO.
+            // Mapeo manual: evita que el cliente establezca Id, PasswordHash o FechaCreacion,
+            // campos que ni siquiera existen en UsuarioCreacionDTO.
             var usuario = new Usuario
             {
                 Nombre = usuarioCreacionDTO.Nombre.Trim(),
@@ -109,9 +103,7 @@ public class UsuarioService : IUsuarioService
 
             await _usuarioRepository.AgregarAsync(usuario);
 
-            // Reclamo automático: las invitaciones creadas antes de que este email tuviera
-            // cuenta (UsuarioId null, ver AsignacionHerenciaService.CrearAsignacionesAsync)
-            // se vinculan ahora al usuario recién creado.
+            // Reclamo automático de invitaciones creadas antes de que este email tuviera cuenta.
             var invitacionesPendientes = await _asignacionHerenciaRepository.ObtenerPendientesPorEmailAsync(usuario.Email);
 
             foreach (var invitacion in invitacionesPendientes)
@@ -131,8 +123,7 @@ public class UsuarioService : IUsuarioService
         }
         catch (Exception ex)
         {
-            // El detalle técnico real (ex) nunca se expone al llamador; se conserva solo
-            // como InnerException para diagnóstico interno. Mismo criterio en todo el archivo.
+            // El detalle técnico (ex) no se expone al llamador, solo queda como InnerException.
             throw new ReglaNegocioException("Ocurrio un error al procesar el usuario.", ex);
         }
     }
@@ -253,9 +244,8 @@ public class UsuarioService : IUsuarioService
                 throw new RecursoNoEncontradoException($"No se encontro el usuario con Id {id}.");
             }
 
-            // La cascada configurada en AppDbContext elimina también sus activos digitales
-            // otorgados. Si el usuario todavía tiene herencias recibidas pendientes, en
-            // cambio, la base de datos rechaza el borrado (Restrict, no Cascade).
+            // Cascade en AppDbContext borra sus activos digitales; si tiene herencias
+            // recibidas pendientes, la BD rechaza el borrado (Restrict, no Cascade).
             await _usuarioRepository.EliminarAsync(id);
         }
         catch (RecursoNoEncontradoException)
@@ -280,9 +270,8 @@ public class UsuarioService : IUsuarioService
 
             if (usuario is null)
             {
-                // El mensaje no distingue "el email no existe" de ningún otro motivo: es
-                // responsabilidad del controller decidir el texto exacto que ve el cliente
-                // en un login fallido, para no permitir enumerar cuentas registradas.
+                // Mensaje genérico a propósito: evita que un login fallido permita
+                // enumerar cuentas registradas.
                 throw new RecursoNoEncontradoException($"No se encontro un usuario con el email '{email}'.");
             }
 
@@ -326,8 +315,7 @@ public class UsuarioService : IUsuarioService
                 throw new RecursoNoEncontradoException($"No se encontro el usuario con Id {usuarioId}.");
             }
 
-            // Se exige demostrar conocimiento de la contraseña actual (comparación en
-            // tiempo constante vía ISeguridadService) antes de permitir el cambio.
+            // Se exige la contraseña actual (comparación en tiempo constante) antes del cambio.
             var passwordActualValida = _seguridadService.VerificarPasswordHash(
                 cambiarPasswordDTO.PasswordActual,
                 usuario.PasswordHash,
@@ -371,16 +359,14 @@ public class UsuarioService : IUsuarioService
         {
             var usuario = await _usuarioRepository.ObtenerPorEmailAsync(email.Trim());
 
-            // Deliberadamente no se lanza RecursoNoEncontradoException: se devuelve null y
-            // es el controller quien decide el mensaje (siempre el mismo, exista o no la
-            // cuenta), para no permitir enumerar emails registrados.
+            // No se lanza RecursoNoEncontradoException: devuelve null para que el mensaje
+            // al cliente sea siempre el mismo y no permita enumerar emails registrados.
             if (usuario is null)
             {
                 return null;
             }
 
-            // Token de un solo uso, criptográficamente aleatorio (256 bits de entropía) y
-            // de vida corta (1 hora): un link de reseteo viejo no debería servir para siempre.
+            // Token de un solo uso, 256 bits de entropía, vida corta (1 hora).
             var token = RandomNumberGenerator.GetHexString(64);
 
             usuario.PasswordResetToken = token;
@@ -413,8 +399,7 @@ public class UsuarioService : IUsuarioService
         {
             var usuario = await _usuarioRepository.ObtenerPorPasswordResetTokenAsync(resetearPasswordDTO.Token);
 
-            // Mensaje genérico a propósito: no distingue "el token no existe" de "existe
-            // pero ya venció", mismo criterio anti-enumeración que el login.
+            // Mensaje genérico a propósito, mismo criterio anti-enumeración que el login.
             if (usuario is null || usuario.PasswordResetExpiracion is null || usuario.PasswordResetExpiracion < DateTime.UtcNow)
             {
                 throw new ReglaNegocioException("El token de reseteo es invalido o ya expiro.");
@@ -457,10 +442,8 @@ public class UsuarioService : IUsuarioService
                 throw new RecursoNoEncontradoException($"No se encontro el usuario con Id {usuarioId}.");
             }
 
-            // RandomNumberGenerator.GetInt32 (CSPRNG) genera un entero en [100000, 999999].
-            // El espacio de 900.000 combinaciones es mucho más chico que el del token de
-            // reseteo (256 bits); es una limitación conocida y aceptada de cualquier código
-            // corto por email/SMS, compensada por la ventana corta (10 min) y el uso único.
+            // Espacio de 900.000 combinaciones (mucho menor al token de reseteo), limitación
+            // aceptada de cualquier código corto, compensada con ventana de 10 min y uso único.
             var codigo = System.Security.Cryptography.RandomNumberGenerator.GetInt32(100_000, 1_000_000).ToString();
 
             usuario.CodigoDobleFactor = codigo;
@@ -500,8 +483,7 @@ public class UsuarioService : IUsuarioService
                 throw new RecursoNoEncontradoException($"No se encontro el usuario con Id {usuarioId}.");
             }
 
-            // Mensaje genérico, mismo criterio anti-enumeración: no distingue "no hay
-            // código pendiente" de "no coincide" de "ya venció".
+            // Mensaje genérico, mismo criterio anti-enumeración que el resto del archivo.
             if (usuario.CodigoDobleFactor is null
                 || usuario.CodigoDobleFactorExpiracion is null
                 || usuario.CodigoDobleFactorExpiracion < DateTime.UtcNow
@@ -581,17 +563,14 @@ public class UsuarioService : IUsuarioService
             throw new ReglaNegocioException("La fecha de nacimiento no puede ser futura.");
         }
 
-        // Restar solo los años calendario sobreestima la edad de quien todavía no cumplió
-        // años este año; se corrige restando 1 si el cumpleaños de este año no llegó aún.
+        // Se corrige restando 1 si el cumpleaños de este año todavía no llegó.
         var edad = hoy.Year - fechaNacimiento.Year;
         if (fechaNacimiento.Date > hoy.AddYears(-edad))
         {
             edad--;
         }
 
-        // La mayoría de edad (18 años) no es una elección de producto: el sistema decide
-        // la liberación de bienes hacia terceros, lo que exige la capacidad legal plena que
-        // el Codigo Civil y Comercial argentino reconoce recien a partir de los 18 anios (Art. 25).
+        // 18 años: capacidad legal plena requerida para liberar bienes a terceros (CCyC Art. 25).
         if (edad < 18)
         {
             throw new ReglaNegocioException("Debes ser mayor de edad (18 anios) para registrarte.");
@@ -604,8 +583,7 @@ public class UsuarioService : IUsuarioService
         }
     }
 
-    // Centraliza la conversión Usuario -> UsuarioDTO; evita repetir el mapeo y el riesgo de
-    // filtrar accidentalmente PasswordHash/PasswordSalt en algún punto de salida.
+    // Centraliza el mapeo para no filtrar PasswordHash/PasswordSalt en algún punto de salida.
     private static UsuarioDTO MapearADTO(Usuario usuario)
     {
         return new UsuarioDTO

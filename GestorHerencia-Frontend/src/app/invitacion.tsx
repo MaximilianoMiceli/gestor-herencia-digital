@@ -1,10 +1,3 @@
-/**
- * @file invitacion.tsx
- * @description Pantalla pública de invitación de heredero: muestra la invitación y permite
- * aceptarla o rechazarla. Si quien la abre no tiene sesión activa, "Aceptar" primero pide
- * iniciar sesión o registrarse (con el email de la invitación precargado) antes de procesarla.
- */
-
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -54,11 +47,6 @@ export default function InvitacionScreen() {
     fetchInvitacion();
   }, [id]);
 
-  /**
-   * Procesa la aceptación de la invitación.
-   * Si el usuario ya está autenticado, llama directamente a la API.
-   * Si el usuario es anónimo, despliega el modal de confirmación de cuenta (Frame 22).
-   */
   const handleAceptar = async () => {
     if (token && id) {
       setProcessing(true);
@@ -74,15 +62,10 @@ export default function InvitacionScreen() {
         setProcessing(false);
       }
     } else {
-      // Usuario anónimo -> Desplegar diálogo del Frame 22
       setShowAuthModal(true);
     }
   };
 
-  /**
-   * Procesa el rechazo de la invitación.
-   * Elimina el registro del beneficiario de la base de datos de manera definitiva.
-   */
   const handleRechazar = () => {
     Alert.alert(
       'Rechazar Invitación',
@@ -123,15 +106,12 @@ export default function InvitacionScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Branding de la App */}
       <View style={styles.logoContainer}>
         <Text style={styles.titlePrefix}>Gestor de</Text>
         <GradientText text="Herencia Digital" style={styles.titleGradient} />
       </View>
 
-      {/* TARJETA BLANCA DE INVITACIÓN (Fiel al Frame 21) */}
       <View style={styles.invitationCard}>
-        {/* Icono de Correo Recibido */}
         <View style={styles.iconCircle}>
           <Mail size={44} color="#1a2e2e" strokeWidth={1.5} />
         </View>
@@ -147,7 +127,6 @@ export default function InvitacionScreen() {
         <Text style={styles.ownerName}>{invitacion?.emisorNombre}</Text>
       </View>
 
-      {/* BOTONERA INFERIOR */}
       <View style={styles.buttonContainer}>
         {processing ? (
           <ActivityIndicator size="large" color="#23856C" style={{ marginVertical: 20 }} />
@@ -164,7 +143,6 @@ export default function InvitacionScreen() {
         )}
       </View>
 
-      {/* MODAL TRANSLÚCIDO "¿YA TENES CUENTA?" (Fiel al Frame 22) */}
       <Modal
         visible={showAuthModal}
         transparent
@@ -213,7 +191,7 @@ export default function InvitacionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#DAF8BD', // Fondo verde claro pastel unificado
+    backgroundColor: '#DAF8BD',
     paddingHorizontal: 24,
     justifyContent: 'space-between',
     paddingTop: 80,
@@ -310,7 +288,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   acceptButton: {
-    backgroundColor: '#2E7D32', // Botón verde oscuro del mockup
+    backgroundColor: '#2E7D32',
     height: 52,
     borderRadius: 12,
     justifyContent: 'center',
@@ -334,7 +312,7 @@ const styles = StyleSheet.create({
     fontFamily: 'MPLUS2-Bold',
   },
   rejectButton: {
-    backgroundColor: '#FFFFFF', // Botón blanco con borde del mockup
+    backgroundColor: '#FFFFFF',
     height: 52,
     borderRadius: 12,
     borderWidth: 1.5,
@@ -348,10 +326,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'MPLUS2-Bold',
   },
-  // Estilos del Modal del Frame 22
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(26, 46, 46, 0.45)', // Filtro translúcido oscuro
+    backgroundColor: 'rgba(26, 46, 46, 0.45)',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 36,
@@ -377,7 +354,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   modalLoginButton: {
-    backgroundColor: '#02213D', // Botón azul marino del mockup
+    backgroundColor: '#02213D',
     height: 48,
     borderRadius: 12,
     justifyContent: 'center',
@@ -391,7 +368,7 @@ const styles = StyleSheet.create({
     fontFamily: 'MPLUS2-Bold',
   },
   modalRegisterButton: {
-    backgroundColor: '#2E7D32', // Botón verde del mockup
+    backgroundColor: '#2E7D32',
     height: 48,
     borderRadius: 12,
     justifyContent: 'center',

@@ -1,10 +1,3 @@
-/**
- * @file animated-icon.tsx
- * @description Variante nativa (iOS/Android) del logotipo animado de bienvenida y de la
- * cortina que cubre la splash screen nativa mientras la app termina de montarse.
- * Ver animated-icon.web.tsx para la variante Web (sin splash nativa ni mismo soporte de gradiente).
- */
-
 import { Image } from 'expo-image';
 import * as SplashScreen from 'expo-splash-screen';
 import { useState } from 'react';
@@ -12,24 +5,17 @@ import { Dimensions, StyleSheet, View } from 'react-native';
 import Animated, { Easing, Keyframe } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
-// Escala inicial del ícono de splash: relativa a la altura de pantalla para que la
-// cortina cubra el logo nativo (90pt) sin importar el tamaño del dispositivo.
+// Relativa a la altura de pantalla para que la cortina cubra el logo nativo (90pt)
+// sin importar el tamaño del dispositivo.
 const INITIAL_SCALE_FACTOR = Dimensions.get('screen').height / 90;
-// Duración (ms) compartida por las animaciones de entrada/salida del logo y la cortina.
 const DURATION = 600;
 
-/**
- * Componente que muestra una cortina sobre la pantalla nativa de carga (Splash)
- * y ejecuta una animación de salida (fade-out) suave una vez que la app está lista.
- */
 export function AnimatedSplashOverlay() {
   const [animate, setAnimate] = useState(false);
   const [visible, setVisible] = useState(true);
 
   if (!visible) return null;
 
-  // Cortina que imita el logo de la splash nativa (opaca) y luego se desvanece,
-  // para que la transición entre la splash de Expo y la UI de la app no se note.
   const splashKeyframe = new Keyframe({
     0: {
       transform: [{ scale: 1 }],
@@ -51,12 +37,12 @@ export function AnimatedSplashOverlay() {
 
   const image = <Image style={styles.image} source={require('@/assets/images/expo-logo.png')} />;
 
-  // Antes de animar, se muestra una View estática (sin Animated) para evitar un parpadeo:
-  // recién al terminar el layout ocultamos la splash nativa y activamos la animación.
+  // Antes de animar se muestra una View estática para evitar un parpadeo: recién al
+  // terminar el layout se oculta la splash nativa y se activa la animación.
   return animate ? (
     <Animated.View
-      // El callback de entrada corre en el hilo de UI (worklet); scheduleOnRN reprograma
-      // setVisible(false) en el hilo de JS, que es el único que puede tocar estado de React.
+      // El callback corre en el hilo de UI (worklet); scheduleOnRN lo reprograma en JS,
+      // el único hilo que puede tocar estado de React.
       entering={splashKeyframe.duration(DURATION).withCallback((finished) => {
         'worklet';
         if (finished) {
@@ -68,8 +54,7 @@ export function AnimatedSplashOverlay() {
     </Animated.View>
   ) : (
     <View
-      // onLayout garantiza que la cortina ya está pintada en pantalla antes de destapar
-      // la splash nativa, evitando un frame en blanco entre ambas.
+      // Garantiza que la cortina ya está pintada antes de destapar la splash nativa.
       onLayout={() => {
         SplashScreen.hideAsync().finally(() => {
           setAnimate(true);
@@ -81,8 +66,7 @@ export function AnimatedSplashOverlay() {
   );
 }
 
-// Fondo con gradiente: arranca "gigante" (cubriendo toda la pantalla, como la splash
-// nativa) y se encoge elásticamente hasta su tamaño final de ícono (128x128).
+// Arranca cubriendo toda la pantalla (como la splash nativa) y se encoge hasta 128x128.
 const keyframe = new Keyframe({
   0: {
     transform: [{ scale: INITIAL_SCALE_FACTOR }],
@@ -93,8 +77,7 @@ const keyframe = new Keyframe({
   },
 });
 
-// Logo: aparece con un pequeño delay respecto al fondo (mantiene opacidad 0 hasta el
-// 40% de la animación) para que no se vea "flotando" mientras el fondo todavía se encoge.
+// Mantiene opacidad 0 hasta el 40% para no verse "flotando" mientras el fondo se encoge.
 const logoKeyframe = new Keyframe({
   0: {
     transform: [{ scale: 1.3 }],
@@ -112,8 +95,7 @@ const logoKeyframe = new Keyframe({
   },
 });
 
-// Brillo de fondo: 20 vueltas completas (7200°) estiradas a varios minutos de duration
-// para que se perciba como un giro lento y sutil, no como una animación que "termina".
+// 20 vueltas (7200°) estiradas a varios minutos para un giro lento que no se perciba "terminar".
 const glowKeyframe = new Keyframe({
   0: {
     transform: [{ rotateZ: '0deg' }],
@@ -123,10 +105,6 @@ const glowKeyframe = new Keyframe({
   },
 });
 
-/**
- * Logotipo animado para la pantalla de bienvenida.
- * Incluye un efecto de brillo giratorio en segundo plano y una animación de entrada elástica.
- */
 export function AnimatedIcon() {
   return (
     <View style={styles.iconContainer}>

@@ -1,17 +1,6 @@
-/**
- * @file verificacion-vida.tsx
- * @description Configuración del sistema de Verificación de Vida ("proof of life"): el
- * mecanismo que determina cuándo se libera una herencia a los beneficiarios.
- *
- * La lógica de negocio vive en el backend (VerificacionVidaBackgroundService, job diario)
- * que escala recordatorios y libera la herencia si el titular no responde a tiempo; esta
- * pantalla solo lee/escribe esa configuración (GET/PUT /api/verificacion-vida/configuracion)
- * y dispara el check-in (POST .../check-in) que resetea el plazo del lado del servidor.
- *
- * El "contacto de confianza" es el Id de un Usuario (ContactoConfianzaId), no un email de
- * texto libre: se elige de los beneficiarios ya ACEPTADOS que tienen cuenta propia.
- */
-
+// La lógica de negocio vive en el backend (VerificacionVidaBackgroundService, job diario)
+// que escala recordatorios y libera la herencia si el titular no responde a tiempo; esta
+// pantalla solo lee/escribe esa configuración y dispara el check-in.
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -68,32 +57,27 @@ export default function VerificacionVidaScreen() {
   const [saving, setSaving] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
 
-  // Estados de configuración, ya en las unidades que espera el backend (frecuencia en
-  // meses, método como código numérico, contacto como Id de usuario).
   const [isActive, setIsActive] = useState(false);
   const [frecuenciaMeses, setFrecuenciaMeses] = useState(3);
   const [metodo, setMetodo] = useState<MetodoNotificacion>(1);
   const [contactoConfianzaId, setContactoConfianzaId] = useState<number | null>(null);
   const [ultimoCheckIn, setUltimoCheckIn] = useState<string | null>(null);
 
-  // Estado granular del monitoreo (ver VerificacionVidaBackgroundService): distingue si
-  // ya se envió un recordatorio o si el protocolo de fallecimiento se activó, más allá
-  // del simple switch Activo/Inactivo.
+  // Estado granular del monitoreo: distingue recordatorio enviado o protocolo de
+  // fallecimiento activado, más allá del simple switch Activo/Inactivo.
   const [estado, setEstado] = useState<EstadoVerificacionVida>(1);
   const [recordatoriosEnviados, setRecordatoriosEnviados] = useState(0);
   const [fechaUltimoRecordatorio, setFechaUltimoRecordatorio] = useState<string | null>(null);
   const [fechaProtocoloActivado, setFechaProtocoloActivado] = useState<string | null>(null);
 
-  // Beneficiarios elegibles como contacto de confianza: el backend exige que ya tengan
-  // cuenta propia (usuarioBeneficiarioId != null) Y que hayan aceptado (estado === 2)
-  // al menos una herencia de este titular.
+  // Elegibles como contacto de confianza: deben tener cuenta propia y haber aceptado
+  // (estado === 2) al menos una herencia de este titular.
   const [contactosElegibles, setContactosElegibles] = useState<BeneficiarioResumen[]>([]);
 
   const [showFrecuenciaDropdown, setShowFrecuenciaDropdown] = useState(false);
   const [showMetodoDropdown, setShowMetodoDropdown] = useState(false);
   const [showContactoDropdown, setShowContactoDropdown] = useState(false);
 
-  // Cargar configuración real del backend + la lista de contactos elegibles al montar.
   useEffect(() => {
     if (!token) {
       router.replace('/(auth)/welcome');
@@ -131,11 +115,8 @@ export default function VerificacionVidaScreen() {
     cargarDatos();
   }, [token]);
 
-  /**
-   * Activar el switch exige, del lado del cliente, tener ya elegido un contacto (la
-   * misma regla que el backend aplica al guardar): evita un viaje de red innecesario
-   * que el servidor rechazaría igual con un 400.
-   */
+  // Exige contacto elegido antes de activar (misma regla del backend): evita un viaje
+  // de red que el servidor rechazaría igual con un 400.
   const handleToggleSwitch = (value: boolean) => {
     if (value && !contactoConfianzaId) {
       Alert.alert(
@@ -147,7 +128,6 @@ export default function VerificacionVidaScreen() {
     setIsActive(value);
   };
 
-  /** Persiste la configuración; exige contacto de confianza si el monitoreo va activo (misma regla que valida el backend). */
   const handleGuardarConfiguracion = async () => {
     if (isActive && !contactoConfianzaId) {
       Alert.alert('Contacto requerido', 'Debés elegir un contacto de confianza para activar el monitoreo.');
@@ -175,11 +155,7 @@ export default function VerificacionVidaScreen() {
     }
   };
 
-  /**
-   * Confirma actividad ante el backend ("sigo con vida"): resetea el plazo de vencimiento
-   * y cancela cualquier certificado de defunción pendiente sobre la cuenta. Simula la
-   * acción real de tocar una notificación push de chequeo.
-   */
+  // Resetea el plazo de vencimiento y cancela cualquier certificado pendiente sobre la cuenta.
   const handleCheckIn = async () => {
     setCheckingIn(true);
     try {
@@ -251,8 +227,6 @@ export default function VerificacionVidaScreen() {
             />
           </View>
 
-          {/* Solo se muestra una vez que arrancó el escalamiento (hubo recordatorios o
-              se activó el protocolo); si no, no hay nada que reportar. */}
           {isActive && (recordatoriosEnviados > 0 || fechaProtocoloActivado) && (
             <View style={styles.detailCard}>
               <Text style={styles.detailRow}>
@@ -469,7 +443,7 @@ export default function VerificacionVidaScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#DAF8BD', // Fondo verde claro pastel
+    backgroundColor: '#DAF8BD',
   },
   loadingContainer: {
     flex: 1,
@@ -536,7 +510,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   statusActive: {
-    color: '#39C55C', // Verde activo Figma
+    color: '#39C55C',
   },
   statusInactive: {
     color: '#8A9E95',
@@ -594,9 +568,9 @@ const styles = StyleSheet.create({
   },
   dropdownButton: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12, // Menos redondeado (rectangular suave)
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#C1E3A4', // Borde verde claro suave
+    borderColor: '#C1E3A4',
     height: 48,
     paddingHorizontal: 16,
     flexDirection: 'row',
@@ -609,17 +583,17 @@ const styles = StyleSheet.create({
     color: '#000000',
   },
   dropdownButtonActive: {
-    borderColor: '#2E7D32', // Borde verde oscuro activo
+    borderColor: '#2E7D32',
     borderWidth: 1.5,
   },
   dropdownButtonTextActive: {
-    color: '#2E7D32', // Texto verde oscuro activo
+    color: '#2E7D32',
   },
   dropdownInlineList: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12, // Menos redondeado
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#C1E3A4', // Borde verde claro suave
+    borderColor: '#C1E3A4',
     padding: 10,
     marginTop: 6,
     gap: 2,
@@ -627,10 +601,10 @@ const styles = StyleSheet.create({
   dropdownInlineOption: {
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 8, // Esquinas más suaves para la selección interna
+    borderRadius: 8,
   },
   dropdownInlineOptionSelected: {
-    backgroundColor: '#DAF8BD', // Fondo verde claro pastel de selección
+    backgroundColor: '#DAF8BD',
   },
   dropdownInlineOptionText: {
     fontFamily: 'MPLUS2-Regular',
@@ -639,7 +613,7 @@ const styles = StyleSheet.create({
   },
   dropdownInlineOptionTextSelected: {
     fontFamily: 'MPLUS2-Bold',
-    color: '#2E7D32', // Texto verde oscuro para la opción seleccionada
+    color: '#2E7D32',
   },
   dropdownEmptyContainer: {
     padding: 12,
@@ -652,7 +626,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   infoCard: {
-    backgroundColor: '#CDE5E9', // Fondo celeste/azul claro (Figma Frame 11)
+    backgroundColor: '#CDE5E9',
     borderWidth: 1,
     borderColor: '#7FAAB5',
     borderRadius: 16,
@@ -672,7 +646,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   saveButton: {
-    backgroundColor: '#39C55C', // Verde Figma
+    backgroundColor: '#39C55C',
     borderRadius: 12,
     height: 48,
     alignItems: 'center',

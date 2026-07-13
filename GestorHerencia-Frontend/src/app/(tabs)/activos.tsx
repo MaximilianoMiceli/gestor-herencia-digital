@@ -1,12 +1,3 @@
-/**
- * @file activos.tsx
- * @description Pantalla de activos guardados (Frame 5).
- * 
- * Permite buscar por nombre y filtrar por tipo en tiempo real consumiendo
- * el endpoint GET /api/activos. Dispone de un botón "Detalles" para editar o eliminar cada activo.
- * Muestra un banner de éxito temporal al eliminar un activo.
- */
-
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -47,7 +38,6 @@ export default function ActivosScreen() {
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [showSuccessBanner, setShowSuccessBanner] = useState(false);
 
-  // Tipos de activos disponibles
   const tiposActivo = [
     { label: 'Todos', value: null },
     { label: 'Cuenta bancaria', value: 0 },
@@ -86,7 +76,6 @@ export default function ActivosScreen() {
     }
   };
 
-  // Recargar la lista automáticamente cada vez que el usuario enfoca esta pestaña
   useFocusEffect(
     useCallback(() => {
       fetchActivos();
@@ -99,7 +88,6 @@ export default function ActivosScreen() {
     setRefreshing(false);
   };
 
-  // Controlar la visualización del banner de éxito al eliminar
   useEffect(() => {
     if (deleted === 'true') {
       setShowSuccessBanner(true);
@@ -111,9 +99,6 @@ export default function ActivosScreen() {
     }
   }, [deleted]);
 
-  /**
-   * Mapea el número del enum TipoActivoDigital a un String descriptivo.
-   */
   const mapearTipoActivo = (tipoVal: number): string => {
     switch (tipoVal) {
       case 0: return 'Cuenta bancaria';
@@ -259,7 +244,7 @@ export default function ActivosScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#DAF8BD', // Fondo verde claro pastel
+    backgroundColor: '#DAF8BD',
   },
   header: {
     paddingHorizontal: 20,
@@ -293,7 +278,7 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     flex: 1,
-    backgroundColor: '#E6EAE7', // Fondo gris claro buscador
+    backgroundColor: '#E6EAE7',
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -308,7 +293,7 @@ const styles = StyleSheet.create({
     color: '#1a2e2e',
     fontFamily: 'MPLUS2-Regular',
     fontSize: 14,
-    padding: 0, // Remueve paddings internos por defecto
+    padding: 0,
   },
   filterButton: {
     backgroundColor: '#E6EAE7',
@@ -405,17 +390,16 @@ const styles = StyleSheet.create({
   },
   detailsButton: {
     borderWidth: 1.5,
-    borderColor: '#005B9A', // Borde azul mockup
+    borderColor: '#005B9A',
     borderRadius: 12,
     paddingVertical: 6,
     paddingHorizontal: 16,
   },
   detailsButtonText: {
-    color: '#005B9A', // Texto azul mockup
+    color: '#005B9A',
     fontFamily: 'MPLUS2-Bold',
     fontSize: 14,
   },
-  // Banner de éxito
   successBanner: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
@@ -441,7 +425,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#1a2e2e',
   },
-  // Empty State
   emptyStateCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,

@@ -9,11 +9,6 @@ using Microsoft.AspNetCore.Mvc;
 namespace Herencia.Api.Controllers;
 
 /// <summary>Expone el recurso Usuario por HTTP: alta, consulta, actualizacion y seguridad de cuenta.</summary>
-/// <remarks>
-/// Los datos de un Usuario (Nombre, Email) son informacion personal, por lo que se protege
-/// con [Authorize] a nivel de clase ("secure by default"), marcando explicitamente con
-/// [AllowAnonymous] el unico endpoint que necesita quedar publico (Crear).
-/// </remarks>
 [ApiController]
 [Authorize]
 [Route("api/usuarios")]
@@ -21,8 +16,7 @@ public class UsuariosController : ControllerBase
 {
     private readonly IUsuarioService _usuarioService;
 
-    // Se inyecta tambien IActivoDigitalService porque este controller expone la ruta anidada
-    // "GET api/usuarios/{id}/activos" (los activos digitales de un usuario puntual).
+    // Expone la ruta anidada "GET api/usuarios/{id}/activos".
     private readonly IActivoDigitalService _activoDigitalService;
 
     private readonly ILogger<UsuariosController> _logger;
@@ -68,8 +62,7 @@ public class UsuariosController : ControllerBase
     {
         try
         {
-            // Ownership: un usuario solo puede ver su propio perfil (el sistema no tiene, para
-            // este endpoint, otra regla de acceso). El Id de la URL se compara contra el del token.
+            // Ownership: solo puede acceder a su propio perfil (Id de URL vs Id del token).
             var usuarioAutenticadoId = ObtenerUsuarioIdAutenticado();
 
             if (usuarioAutenticadoId is null)
@@ -105,9 +98,7 @@ public class UsuariosController : ControllerBase
     {
         try
         {
-            // Misma verificacion de ownership que ObtenerPorId: un usuario solo puede listar
-            // los suyos. El endpoint hermano "GET /api/activos" resuelve el mismo caso de uso
-            // sin Id en la URL; esta ruta anidada se mantiene por compatibilidad.
+            // Ownership check.
             var usuarioAutenticadoId = ObtenerUsuarioIdAutenticado();
 
             if (usuarioAutenticadoId is null)
@@ -137,14 +128,7 @@ public class UsuariosController : ControllerBase
         }
     }
 
-    /// <summary>Crea una cuenta de usuario nueva.</summary>
-    /// <remarks>
-    /// [AllowAnonymous]: unico endpoint publico del controller (no tendria sentido exigir
-    /// estar autenticado para crear una cuenta). El flujo de auto-registro "oficial" para un
-    /// visitante anonimo es POST /api/auth/registro (AuthController), que reutiliza este
-    /// mismo servicio; este endpoint se mantiene por compatibilidad con el alta administrativa
-    /// ya implementada antes de existir el modulo de autenticacion.
-    /// </remarks>
+    /// <summary>Crea una cuenta de usuario nueva. Único endpoint público del controller.</summary>
     [AllowAnonymous]
     [HttpPost]
     public async Task<ActionResult<UsuarioDTO>> Crear(UsuarioCreacionDTO usuarioCreacionDTO)
@@ -186,7 +170,7 @@ public class UsuariosController : ControllerBase
 
         try
         {
-            // Ownership: un usuario solo puede editar su propio perfil.
+            // Ownership check.
             var usuarioAutenticadoId = ObtenerUsuarioIdAutenticado();
 
             if (usuarioAutenticadoId is null)
@@ -231,7 +215,7 @@ public class UsuariosController : ControllerBase
 
         try
         {
-            // Ownership: un usuario solo puede cambiar su propia contraseña.
+            // Ownership check.
             var usuarioAutenticadoId = ObtenerUsuarioIdAutenticado();
 
             if (usuarioAutenticadoId is null)
@@ -306,7 +290,7 @@ public class UsuariosController : ControllerBase
     {
         try
         {
-            // Ownership: un usuario solo puede eliminar su propia cuenta.
+            // Ownership check.
             var usuarioAutenticadoId = ObtenerUsuarioIdAutenticado();
 
             if (usuarioAutenticadoId is null)

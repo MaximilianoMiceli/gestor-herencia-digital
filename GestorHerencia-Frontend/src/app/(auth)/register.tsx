@@ -1,13 +1,3 @@
-/**
- * @file register.tsx
- * @description Pantalla pública de registro de cuentas (Register Screen).
- * 
- * Permite a los nuevos usuarios crear una cuenta en el sistema ingresando
- * su nombre, dirección de correo electrónico y contraseña.
- * Tras un registro exitoso, se notifica al usuario y se le redirige a la
- * pantalla de inicio de sesión (`/login`) para completar el flujo.
- */
-
 import React, { useState } from 'react';
 import { View, StyleSheet, Text, Alert, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -32,9 +22,6 @@ export default function RegisterScreen() {
   const [fechaNacimientoTexto, setFechaNacimientoTexto] = useState('');
   const [loading, setLoading] = useState(false);
 
-  /**
-   * Valida los campos localmente y realiza la llamada de registro al servidor.
-   */
   const handleRegister = async () => {
     if (!nombre || !email || !password || !confirmPassword || !dni || !fechaNacimientoTexto) {
       Alert.alert('Error', 'Todos los campos son obligatorios.');
@@ -46,15 +33,13 @@ export default function RegisterScreen() {
       return;
     }
 
-    // Mismo criterio que UsuarioService.CrearUsuarioAsync en el backend: se valida acá
-    // también para avisar sin esperar el viaje de red.
+    // Se valida también en frontend (misma regla que el backend) para avisar sin
+    // esperar el viaje de red.
     if (!DNI_REGEX.test(dni.trim())) {
       Alert.alert('Error', 'El DNI debe tener 7 u 8 dígitos numéricos.');
       return;
     }
 
-    // Misma regla que ValidarFechaNacimiento en el backend (fecha de calendario real +
-    // mayoría de edad).
     const fechaNacimiento = parsearFechaDDMMAAAA(fechaNacimientoTexto);
     if (!fechaNacimiento) {
       Alert.alert('Error', 'Ingresá una fecha de nacimiento válida (DD/MM/AAAA).');
@@ -67,10 +52,7 @@ export default function RegisterScreen() {
 
     setLoading(true);
     try {
-      // Se arma el string "AAAA-MM-DD" a mano desde los componentes locales, NUNCA con
-      // `fechaNacimiento.toISOString()`: ese método convierte a UTC primero, y en
-      // Argentina (UTC-3) eso puede correr la fecha un día hacia atrás (ej. medianoche
-      // del 01/01/1990 local cae en 1989-12-31 UTC).
+      // Se arma el ISO a mano: toISOString() convierte a UTC y puede correr la fecha un día.
       const anio = fechaNacimiento.getFullYear();
       const mes = String(fechaNacimiento.getMonth() + 1).padStart(2, '0');
       const dia = String(fechaNacimiento.getDate()).padStart(2, '0');
@@ -100,8 +82,7 @@ export default function RegisterScreen() {
   };
 
   return (
-    // behavior "padding" solo en iOS: es la plataforma donde el teclado tapa los inputs
-    // sin ese ajuste (Android ya lo resuelve con el modo de ventana por defecto).
+    // "padding" solo en iOS: Android ya evita que el teclado tape los inputs por defecto.
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}

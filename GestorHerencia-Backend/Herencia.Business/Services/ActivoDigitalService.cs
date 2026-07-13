@@ -15,15 +15,13 @@ public class ActivoDigitalService : IActivoDigitalService
 {
     private readonly IActivoDigitalRepository _activoDigitalRepository;
 
-    // Se usa además del repositorio de ActivoDigital para validar la regla de negocio
-    // "el usuario titular debe existir antes de crearle un activo".
+    // Usado para validar que el usuario titular exista antes de crearle un activo.
     private readonly IUsuarioRepository _usuarioRepository;
 
     private readonly IAlmacenamientoArchivosService _almacenamientoService;
     private readonly IConfiguration _configuration;
 
-    // Se valida el ContentType reportado por el cliente, no la extensión del nombre
-    // (trivial de falsificar). Misma lista que CertificadoDefuncionService.
+    // Se valida el ContentType, no la extensión del nombre (trivial de falsificar).
     private static readonly string[] TiposPermitidos =
     [
         "application/pdf",
@@ -79,7 +77,6 @@ public class ActivoDigitalService : IActivoDigitalService
         }
         catch (RecursoNoEncontradoException)
         {
-            // Ya es una excepción de negocio específica: se relanza sin envolver.
             throw;
         }
         catch (ReglaNegocioException)
@@ -88,7 +85,7 @@ public class ActivoDigitalService : IActivoDigitalService
         }
         catch (Exception ex)
         {
-            // Se evita exponer el detalle técnico (StackTrace, mensaje de EF/SQLite) al llamador.
+            // El detalle técnico (ex) no se expone al llamador, solo queda como InnerException.
             throw new ReglaNegocioException("Ocurrio un error al procesar el activo digital.", ex);
         }
     }
@@ -206,8 +203,7 @@ public class ActivoDigitalService : IActivoDigitalService
                 throw new RecursoNoEncontradoException($"No se encontro el activo digital con Id {id}.");
             }
 
-            // La cascada configurada en AppDbContext elimina también las asignaciones de
-            // herencia que dependan de este activo.
+            // Cascade en AppDbContext elimina también las asignaciones que dependan de este activo.
             await _activoDigitalRepository.EliminarAsync(id);
         }
         catch (RecursoNoEncontradoException)
@@ -228,8 +224,6 @@ public class ActivoDigitalService : IActivoDigitalService
         int usuarioId, int pagina, int limite, TipoActivoDigital? tipo, string? nombre)
     {
         // Normalización defensiva: pagina/limite llegan de un query string HTTP no confiable.
-        // Sin acotarlos, un cliente podría pedir "limite=999999" (anula el propósito de
-        // paginar) o "pagina=0/-1" (rompería Skip = (pagina - 1) * limite con un valor negativo).
         if (pagina < 1)
         {
             pagina = 1;
@@ -261,8 +255,7 @@ public class ActivoDigitalService : IActivoDigitalService
                 PaginaActual = pagina,
                 RegistrosPorPagina = limite,
                 TotalRegistros = total,
-                // Se castea a double antes de dividir (la división entera trunca) para que
-                // Math.Ceiling redondee hacia arriba y cubra la última página incompleta.
+                // Cast a double antes de dividir para que Math.Ceiling cubra la última página.
                 TotalPaginas = (int)Math.Ceiling(total / (double)limite)
             };
         }
@@ -307,7 +300,6 @@ public class ActivoDigitalService : IActivoDigitalService
                 throw new RecursoNoEncontradoException($"No se encontro el activo digital con Id {id}.");
             }
 
-            // "activos_digitales" es carpeta hermana de "certificados_defuncion": nunca comparten directorio.
             var rutaGuardada = await _almacenamientoService.GuardarArchivoAsync(
                 contenido, nombreArchivoOriginal, subcarpeta: "activos_digitales");
 

@@ -5,9 +5,8 @@ using Microsoft.Extensions.Logging;
 namespace Herencia.Business.Services;
 
 /// <summary>
-/// Única implementación de <see cref="INotificationService"/>. En vez de integrar
-/// proveedores reales (SMTP/SendGrid, Push, Twilio para SMS — fuera del alcance de esta
-/// etapa), deja constancia por consola de que la notificación "hubiera salido".
+/// Implementación de <see cref="INotificationService"/> que simula el envío dejando
+/// constancia por consola, en vez de integrar proveedores reales (SMTP, Push, SMS).
 /// </summary>
 public class NotificacionSimuladaService : INotificationService
 {

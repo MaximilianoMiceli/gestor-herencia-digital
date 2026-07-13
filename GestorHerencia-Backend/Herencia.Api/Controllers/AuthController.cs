@@ -53,9 +53,7 @@ public class AuthController : ControllerBase
         }
         catch (ReglaNegocioException ex)
         {
-            // Nombre vacio, email invalido, contraseña corta, email/DNI ya registrados, etc.
-            // Se loguea como Warning (no Error): es un dato invalido del cliente, no una
-            // falla del servidor.
+            // Warning (no Error): dato invalido del cliente, no falla del servidor.
             _logger.LogWarning(ex, "Registro de usuario rechazado: {Mensaje}", ex.Message);
             return BadRequest(new { mensaje = ex.Message });
         }
@@ -89,9 +87,7 @@ public class AuthController : ControllerBase
             }
             catch (RecursoNoEncontradoException)
             {
-                // Seguridad: se devuelve exactamente el mismo codigo/mensaje que "contraseña
-                // incorrecta" mas abajo, para no permitir "user enumeration" (deducir que
-                // emails estan registrados por la diferencia de respuesta).
+                // Mismo mensaje que "contraseña incorrecta": evita "user enumeration".
                 return Unauthorized(new { mensaje = "Credenciales invalidas." });
             }
 
@@ -105,10 +101,8 @@ public class AuthController : ControllerBase
                 return Unauthorized(new { mensaje = "Credenciales invalidas." });
             }
 
-            // Segundo factor (2FA por email): si esta habilitado, la contraseña correcta no
-            // alcanza todavia. Se envia un codigo y se corta el flujo devolviendo
-            // RequiereDobleFactor=true; el cliente completa el login con
-            // POST /api/auth/verificar-doble-factor.
+            // 2FA: si esta habilitado se envia un codigo y se corta el flujo con RequiereDobleFactor=true;
+            // el cliente completa el login con POST /api/auth/verificar-doble-factor.
             if (usuarioAutenticacion.DobleFactorHabilitado)
             {
                 await _usuarioService.GenerarYEnviarCodigoDobleFactorAsync(usuarioAutenticacion.Id);
@@ -120,9 +114,7 @@ public class AuthController : ControllerBase
                 });
             }
 
-            // Objeto Usuario transitorio (nunca persistido ni devuelto): solo para pasarle a
-            // ITokenService.CrearToken los datos que necesita. El Rol viaja tal cual esta
-            // persistido en este instante, para que el token refleje el permiso real y actual.
+            // Objeto Usuario transitorio (nunca persistido) solo para pasarle datos a ITokenService.CrearToken.
             var usuarioParaToken = new Usuario
             {
                 Id = usuarioAutenticacion.Id,
@@ -137,8 +129,7 @@ public class AuthController : ControllerBase
         }
         catch (AutenticacionException ex)
         {
-            // Fallo de configuracion del servidor (ej: falta la clave de firma), no
-            // responsabilidad del cliente: 500. El mensaje ya esta pensado para ser seguro de mostrar.
+            // Fallo de configuracion del servidor (ej: falta la clave de firma), no del cliente.
             _logger.LogError(ex, "Error al generar el token de autenticacion.");
             return StatusCode(StatusCodes.Status500InternalServerError, new { mensaje = ex.Message });
         }
@@ -198,10 +189,7 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>Primer paso del flujo de "olvide mi contraseña": solicita el envio de un enlace de reseteo.</summary>
-    /// <remarks>
-    /// Siempre devuelve el mismo mensaje de exito exista o no el email (mismo criterio anti
-    /// "user enumeration" que Login), para no revelar que direcciones estan registradas.
-    /// </remarks>
+    // Siempre devuelve el mismo mensaje de exito exista o no el email (anti "user enumeration").
     [HttpPost("olvide-password")]
     public async Task<IActionResult> OlvidePassword(SolicitarResetPasswordDTO solicitarResetPasswordDTO)
     {
@@ -214,8 +202,7 @@ public class AuthController : ControllerBase
         {
             var token = await _usuarioService.SolicitarResetPasswordAsync(solicitarResetPasswordDTO.Email);
 
-            // Solo si existe una cuenta con ese email (token no nulo) se "envia" el correo.
-            // Este proyecto simula el envio por consola en vez de integrar un proveedor real.
+            // Solo si existe una cuenta con ese email (token no nulo) se "envia" el correo simulado.
             if (token is not null)
             {
                 var link = $"http://localhost:8081/resetear-password?token={token}";

@@ -1,11 +1,3 @@
-/**
- * @file detalle-beneficiario.tsx
- * @description Detalle y gestión de un beneficiario: su email (identificador real, ya que
- * el backend no expone nombre ni Id propio para esta persona) y los activos que tiene
- * asignados. Eliminarlo borra todas las asignaciones que lo vinculan con mis activos, ya
- * que no existe una entidad "Beneficiario" separada.
- */
-
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -79,21 +71,14 @@ export default function DetalleBeneficiarioScreen() {
   /** El backend no expone un nombre para el beneficiario, así que las iniciales salen del email. */
   const obtenerIniciales = (correo: string) => correo.substring(0, 2).toUpperCase();
 
-  /**
-   * Badge de estado: 2 = Verificado (aceptó la invitación), 3 = Rechazado, cualquier otro
-   * valor (1 = Pendiente) queda como "Pendiente". Se basa en el estado de la primera
-   * asignación encontrada, usado como representativo de todo el beneficiario.
-   */
+  // estado: 2 = Verificado, 3 = Rechazado, cualquier otro (1 = Pendiente) queda "Pendiente".
   const obtenerEstadoBeneficiario = (item: BeneficiarioResumen): 'Verificado' | 'Pendiente' | 'Rechazado' => {
     if (item.estado === 2) return 'Verificado';
     if (item.estado === 3) return 'Rechazado';
     return 'Pendiente';
   };
 
-  /**
-   * Elimina todas las asignaciones de herencia del beneficiario (borrado completo, ya que
-   * no existe una entidad "Beneficiario" separada para eliminar).
-   */
+  // No existe una entidad "Beneficiario" separada: eliminar implica borrar todas sus asignaciones.
   const handleEliminarBeneficiario = async () => {
     if (!token || !beneficiario) return;
 
@@ -104,7 +89,6 @@ export default function DetalleBeneficiarioScreen() {
       );
       setShowConfirmModal(false);
 
-      // Parámetro que dispara el banner de éxito en el listado.
       router.replace({
         pathname: '/(tabs)/beneficiarios',
         params: { deleted: 'true' },
@@ -269,7 +253,7 @@ export default function DetalleBeneficiarioScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#DAF8BD', // Fondo general verde claro pastel
+    backgroundColor: '#DAF8BD',
   },
   loadingContainer: {
     flex: 1,
@@ -337,13 +321,13 @@ const styles = StyleSheet.create({
     width: 68,
     height: 68,
     borderRadius: 34,
-    backgroundColor: '#F8B5B1', // Fondo rosado/rojo claro del mockup (Frame 9)
+    backgroundColor: '#F8B5B1',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
   },
   avatarText: {
-    color: '#C53929', // Texto rojo
+    color: '#C53929',
     fontFamily: 'MPLUS2-Bold',
     fontSize: 24,
   },
@@ -370,13 +354,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   badgeVerified: {
-    backgroundColor: '#C5E2D0', // Verde claro translúcido
+    backgroundColor: '#C5E2D0',
   },
   badgePending: {
-    backgroundColor: '#FFF9E6', // Naranja claro translúcido
+    backgroundColor: '#FFF9E6',
   },
   badgeRejected: {
-    backgroundColor: '#FADBD8', // Rojo claro translúcido
+    backgroundColor: '#FADBD8',
   },
   statusBadgeText: {
     fontSize: 13,
@@ -444,7 +428,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: '#C53929', // Borde rojo (Frame 9)
+    borderColor: '#C53929',
     height: 52,
     alignItems: 'center',
     justifyContent: 'center',
@@ -456,10 +440,9 @@ const styles = StyleSheet.create({
     fontFamily: 'MPLUS2-Bold',
     fontSize: 16,
   },
-  // Confirmación de Borrado Modal (Frame 28)
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(26, 46, 46, 0.6)', // Fondo oscuro translúcido
+    backgroundColor: 'rgba(26, 46, 46, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -521,7 +504,7 @@ const styles = StyleSheet.create({
   },
   modalConfirmButton: {
     flex: 1,
-    backgroundColor: '#D32F2F', // Fondo rojo sólido (Frame 28)
+    backgroundColor: '#D32F2F',
     borderRadius: 12,
     height: 48,
     alignItems: 'center',

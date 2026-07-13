@@ -4,11 +4,8 @@ using Microsoft.EntityFrameworkCore.Design;
 namespace Herencia.Data;
 
 /// <summary>
-/// Fabrica de DbContext en tiempo de diseno: Herencia.Data es una libreria de
-/// clases, no un ejecutable, asi que "dotnet ef migrations add" no puede construir
-/// un AppDbContext por si solo. Le da al tooling una cadena de conexion minima para
-/// generar migraciones sin depender de que la capa Api ya este configurada. La
-/// cadena de conexion real de la aplicacion se define en la capa Api, no aqui.
+/// Fabrica de DbContext en tiempo de diseno: permite a "dotnet ef migrations add" construir un
+/// AppDbContext con una cadena de conexion minima. La cadena real se define en la capa Api.
 /// </summary>
 public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
 {

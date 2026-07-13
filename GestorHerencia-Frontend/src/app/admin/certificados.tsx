@@ -1,11 +1,3 @@
-/**
- * @file admin/certificados.tsx
- * @description Panel de Administrador para revisar certificados de defunción pendientes:
- * listarlos, ver el archivo adjunto, aprobarlos (libera todos los bienes del titular) o
- * rechazarlos con un motivo. Los 3 endpoints ya exigen `[Authorize(Roles = "Administrador")]`
- * en el backend; el chequeo de rol acá (vía AuthContext) es solo UX, no el control real.
- */
-
 import React, { useState, useCallback } from 'react';
 import {
   View,
@@ -24,8 +16,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { ArrowLeft, ShieldCheck, FileText, Eye } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-// API "legacy" de expo-file-system: la nueva API basada en clases (File/Directory) rechazaba
-// la descarga con un error genérico y, a diferencia de esta, no expone el status HTTP real.
+// API "legacy": la nueva API basada en clases (File/Directory) no expone el status HTTP real.
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as SecureStore from 'expo-secure-store';
@@ -51,6 +42,7 @@ export default function AdminCertificadosScreen() {
   const [motivoRechazo, setMotivoRechazo] = useState('');
 
   const fetchPendientes = useCallback(async () => {
+    // El backend ya exige rol Administrador en estos endpoints; este chequeo es solo UX.
     if (userRole !== 'Administrador') {
       Alert.alert('Sin permiso', 'Esta sección es exclusiva para administradores.');
       router.replace('/');
@@ -78,11 +70,6 @@ export default function AdminCertificadosScreen() {
     setRefreshing(false);
   }, [fetchPendientes]);
 
-  /**
-   * Descarga el certificado (con el JWT del admin, ya que el endpoint está protegido) y
-   * abre el selector nativo "Abrir con..." para visualizarlo, en vez de dejar que se
-   * apruebe o rechace a ciegas sin ver el documento real.
-   */
   const handleVerArchivo = async (certificado: CertificadoDefuncionDTO) => {
     if (!FileSystem.cacheDirectory) {
       Alert.alert('No disponible', 'Este dispositivo no tiene una carpeta de caché accesible.');
@@ -259,7 +246,6 @@ export default function AdminCertificadosScreen() {
         )}
       </View>
 
-      {/* MODAL: pedir motivo de rechazo (Alert.prompt no existe en Android) */}
       <Modal
         visible={certificadoARechazar !== null}
         transparent
