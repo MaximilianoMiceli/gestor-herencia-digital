@@ -55,6 +55,15 @@ export interface ActivoDigitalDTO {
   nombreArchivoOriginal: string | null;
 }
 
+/** Forma de ResultadoPaginadoDTO<T> del backend (Herencia.Business.Dtos). */
+export interface ResultadoPaginadoDTO<T> {
+  items: T[];
+  paginaActual: number;
+  registrosPorPagina: number;
+  totalRegistros: number;
+  totalPaginas: number;
+}
+
 export interface MiHerenciaDTO {
   asignacionId: number;
   /** Necesario para pedir GET /api/activosdigitales/{id}/archivo. */
@@ -113,13 +122,31 @@ export class AssetsService {
     return response.data;
   }
 
-  /** Llama a: GET /api/activos (paginado; se pide una página grande para simplificar la UI) */
+  /** Llama a: GET /api/activos, pidiendo una página grande para simplificar la UI. */
   static async getAssets(): Promise<ActivoDigitalDTO[]> {
-    const response = await api.get<{ items?: ActivoDigitalDTO[]; elementos?: ActivoDigitalDTO[] }>(
-      '/activos',
-      { params: { pagina: 1, limite: 100 } }
-    );
-    return response.data.items ?? response.data.elementos ?? [];
+    const resultado = await this.getAssetsPaginated(1, 100);
+    return resultado.items;
+  }
+
+  /** Llama a: GET /api/activos (paginado real, con filtros opcionales por tipo y nombre). */
+  static async getAssetsPaginated(
+    pagina: number,
+    limite: number,
+    tipo?: number | null,
+    nombre?: string
+  ): Promise<ResultadoPaginadoDTO<ActivoDigitalDTO>> {
+    const params: Record<string, string | number> = { pagina, limite };
+
+    if (tipo !== null && tipo !== undefined) {
+      params.tipo = tipo;
+    }
+
+    if (nombre && nombre.trim().length > 0) {
+      params.nombre = nombre.trim();
+    }
+
+    const response = await api.get<ResultadoPaginadoDTO<ActivoDigitalDTO>>('/activos', { params });
+    return response.data;
   }
 
   /** Llama a: PUT /api/activosdigitales/{id} */

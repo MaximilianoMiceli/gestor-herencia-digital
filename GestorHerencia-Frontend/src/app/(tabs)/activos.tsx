@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { ArrowLeft, Search, ChevronDown, HelpCircle, Info } from 'lucide-react-native';
+import { ArrowLeft, Search, ChevronDown, ChevronLeft, ChevronRight, HelpCircle, Info } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
@@ -24,6 +24,8 @@ interface ActivoItem {
   descripcion: string;
 }
 
+const ACTIVOS_POR_PAGINA = 5;
+
 export default function ActivosScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -32,9 +34,13 @@ export default function ActivosScreen() {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [cambiandoPagina, setCambiandoPagina] = useState(false);
   const [activos, setActivos] = useState<ActivoItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [busquedaFiltrada, setBusquedaFiltrada] = useState('');
   const [selectedType, setSelectedType] = useState<number | null>(null);
+  const [pagina, setPagina] = useState(1);
+  const [totalPaginas, setTotalPaginas] = useState(1);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [showSuccessBanner, setShowSuccessBanner] = useState(false);
 
@@ -47,21 +53,34 @@ export default function ActivosScreen() {
     { label: 'Archivo / Otro', value: 4 },
   ];
 
-  const fetchActivos = async () => {
+  // Debounce: evita pedir una página nueva al backend en cada tecla escrita.
+  // El cambio de búsqueda invalida la página en la que se estaba parado, por eso se resetea acá.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setBusquedaFiltrada(searchQuery.trim());
+      setPagina(1);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const fetchActivos = async (paginaAPedir: number) => {
     if (!token) return;
     try {
-      // El backend no expone búsqueda por query params: se trae la lista completa y se filtra acá.
-      const fullList = await AssetsService.getAssets();
-      let filtered = fullList;
-      if (searchQuery.trim().length > 0) {
-        const query = searchQuery.toLowerCase();
-        filtered = filtered.filter((a) => a.nombre.toLowerCase().includes(query));
-      }
-      if (selectedType !== null) {
-        filtered = filtered.filter((a) => a.tipo === selectedType);
+      const resultado = await AssetsService.getAssetsPaginated(
+        paginaAPedir,
+        ACTIVOS_POR_PAGINA,
+        selectedType,
+        busquedaFiltrada
+      );
+
+      // La página quedó vacía (por ej. se borró el último activo de esta página): retrocede una.
+      if (resultado.items.length === 0 && paginaAPedir > 1 && resultado.totalRegistros > 0) {
+        setPagina(paginaAPedir - 1);
+        return;
       }
 
-      setActivos(filtered);
+      setActivos(resultado.items);
+      setTotalPaginas(Math.max(1, resultado.totalPaginas));
     } catch (err: any) {
       console.log('Error loading assets:', err.message);
       if (
@@ -73,19 +92,26 @@ export default function ActivosScreen() {
       }
     } finally {
       setLoading(false);
+      setCambiandoPagina(false);
     }
   };
 
   useFocusEffect(
     useCallback(() => {
-      fetchActivos();
-    }, [token, searchQuery, selectedType])
+      fetchActivos(pagina);
+    }, [token, pagina, selectedType, busquedaFiltrada])
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchActivos();
+    await fetchActivos(pagina);
     setRefreshing(false);
+  };
+
+  const irAPagina = (nuevaPagina: number) => {
+    if (nuevaPagina < 1 || nuevaPagina > totalPaginas || nuevaPagina === pagina) return;
+    setCambiandoPagina(true);
+    setPagina(nuevaPagina);
   };
 
   useEffect(() => {
@@ -181,6 +207,7 @@ export default function ActivosScreen() {
                 ]}
                 onPress={() => {
                   setSelectedType(tipo.value);
+                  setPagina(1);
                   setShowFilterDropdown(false);
                 }}
               >
@@ -234,6 +261,35 @@ export default function ActivosScreen() {
                 </TouchableOpacity>
               </View>
             )}
+            ListFooterComponent={
+              totalPaginas > 1 ? (
+                <View style={styles.paginationContainer}>
+                  <TouchableOpacity
+                    style={[styles.paginationButton, pagina <= 1 && styles.paginationButtonDisabled]}
+                    onPress={() => irAPagina(pagina - 1)}
+                    disabled={pagina <= 1 || cambiandoPagina}
+                  >
+                    <ChevronLeft size={20} color={pagina <= 1 ? '#B7C7BE' : '#1a2e2e'} />
+                  </TouchableOpacity>
+
+                  {cambiandoPagina ? (
+                    <ActivityIndicator size="small" color="#23856C" />
+                  ) : (
+                    <Text style={styles.paginationText}>
+                      Página {pagina} de {totalPaginas}
+                    </Text>
+                  )}
+
+                  <TouchableOpacity
+                    style={[styles.paginationButton, pagina >= totalPaginas && styles.paginationButtonDisabled]}
+                    onPress={() => irAPagina(pagina + 1)}
+                    disabled={pagina >= totalPaginas || cambiandoPagina}
+                  >
+                    <ChevronRight size={20} color={pagina >= totalPaginas ? '#B7C7BE' : '#1a2e2e'} />
+                  </TouchableOpacity>
+                </View>
+              ) : null
+            }
           />
         )}
       </View>
@@ -359,6 +415,31 @@ const styles = StyleSheet.create({
     fontFamily: 'MPLUS2-Regular',
     fontSize: 14,
     color: '#23856C',
+  },
+  paginationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    paddingTop: 8,
+  },
+  paginationButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#E6EAE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paginationButtonDisabled: {
+    opacity: 0.5,
+  },
+  paginationText: {
+    fontFamily: 'MPLUS2-Bold',
+    fontSize: 14,
+    color: '#1a2e2e',
+    minWidth: 110,
+    textAlign: 'center',
   },
   listContent: {
     gap: 12,
